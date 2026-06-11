@@ -31,6 +31,13 @@ const UI = (() => {
     dp.appendChild(Sprites.icon('pop'));
     resEls.pop = el('span', '', dp);
     ageEl = el('div', '', top); ageEl.id = 'agebadge';
+    const sb = el('button', '', top); sb.id = 'menuBtn'; sb.textContent = '1×';
+    sb.title = 'Game speed';
+    sb.onclick = () => {
+      game.speed = game.speed >= 3 ? 1 : game.speed + 1;
+      sb.textContent = game.speed + '×';
+      Audio2.sfx('click');
+    };
     const mb = el('button', '', top); mb.id = 'menuBtn'; mb.textContent = '☰';
     mb.onclick = () => {
       if (quitArmed) location.reload();
@@ -156,6 +163,12 @@ const UI = (() => {
           let sub = `ATK ${Math.round(u.effAtk(game))} · DEF ${u.effArmor(game)}${u.rank ? ' · ' + ['', 'Trained', 'Veteran', 'Elite'][u.rank] : ''}`;
           if (u.cargo) sub = `⚓ Troops aboard: ${u.cargo.reduce((s, c2) => s + c2.def.pop, 0)}/${u.def.capacity} — tap a shore to land`;
           if (u.def.suicide) sub = '🔥 Rams and burns enemy ships — single use!';
+          if (u.type === 'trader') {
+            const known = u.visited ? Object.keys(u.visited).filter(k => +k !== game.humanId).length : 0;
+            sub = u.bribedBy === game.humanId ? '💰 Your trade caravan — pays gold at your Town Center'
+                : u.bribedBy >= 0 ? 'Already serving another kingdom'
+                : `Knows ${known} rival kingdom${known === 1 ? '' : 's'} · protected inside borders`;
+          }
           el('div', 'sub', c).textContent = sub;
         }
       }
@@ -180,6 +193,18 @@ const UI = (() => {
       }
     }
 
+    /* ---- merchant bribe ---- */
+    if (first.kind === 'unit' && first.def.npc && first.type === 'trader' && first.bribedBy < 0) {
+      const nearMine = game.units.some(u => !u.dead && u.owner === game.humanId && dist(u.x, u.y, first.x, first.y) < 4.5);
+      actionBtn(actP, {
+        label: 'Bribe', icon: makeIconCv('coin'), cost: { gold: CFG.BRIBE_COST },
+        enabled: nearMine && p.res.gold >= CFG.BRIBE_COST,
+        title: nearMine ? 'Buy his maps, his gossip, and his loyalty — he becomes your trade caravan'
+                        : 'Move one of your units next to the merchant first',
+        onClick: () => { if (Sim.bribe(game, first, game.humanId)) refreshPanels(true); },
+      });
+    }
+
     /* ---- actions ---- */
     if (first.kind === 'unit' && first.owner === game.humanId) {
       const settlers = sel.filter(u => u.type === 'settler');
@@ -194,6 +219,16 @@ const UI = (() => {
             onClick: () => { game.placing = { type: bt }; },
           });
         }
+      }
+      if (p.bonus.poison && sel.some(u => u.type === 'scout')) {
+        actionBtn(actP, {
+          label: 'Poison Water', icon: makeIconCv('poison'), enabled: !game.targeting,
+          title: 'Send a scout to foul an enemy water source — their troops sicken for 90s',
+          onClick: () => {
+            game.targeting = { kind: 'poison' };
+            message('Tap an enemy water tile to poison it');
+          },
+        });
       }
       const loaded = sel.filter(u => u.cargo && u.cargo.length);
       if (loaded.length) {

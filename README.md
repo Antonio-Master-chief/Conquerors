@@ -52,10 +52,30 @@ or just double-click `index.html` (everything is dependency-free vanilla JS — 
   and gold — reachable only by transport, a naval route to population
 - Ships bob on the water, leave foam wakes; AI builds docks, fishes, and floats patrol ships
 
-## Phase 3 (next)
+## Phase 3 (this build) — SIEGE, SABOTAGE & STATECRAFT
 
-- AI amphibious assaults, walls & gates, save/load, Wonders, market/trading
-- Per-civ architecture upgrades each age, more map types
+- **Realistic sieges**: surround an enemy settlement with 5+ troops and it falls *Under Siege* —
+  defenders starve (-25% attack, no healing, HP decay on long sieges). Starve them out
+  or assault the walls: both are real strategies now
+- **Poison Wells** (Age III tech): scouts can foul an enemy water source — troops near it
+  sicken for 90s (-20% damage, health drain). Cut supplies, poison water, then strike
+- **Terrain advantage**: *highlands* give +20% attack, reduced damage taken, and +0.6 range
+  for archers; standing by trees gives forest cover (-30% from arrows)
+- **Merchants 2.0**: wandering merchants remember every kingdom they visit.
+  **Bribe one (100 gold)** to buy his travel maps (explored map area), the **location of
+  every rival kingdom he's seen**, and his loyalty — he becomes your trade caravan,
+  paying gold each round trip. Merchants are untouchable inside kingdom borders,
+  but can be hunted in the wilderness to deny rivals his knowledge
+- Game speed toggle (1×/2×/3×)
+
+## Phase 4 (the vision) — ONE WORLD multiplayer
+
+- One massive persistent map; players spawn at random locations and explore
+- **Kingdoms of up to 5 players**: one King rules the capital, up to 4 Generals
+  each govern a colony of the kingdom
+- Trade routes between kingdoms; merchant intel economy; espionage
+- Full siege warfare between kingdoms; terrain, supply lines and naval blockades
+- Walls & gates, save/load, Wonders, AI amphibious assaults, market, per-age architecture
 
 ## Controls
 

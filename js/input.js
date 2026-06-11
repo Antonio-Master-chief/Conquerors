@@ -78,6 +78,16 @@ const Input = (() => {
     const settlers = sel.filter(u => u.type === 'settler');
 
     const big = sel.some(u => u.def.big);
+    // merchants can be hunted in the wilderness — never inside kingdom borders
+    if (target && target.kind === 'unit' && target.def.npc) {
+      if (game.inTerritory(target.x, target.y) >= 0) {
+        UI.message('Merchants are protected inside kingdom borders', true);
+        return true;
+      }
+      for (const u of sel) if (!u.civilian) u.orderAttack(target);
+      Audio2.ack('attack', big);
+      return true;
+    }
     // board a friendly transport
     if (target && target.kind === 'unit' && target.owner === game.humanId && target.cargo) {
       const landUnits = sel.filter(u => !u.def.naval && u !== target);
@@ -135,6 +145,23 @@ const Input = (() => {
     });
     Audio2.ack('move', big);
     return true;
+  }
+
+  /* targeted abilities (Poison Wells) */
+  function resolveTargeting(px, py) {
+    const t = game.targeting;
+    game.targeting = null;
+    if (!t || t.kind !== 'poison') return;
+    const [tx, ty] = screenToTile(px, py);
+    const x = tx | 0, y = ty | 0;
+    if (!World.inB(x, y) || game.world.ter[World.idx(x, y)] > TERRAIN.SHALLOW) {
+      UI.message('Target a water tile', true); return;
+    }
+    const scout = game.selected.find(u => !u.dead && u.kind === 'unit' && u.owner === game.humanId && u.type === 'scout');
+    if (!scout) { UI.message('Select a scout first', true); return; }
+    scout.orderPoison(x + .5, y + .5);
+    Audio2.ack('move', false);
+    UI.refreshPanels(true);
   }
 
   function placeAt(px, py) {
@@ -225,9 +252,11 @@ const Input = (() => {
     }
     // mouse
     if (e.button === 0) {
+      if (game.targeting) { resolveTargeting(e.clientX, e.clientY); return; }
       if (game.placing) { placeAt(e.clientX, e.clientY); return; }
       dragStart = { x: e.clientX, y: e.clientY }; dragNow = { ...dragStart }; dragging = true;
     } else if (e.button === 2) {
+      if (game.targeting) { game.targeting = null; UI.message('Cancelled'); return; }
       if (game.placing) { game.placing = null; UI.refreshPanels(true); return; }
       commandAt(e.clientX, e.clientY);
     } else if (e.button === 1) {
@@ -274,6 +303,7 @@ const Input = (() => {
       if (panPointer === e.pointerId) {
         panPointer = null;
         if (panMoved < 9) { // tap
+          if (game.targeting) { resolveTargeting(e.clientX, e.clientY); return; }
           if (game.placing) { placeAt(e.clientX, e.clientY); return; }
           const hit = pickAt(e.clientX, e.clientY);
           const haveUnits = game.selected.some(s => !s.dead && s.kind === 'unit' && s.owner === game.humanId);

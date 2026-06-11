@@ -15,10 +15,16 @@ const CFG = {
   AGGRO: 6,                // auto-engage radius (tiles)
   IRRIGATION: 3,           // farm-to-water/canal supply distance (tiles)
   DAY_CYCLE: 300,          // seconds per full day/night cycle
+  TERRITORY: 12,           // kingdom border radius around TCs & owned towns
+  SIEGE_R: 10,             // enemy presence radius that blockades a settlement
+  SIEGE_MEN: 5,            // enemies needed to enforce a siege
+  SIEGE_DELAY: 25,         // seconds of blockade before hunger sets in
+  POISON_T: 90,            // seconds a poisoned water source stays toxic
+  BRIBE_COST: 100,
   ZOOM_MIN: 0.55, ZOOM_MAX: 1.6,
 };
 
-const TERRAIN = { DEEP:0, SHALLOW:1, SAND:2, GRASS:3, DIRT:4 };
+const TERRAIN = { DEEP:0, SHALLOW:1, SAND:2, GRASS:3, DIRT:4, HILL:5 };
 
 const AGES = [
   { name:'Settlement Age', cost:null },
@@ -163,6 +169,8 @@ const TECHS = {
     desc:'Units regenerate near Town Centers', apply:p=>p.bonus.tcHeal=true },
   greekfire:{ name:'Greek Fire', cost:{knowledge:200, gold:250, iron:120}, age:4, time:40, civ:'rome',
     desc:'Catapults & towers set targets ablaze', apply:p=>p.bonus.greekFire=true },
+  poisonwells:{ name:'Poison Wells', cost:{knowledge:120, gold:120}, age:3, time:30,
+    desc:'Scouts can poison enemy water sources — their troops sicken', apply:p=>p.bonus.poison=true },
 };
 
 /* ---------- Helpers ---------- */

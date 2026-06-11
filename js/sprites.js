@@ -20,6 +20,7 @@ const Sprites = (() => {
     else if (t === TERRAIN.SHALLOW){ base = ['#2e6e96', '#27608a']; det = 'wave'; }
     else if (t === TERRAIN.SAND) { base = ['#cdb279', '#c2a76e']; det = 'speck'; }
     else if (t === TERRAIN.DIRT) { base = ['#8a7148', '#7d663f']; det = 'speck'; }
+    else if (t === TERRAIN.HILL) { base = ['#93a05a', '#7a8a4a']; det = 'hill'; }
     else                         { base = variant % 2 ? ['#587f37', '#4e7530'] : ['#5d8a3c', '#527c33']; det = 'grass'; }
     const grad = g.createLinearGradient(0, 0, 0, 32);
     grad.addColorStop(0, base[0]); grad.addColorStop(1, base[1]);
@@ -36,6 +37,17 @@ const Sprites = (() => {
         g.fillStyle = rnd() > .5 ? 'rgba(255,255,255,.10)' : 'rgba(0,0,0,.12)';
         g.fillRect(4 + rnd() * 56, 3 + rnd() * 26, 1.5, 1.5);
       }
+    } else if (det === 'hill') {
+      // rocky highland with relief shading
+      for (let i = 0; i < 9; i++) {
+        const x = 8 + rnd() * 48, y = 5 + rnd() * 22;
+        g.fillStyle = rnd() > .5 ? 'rgba(160,158,140,.45)' : 'rgba(80,86,52,.4)';
+        g.beginPath(); g.ellipse(x, y, 2.5 + rnd() * 2, 1.5 + rnd(), rnd(), 0, 7); g.fill();
+      }
+      g.strokeStyle = 'rgba(235,240,210,.35)'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(2, 15); g.lineTo(32, 1); g.lineTo(62, 15); g.stroke(); // sunlit ridge
+      g.strokeStyle = 'rgba(30,35,15,.30)'; g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(2, 17); g.lineTo(32, 31); g.lineTo(62, 17); g.stroke(); // shaded base
     } else if (det === 'wave') {
       g.strokeStyle = t === TERRAIN.DEEP ? 'rgba(120,170,220,.18)' : 'rgba(200,235,255,.30)';
       g.lineWidth = 1.2;
@@ -889,6 +901,15 @@ const Sprites = (() => {
       case 'flag': g.strokeStyle = '#6e5638'; g.lineWidth = 2; g.beginPath(); g.moveTo(8, 22); g.lineTo(8, 4); g.stroke();
         g.fillStyle = '#c4543f'; g.beginPath(); g.moveTo(8, 4); g.lineTo(21, 7.5); g.lineTo(8, 11); g.closePath(); g.fill(); break;
       case 'stop': g.fillStyle = '#c4543f'; g.beginPath(); g.roundRect(6, 6, 14, 14, 3); g.fill(); g.stroke(); break;
+      case 'poison': g.fillStyle = '#5fae3f'; g.beginPath();
+        g.moveTo(13, 4); g.quadraticCurveTo(20, 13, 13, 21); g.quadraticCurveTo(6, 13, 13, 4); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = '#1d3812'; g.beginPath(); g.arc(10.5, 12, 1.7, 0, 7); g.fill();
+        g.beginPath(); g.arc(15.5, 12, 1.7, 0, 7); g.fill();
+        g.fillRect(11, 16, 4, 1.6); break;
+      case 'coin': g.fillStyle = '#ffd34d'; g.beginPath(); g.arc(13, 13, 8, 0, 7); g.fill(); g.stroke();
+        g.strokeStyle = '#8a6420'; g.lineWidth = 1.6; g.beginPath(); g.arc(13, 13, 5, 0, 7); g.stroke();
+        g.fillStyle = '#8a6420'; g.font = 'bold 9px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText('$', 13, 13.5); break;
       default: g.fillStyle = '#cdbb96'; g.font = 'bold 14px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
         g.fillText(name[0].toUpperCase(), 13, 14);
     }

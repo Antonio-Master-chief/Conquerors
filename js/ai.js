@@ -69,6 +69,10 @@ class AIController {
         this.defendUntil = g.time + 14;
         this.defendPos = { x: b.cx(), y: b.cy() };
       }
+      if (b.besieged) { // break the siege or starve
+        this.defendUntil = g.time + 20;
+        this.defendPos = { x: b.cx(), y: b.cy() };
+      }
       this.bldHp.set(b.id, b.hp);
     }
   }
@@ -302,7 +306,7 @@ class AIController {
     if (!uni || p.researching) return;
     const prio = ['wheelbarrow', 'bronzeBlades', 'fletching', 'leather', 'masonry',
                   'ironBlades', 'bodkin', 'scale', 'ironTools', 'medicine', 'architecture',
-                  'plate', 'wootz', 'greekfire'];
+                  'plate', 'wootz', 'greekfire', 'poisonwells'];
     for (const k of prio) if (p.canResearch(k)) { p.startResearch(k); return; }
   }
 

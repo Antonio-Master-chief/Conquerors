@@ -31,6 +31,14 @@ class Unit {
     this.fade = 1;
     this.cargo = u.capacity ? [] : null; // transports
     this.inShip = null;            // set while riding a transport
+    this.hungerT = -99;            // siege starvation
+    this.poisonT = -99;            // poisoned water
+    this.starveT = -99;            // prolonged siege: hp decay
+    this.cover = false;            // fighting beside trees blunts arrows
+    // merchants: where they've been is worth gold
+    this.visited = u.npc ? {} : null;
+    this.trail = u.npc ? [] : null;
+    this.trailT = 0; this.bribedBy = -2; this.route = null;
   }
   cx() { return this.x; } cy() { return this.y; }
   get def() { return UNITS[this.type]; }
@@ -41,6 +49,8 @@ class Unit {
     let a = p ? p.statAtk(this.def) : this.def.atk;
     a *= 1 + this.rank * CFG.RANK_BONUS;
     if (this.buffT > 0) a *= 1.25;
+    if (game.time - this.hungerT < 4) a *= 0.75;  // starving under siege
+    if (game.time - this.poisonT < 4) a *= 0.8;   // sickened by bad water
     return a;
   }
   effArmor(game) {
@@ -78,6 +88,10 @@ class Unit {
   orderBoard(t) {
     if (this.def.naval || this.def.npc) return;
     this.order = { kind: 'board', target: t }; this.path = null; this.state = 'move';
+  }
+  orderPoison(x, y) {
+    if (this.type !== 'scout') return;
+    this.order = { kind: 'poison', x, y, t: 0 }; this.path = null; this.state = 'move';
   }
   orderUnload(x, y) {
     if (!this.cargo) return;
@@ -139,7 +153,8 @@ class Unit {
   tryAttack(game, dt) {
     const t = this.order.target;
     if (!t || t.dead) { this.clearOrder(); return; }
-    const range = Math.max(this.effRange(game), this.def.naval ? 1.6 : 1.0);
+    let range = Math.max(this.effRange(game), this.def.naval ? 1.6 : 1.0);
+    if (range > 1.2 && World.terAt(this.x, this.y) === TERRAIN.HILL) range += 0.6; // shooting downhill
     const d = this.distTo(t);
     const minR = this.def.minRange || 0;
     if (d <= range + 0.15 && d >= minR) {
@@ -192,9 +207,17 @@ class Unit {
       if (Math.random() < dt * 8) Sim.flame(game, this.x, this.y - .5);
       if (this.burn.t <= 0) this.burn = null;
     }
-    // regen (India / medicine near TC)
+    // siege starvation & poison sickness
+    const hungry = game.time - this.hungerT < 4, sick = game.time - this.poisonT < 4;
+    if (sick && this.hp > this.maxHp * 0.15) {
+      this.hp -= 0.12 * dt * this.maxHp / 10;
+      if (Math.random() < dt * 2) Sim.puff(game, this.x, this.y - 0.8, '#5fae3f', 1);
+    }
+    if (game.time - this.starveT < 4 && this.hp > this.maxHp * 0.15) this.hp -= 0.2 * dt;
+
+    // regen (India / medicine near TC) — the starving and the sick don't heal
     const p = game.players[this.owner];
-    if (p && this.hp < this.maxHp && game.time - this.lastHitT > 4) {
+    if (p && !hungry && !sick && this.hp < this.maxHp && game.time - this.lastHitT > 4) {
       let r = (p.civ && p.civ.regen) || 0;
       if (p.bonus.tcHeal && game.nearDropoff(this.owner, this.x, this.y, 6)) r += 1;
       if (r) this.hp = Math.min(this.maxHp, this.hp + r * dt);
@@ -285,6 +308,19 @@ class Unit {
           }
           break;
         }
+        case 'poison': { // scout sneaks to enemy water and fouls it
+          const d = dist(this.x, this.y, o.x, o.y);
+          if (d < 1.7) {
+            this.path = null; this.anim = 'attack';
+            o.t += dt;
+            if (Math.random() < dt * 4) Sim.puff(game, o.x, o.y, '#5fae3f', 2);
+            if (o.t >= 5) { Sim.applyPoison(game, this.owner, o.x, o.y); this.clearOrder(); }
+          } else {
+            if (this.ensurePath(game, o.x, o.y)) this.moveAlong(game, dt);
+            else if (!this.path) this.clearOrder();
+          }
+          break;
+        }
         case 'board': {
           const t = o.target;
           if (!t || t.dead || !t.cargo) { this.clearOrder(); break; }
@@ -339,6 +375,16 @@ class Unit {
     // ===== auto-behaviors =====
     if (this.scanT <= 0) {
       this.scanT = 0.45;
+      // forest cover: a tree at your shoulder blunts incoming arrows
+      this.cover = false;
+      for (let dy = -1; dy <= 1 && !this.cover; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const ob = World.objAt((this.x + dx) | 0, (this.y + dy) | 0);
+        if (ob && ob.alive && ob.kind === 'tree') { this.cover = true; break; }
+      }
+      if (this.def.npc) { // merchants remember every kingdom they pass through
+        const terr = game.inTerritory(this.x, this.y);
+        if (terr >= 0 && this.visited) this.visited[terr] = true;
+      }
       if (!this.def.npc) {
         if (!this.civilian && (!this.order || (this.order.kind === 'move' && false))) {
           // idle military: engage nearby enemies (fire ships wait for explicit orders)
@@ -369,13 +415,38 @@ class Unit {
       }
     }
 
-    // trader wander / leave
-    if (this.type === 'trader' && !this.order) {
-      if (this.gaveKnow) { this.fade -= dt * 0.5; if (this.fade <= 0) { this.dead = true; game.popFree(this); } }
-      else {
-        const nx = clamp(this.x + (Math.random() * 16 - 8), 2, World.N - 3);
-        const ny = clamp(this.y + (Math.random() * 16 - 8), 2, World.N - 3);
-        if (!game.world.blocked[World.idx(nx | 0, ny | 0)]) this.orderMove(nx, ny);
+    // trader behavior: wander, remember the road, or run a bribed trade route
+    if (this.type === 'trader') {
+      if ((this.trailT += dt) > 2.5 && this.trail) {
+        this.trailT = 0;
+        this.trail.push([this.x, this.y]);
+        if (this.trail.length > 80) this.trail.shift();
+      }
+      if (this.route && !this.order) {
+        // bribed caravan: shuttle between the briber's TC and a far town
+        const { a, b } = this.route;
+        if (!a || a.dead || !b || b.dead) { this.route = null; }
+        else {
+          const tgt = this.route.leg === 'a' ? a : b;
+          if (this.distTo(tgt) < 2.4) {
+            if (this.route.leg === 'a') { // arrived home: pay out
+              const p = game.players[this.bribedBy];
+              if (p) { p.res.gold += 15;
+                Sim.puff(game, this.x, this.y - 1, '#ffd34d', 8);
+                if (this.bribedBy === game.humanId) Audio2.sfx('train'); }
+            }
+            this.route.leg = this.route.leg === 'a' ? 'b' : 'a';
+          } else this.orderMove(tgt.cx(), tgt.cy());
+        }
+      } else if (!this.order) {
+        if (this.gaveKnow && !this.route) {
+          this.fade -= dt * 0.5;
+          if (this.fade <= 0) { this.dead = true; game.popFree(this); }
+        } else {
+          const nx = clamp(this.x + (Math.random() * 16 - 8), 2, World.N - 3);
+          const ny = clamp(this.y + (Math.random() * 16 - 8), 2, World.N - 3);
+          if (!game.world.blocked[World.idx(nx | 0, ny | 0)]) this.orderMove(nx, ny);
+        }
       }
     }
 
@@ -396,6 +467,8 @@ class Unit {
 
   takeDamage(game, dmg, from, silent) {
     if (this.dead) return;
+    // merchants are under royal protection inside any kingdom's borders
+    if (this.def.npc && game.inTerritory(this.x, this.y) >= 0) return;
     this.hp -= dmg;
     this.lastHitT = game.time;
     if (this.owner === game.humanId || (from && from.owner === game.humanId)) game.combatT = game.time;
@@ -422,7 +495,8 @@ class Unit {
     const ix = (World.isoX(this.x, this.y) - view.left) * view.z;
     const iy = (World.isoY(this.x, this.y) - view.top) * view.z;
     const sc = view.z * (this.def.big ? 0.95 : 0.78);
-    const bob = this.def.naval ? Math.sin(performance.now() / 450 + this.id * 1.7) * 2 * view.z : 0;
+    let bob = this.def.naval ? Math.sin(performance.now() / 450 + this.id * 1.7) * 2 * view.z : 0;
+    if (World.terAt(this.x, this.y) === TERRAIN.HILL) bob -= 5 * view.z; // standing tall on high ground
     if (this.fade < 1) g.globalAlpha = this.fade;
     g.drawImage(s.cv, ix - s.ax * sc, iy - s.ay * sc + bob, s.cv.width * sc, s.cv.height * sc);
     g.globalAlpha = 1;
@@ -608,6 +682,19 @@ class Building {
       g.fillStyle = '#e7cf8e';
       g.fillRect(ix - 21 * view.z, iy + 5 * view.z, 42 * view.z * this.progress, 3 * view.z);
     }
+    // siege banner
+    if (this.besieged) {
+      const pulse = 0.6 + Math.sin(performance.now() / 250) * 0.3;
+      g.strokeStyle = `rgba(220,60,40,${pulse.toFixed(2)})`;
+      g.lineWidth = 3 * view.z;
+      g.beginPath(); g.ellipse(ix, iy, this.size * 34 * view.z, this.size * 17 * view.z, 0, 0, 7); g.stroke();
+      g.fillStyle = '#d04a35';
+      g.beginPath();
+      g.moveTo(ix, iy - (this.size * 26 + 44) * view.z);
+      g.lineTo(ix + 9 * view.z, iy - (this.size * 26 + 56) * view.z);
+      g.lineTo(ix - 9 * view.z, iy - (this.size * 26 + 56) * view.z);
+      g.closePath(); g.fill();
+    }
     // capture progress ring
     if (this.type === 'town' && this.captureBy >= -1) {
       const pr = this.capture[this.captureBy] || 0;
@@ -698,13 +785,16 @@ const Sim = {
   },
 
   calcDamage(game, src, t) {
-    const atk = src.kind === 'unit' ? src.effAtk(game) : src.def.atk;
+    let atk = src.kind === 'unit' ? src.effAtk(game) : src.def.atk;
+    // terrain advantage: high ground hits harder and is harder to hurt
+    if (src.kind === 'unit' && World.terAt(src.x, src.y) === TERRAIN.HILL) atk *= 1.2;
     let mult = 1;
     const bv = src.def.bonusVs;
     if (bv) {
       const tags = t.kind === 'bld' ? ['building'] : t.def.tags || [];
       for (const tag of tags) if (bv[tag]) mult = Math.max(mult, bv[tag]);
     }
+    if (t.kind === 'unit' && World.terAt(t.x, t.y) === TERRAIN.HILL) mult *= 0.85;
     const armor = t.kind === 'unit' ? t.effArmor(game) : 1;
     return Math.max(1, atk * mult - armor);
   },
@@ -747,7 +837,9 @@ const Sim = {
             if (pr.burn) this.flame(game, tx, ty);
           }
         } else {
-          t.takeDamage(game, pr.dmg, pr.src);
+          let dmg = pr.dmg;
+          if (t.kind === 'unit' && t.cover) dmg *= 0.7; // forest cover blunts arrows
+          t.takeDamage(game, dmg, pr.src);
           if (pr.burn && t.kind === 'unit') { t.burn = { t: 3, dps: 5 }; this.flame(game, tx, ty); }
         }
       } else {
@@ -778,6 +870,96 @@ const Sim = {
       Audio2.say('We have lost a town!', true);
     } else if (p) game.message(`${PLAYER_COLORS[pid].name} captured a town`, false);
     game.ping(town.cx(), town.cy());
+  },
+
+  /* ---- sieges: surround a settlement to starve its defenders ---- */
+  sieges(game) {
+    for (const b of game.buildings) {
+      if (b.dead || !b.built || (b.type !== 'tc' && b.type !== 'town') || b.owner < 0) continue;
+      let foes = 0;
+      for (const u of game.queryUnits(b.cx(), b.cy(), CFG.SIEGE_R))
+        if (!u.dead && !u.civilian && !u.def.npc && !u.inShip && u.owner >= 0 && u.owner !== b.owner) foes++;
+      b.siegeT = foes >= CFG.SIEGE_MEN ? (b.siegeT || 0) + 2 : Math.max(0, (b.siegeT || 0) - 4);
+      const was = b.besieged;
+      b.besieged = b.siegeT >= CFG.SIEGE_DELAY;
+      if (b.besieged && !was) {
+        if (b.owner === game.humanId) {
+          game.message('UNDER SIEGE — supplies are cut, our troops are starving!', true);
+          Audio2.say('We are under siege! They mean to starve us out!', true);
+          game.ping(b.cx(), b.cy());
+        } else game.message('Enemy settlement is under siege — starve them out!');
+      }
+      if (was && !b.besieged && b.owner === game.humanId) game.message('The siege is broken — supplies flow again');
+      if (b.besieged) {
+        for (const u of game.queryUnits(b.cx(), b.cy(), CFG.SIEGE_R + 1)) {
+          if (u.dead || u.owner !== b.owner) continue;
+          u.hungerT = game.time;
+          if (b.siegeT > 90) u.starveT = game.time; // long sieges kill
+        }
+      }
+    }
+  },
+
+  /* ---- poison wells: scouts foul enemy water ---- */
+  applyPoison(game, by, x, y) {
+    game.poisons.push({ x, y, by, until: game.time + CFG.POISON_T });
+    for (let i = 0; i < 16; i++) game.particles.push({
+      x: x + (Math.random() - .5) * 2, y: y + (Math.random() - .5) * 1.4,
+      vx: (Math.random() - .5), vy: -1 - Math.random(), grav: -1,
+      life: .9 + Math.random() * .6, max: 1.4, color: '#5fae3f', size: 2.5 + Math.random() * 3,
+    });
+    const victim = game.inTerritory(x, y);
+    if (victim === game.humanId) {
+      game.message('Our water has been POISONED! Troops nearby are sickening!', true);
+      Audio2.say('Our water has been poisoned!', true);
+      game.ping(x, y);
+    }
+    if (by === game.humanId) {
+      game.message('Water poisoned — enemy troops there will sicken for 90s');
+      Audio2.say('The wells are poisoned. Their soldiers will drink death.');
+    }
+  },
+
+  /* ---- merchants: gold buys their maps and their loyalty ---- */
+  bribe(game, trader, pid) {
+    const p = game.players[pid];
+    if (!p || trader.bribedBy >= 0 || p.res.gold < CFG.BRIBE_COST) return false;
+    p.res.gold -= CFG.BRIBE_COST;
+    trader.bribedBy = pid;
+    trader.gaveKnow = true; // no double-dipping the knowledge gift
+    p.res.knowledge += 20;
+    if (pid === game.humanId) {
+      // his maps: everywhere he's walked becomes explored
+      for (const [tx, ty] of trader.trail) World.explore(tx, ty, 5);
+      World.explore(trader.x, trader.y, 6);
+      // his gossip: every kingdom he's visited is betrayed
+      let kingdoms = 0;
+      for (const k in trader.visited) {
+        const other = +k;
+        if (other === pid) continue;
+        kingdoms++;
+        for (const b of game.buildings) {
+          if (b.dead || b.owner !== other || (b.type !== 'tc' && b.type !== 'town')) continue;
+          World.explore(b.cx(), b.cy(), 7);
+          game.ping(b.cx(), b.cy());
+        }
+      }
+      game.message(kingdoms
+        ? `The merchant sold his maps — and the location of ${kingdoms} rival kingdom${kingdoms > 1 ? 's' : ''}!`
+        : 'The merchant sold his maps. +20 Knowledge');
+      Audio2.say(kingdoms ? 'The merchant has betrayed the rival kingdoms to us.' : 'The merchant shared his travel maps.');
+      Audio2.sfx('capture');
+    }
+    // he becomes your caravan: TC <-> the nearest town he can trade with
+    const myTc = game.buildings.find(b => !b.dead && b.owner === pid && b.type === 'tc');
+    let tgt = null, bd = 1e9;
+    for (const b of game.buildings) {
+      if (b.dead || b.type !== 'town' || b.owner === pid) continue;
+      const d = dist2(trader.x, trader.y, b.cx(), b.cy());
+      if (d < bd) { bd = d; tgt = b; }
+    }
+    if (myTc && tgt) { trader.route = { a: myTc, b: tgt, leg: 'a' }; trader.clearOrder(); }
+    return true;
   },
 
   /* ---- irrigation: BFS water flow through canal chains ---- */

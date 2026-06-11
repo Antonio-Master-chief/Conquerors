@@ -12,12 +12,23 @@ function makeGame(civKey, diff) {
     cam: { x: 0, y: 0, zoom: 0.9 },
     world: World.W,
     players: [], units: [], buildings: [], projectiles: [], particles: [], pings: [],
-    selected: [], placing: null,
-    ai: [], time: 0, humanId: 0, over: false,
+    selected: [], placing: null, targeting: null,
+    ai: [], time: 0, humanId: 0, over: false, speed: 1,
     lastAlertT: -99, traderT: 25,
+    poisons: [],                  // active poisoned water sources
     grid: new Map(),
 
     hostile(a, b) { return a !== b; },
+
+    /* which kingdom's borders is this point inside? -2 = wilderness */
+    inTerritory(x, y) {
+      const r2 = CFG.TERRITORY * CFG.TERRITORY;
+      for (const b of this.buildings) {
+        if (b.dead || !b.built || b.owner < 0 || (b.type !== 'tc' && b.type !== 'town')) continue;
+        if (dist2(x, y, b.cx(), b.cy()) <= r2) return b.owner;
+      }
+      return -2;
+    },
 
     rebuildGrid() {
       this.grid.clear();
@@ -373,16 +384,24 @@ function drawHpBar(ctx, game, e, ix, iy, z, w) {
 
 /* ---------------- main loop ---------------- */
 let lastT = 0, fogT = 0, uiT = 0, mmT = 0, panelT = 0, vicT = 0, leashT = 0, auraT = 0,
-    irrT = 0, smokeT = 0, moodT = 0;
+    irrT = 0, smokeT = 0, moodT = 0, siegeT2 = 0, poisonT2 = 0;
 
 function loop(now) {
   const game = Game;
   if (!game) return;
   const dt = Math.min(0.05, (now - lastT) / 1000 || 0.016);
   lastT = now;
-  game.time += dt;
 
   Input.update(dt);
+  // game speed: run extra simulation sub-steps, render once
+  for (let step = 0; step < game.speed; step++) simStep(game, dt);
+
+  render(game);
+  requestAnimationFrame(loop);
+}
+
+function simStep(game, dt) {
+  game.time += dt;
   game.rebuildGrid();
 
   for (const u of game.units) u.update(game, dt);
@@ -395,6 +414,17 @@ function loop(now) {
   maybeSpawnTrader(game, dt);
 
   if ((auraT += dt) > 0.5) { auraT = 0; Sim.auras(game); }
+  if ((siegeT2 += dt) > 2) { siegeT2 = 0; Sim.sieges(game); }
+  if ((poisonT2 += dt) > 1) { // poisoned water sickens nearby enemies of the poisoner
+    poisonT2 = 0;
+    game.poisons = game.poisons.filter(ps => ps.until > game.time);
+    for (const ps of game.poisons) {
+      for (const u of game.queryUnits(ps.x, ps.y, 12)) {
+        if (!u.dead && u.owner >= 0 && u.owner !== ps.by && !u.def.npc) u.poisonT = game.time;
+      }
+      if (Math.random() < 0.4 && World.visAt(ps.x, ps.y) === 2) Sim.puff(game, ps.x, ps.y, '#5fae3f', 2);
+    }
+  }
   if ((irrT += dt) > 2) { irrT = 0; Sim.recomputeIrrigation(game); }
   if ((smokeT += dt) > 0.5) { // chimney smoke from visible settlements
     smokeT = 0;
@@ -431,9 +461,6 @@ function loop(now) {
     game.buildings = game.buildings.filter(b => !b.dead);
   }
   game.selected = game.selected.filter(e => !e.dead);
-
-  render(game);
-  requestAnimationFrame(loop);
 }
 
 /* ---------------- entry ---------------- */

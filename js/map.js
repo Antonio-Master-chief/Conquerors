@@ -40,7 +40,8 @@ const World = (() => {
   /* ---------------- generation ---------------- */
   function gen(seed) {
     const rnd = RNG(seed);
-    const n1 = makeNoise(rnd, 13), n2 = makeNoise(rnd, 6), nf = makeNoise(rnd, 5), nd = makeNoise(rnd, 9);
+    const n1 = makeNoise(rnd, 13), n2 = makeNoise(rnd, 6), nf = makeNoise(rnd, 5), nd = makeNoise(rnd, 9),
+          nh = makeNoise(rnd, 7); // highlands
 
     // player starts: triangle around center (kept clear of the wide border ocean)
     const cx = N / 2, cy = N / 2, R = N * 0.31;
@@ -77,6 +78,8 @@ const World = (() => {
       else if (h < 0.365) t = TERRAIN.SHALLOW;
       else if (h < 0.40) t = TERRAIN.SAND;
       else t = nd(x, y) > 0.72 ? TERRAIN.DIRT : TERRAIN.GRASS;
+      // highlands: defensive high ground (walkable, combat bonuses)
+      if (t === TERRAIN.GRASS && nh(x, y) > 0.80) t = TERRAIN.HILL;
       W.ter[idx(x, y)] = t;
       if (t <= TERRAIN.SHALLOW) W.blocked[idx(x, y)] = 1;
     }
@@ -431,6 +434,16 @@ const World = (() => {
     W.fogDirty = true;
   }
   const visAt = (x, y) => inB(x | 0, y | 0) ? W.vis[idx(x | 0, y | 0)] : 0;
+  const terAt = (x, y) => inB(x | 0, y | 0) ? W.ter[idx(x | 0, y | 0)] : -1;
+
+  /* mark a circle as explored (merchant intel) without granting live vision */
+  function explore(cx2, cy2, r) {
+    const x0 = Math.max(0, (cx2 - r) | 0), x1 = Math.min(N - 1, (cx2 + r) | 0);
+    const y0 = Math.max(0, (cy2 - r) | 0), y1 = Math.min(N - 1, (cy2 + r) | 0);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
+      if (W.vis[idx(x, y)] === 0 && dist2(x, y, cx2, cy2) <= r * r) W.vis[idx(x, y)] = 1;
+    W.fogDirty = true;
+  }
 
   /* fog overlay: one transformed drawImage (tile space -> iso screen space) */
   function drawFog(g, cam, w, h) {
@@ -448,7 +461,7 @@ const World = (() => {
   function bakeMinimapBase() {
     const cv = document.createElement('canvas'); cv.width = N; cv.height = N;
     const g = cv.getContext('2d');
-    const cols = ['#16345c', '#2e6e96', '#cdb279', '#5d8a3c', '#8a7148'];
+    const cols = ['#16345c', '#2e6e96', '#cdb279', '#5d8a3c', '#8a7148', '#93a05a'];
     const img = g.createImageData(N, N);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const t = W.ter[idx(x, y)];
@@ -466,5 +479,5 @@ const World = (() => {
   }
 
   return { W, gen, idx, inB, isoX, isoY, objAt, nearestObj, removeObj,
-           drawTerrain, drawFog, recomputeFog, visAt, N };
+           drawTerrain, drawFog, recomputeFog, visAt, terAt, explore, N };
 })();
