@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d0a07">
+<title>CONQUERORS</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Game canvas -->
+  <canvas id="game"></canvas>
+
+  <!-- HUD (built by ui.js) -->
+  <div id="hud" class="hidden">
+    <div id="topbar"></div>
+    <div id="msglog"></div>
+    <div id="bottombar">
+      <div id="minimapWrap"><canvas id="minimap" width="176" height="176"></canvas></div>
+      <div id="selpanel"></div>
+      <div id="actionpanel"></div>
+    </div>
+  </div>
+
+  <!-- Title screen (built by title.js) -->
+  <div id="title"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/path.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/players.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/title.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,951 @@
+/* ============ CONQUERORS — units, buildings, combat, capture ============ */
+'use strict';
+
+const GATHER_RATE = { bush: 0.55, farm: 0.42, tree: 0.50, gold: 0.45, stone: 0.42, iron: 0.40, fish: 0.65 };
+const OBJ_RES = { bush: 'food', farm: 'food', tree: 'wood', gold: 'gold', stone: 'stone', iron: 'iron', fish: 'food' };
+let NEXT_ID = 1;
+
+/* ================= UNIT ================= */
+class Unit {
+  constructor(owner, type, x, y, civKey) {
+    const u = UNITS[type];
+    this.id = NEXT_ID++; this.kind = 'unit';
+    this.owner = owner; this.type = type; this.civKey = civKey;
+    this.x = x; this.y = y;
+    this.maxHp = u.hp; this.hp = u.hp;
+    this.speed = u.speed; this.los = u.los;
+    this.dead = false;
+    this.path = null; this.wp = 0;
+    this.order = null;             // {kind, x,y, target, obj}
+    this.state = 'idle';
+    this.dir = 0; this.animT = 0; this.anim = 'idle'; this.frame = 0;
+    this.atkCd = 0; this.repathT = 0; this.scanT = Math.random() * 0.4;
+    this.carry = null;             // {res, amt}
+    this.gatherT = 0;
+    this.xp = 0; this.rank = 0;
+    this.burn = null; this.lastHitT = -99;
+    this.buffT = 0;                // centurion aura
+    this.burstLeft = 0; this.burstT = 0;
+    this.stuckT = 0; this.lastX = x; this.lastY = y;
+    this.gaveKnow = false;         // traders
+    this.fade = 1;
+    this.cargo = u.capacity ? [] : null; // transports
+    this.inShip = null;            // set while riding a transport
+  }
+  cx() { return this.x; } cy() { return this.y; }
+  get def() { return UNITS[this.type]; }
+  get civilian() { return !!this.def.civilian; }
+
+  effAtk(game) {
+    const p = game.players[this.owner];
+    let a = p ? p.statAtk(this.def) : this.def.atk;
+    a *= 1 + this.rank * CFG.RANK_BONUS;
+    if (this.buffT > 0) a *= 1.25;
+    return a;
+  }
+  effArmor(game) {
+    const p = game.players[this.owner];
+    return (p ? p.statArmor(this.def) : this.def.armor);
+  }
+  effRange(game) {
+    const p = game.players[this.owner];
+    return p ? p.statRange(this.def) : this.def.range;
+  }
+
+  addXP(amt, game) {
+    if (this.def.npc || this.civilian) return;
+    this.xp += amt;
+    while (this.rank < 3 && this.xp >= CFG.XP_RANKS[this.rank]) {
+      this.rank++;
+      const oldMax = this.maxHp;
+      this.maxHp = Math.round(this.def.hp * (1 + this.rank * CFG.RANK_BONUS));
+      this.hp += this.maxHp - oldMax;
+      Sim.puff(game, this.x, this.y - 1, '#ffd34d', 8);
+      if (this.owner === game.humanId) game.message(`${this.def.name} promoted to ${['', 'Trained', 'Veteran', 'Elite'][this.rank]}!`);
+    }
+  }
+
+  /* ---- orders ---- */
+  clearOrder() { this.order = null; this.path = null; this.state = 'idle'; }
+  orderMove(x, y) { this.order = { kind: 'move', x, y }; this.path = null; this.state = 'move'; }
+  orderAttack(t) { this.order = { kind: 'attack', target: t }; this.path = null; this.state = 'attack'; }
+  orderGather(obj) {
+    const canGather = obj.kind === 'fish' ? this.type === 'fishboat'
+                    : this.type === 'settler';
+    if (!canGather) return this.orderMove(obj.x + .5, obj.y + .5);
+    this.order = { kind: 'gather', obj }; this.path = null; this.state = 'gather';
+  }
+  orderBoard(t) {
+    if (this.def.naval || this.def.npc) return;
+    this.order = { kind: 'board', target: t }; this.path = null; this.state = 'move';
+  }
+  orderUnload(x, y) {
+    if (!this.cargo) return;
+    this.order = { kind: 'unload', x, y }; this.path = null; this.state = 'move';
+  }
+  orderBuild(b) {
+    if (this.type !== 'settler') return;
+    this.order = { kind: 'build', target: b }; this.path = null; this.state = 'build';
+  }
+  orderDeposit(game) { this.order = { kind: 'deposit', resume: this.order && this.order.kind === 'gather' ? this.order.obj : null }; this.path = null; }
+
+  /* ---- pathing ---- */
+  ensurePath(game, tx, ty) {
+    if (this.path && this.wp < this.path.length) return true;
+    if (this.repathT > 0) return false;
+    this.repathT = 0.4 + Math.random() * 0.3;
+    const grid = this.def.naval ? game.world.navBlocked : game.world.blocked;
+    // ships get an uncapped-ish search: coastlines force long detours, and a
+    // capped A* strands them in dead-end bays chasing straight-line distance
+    const p = Path.find(grid, this.x, this.y, tx, ty, this.def.naval ? 9500 : 4200);
+    if (p && p.length) { this.path = p; this.wp = 0; return true; }
+    this.path = null;
+    return false;
+  }
+  moveAlong(game, dt) {
+    if (!this.path || this.wp >= this.path.length) return false;
+    const [tx, ty] = this.path[this.wp];
+    const gx = tx + .5, gy = ty + .5;
+    const d = dist(this.x, this.y, gx, gy);
+    const step = this.speed * dt;
+    if (d <= step) { this.x = gx; this.y = gy; this.wp++; }
+    else {
+      const vx = (gx - this.x) / d, vy = (gy - this.y) / d;
+      this.x += vx * step; this.y += vy * step;
+      this.setDir(vx, vy);
+    }
+    if (this.def.naval && Math.random() < dt * 5) game.particles.push({ // wake foam
+      x: this.x + (Math.random() - .5) * .3, y: this.y + (Math.random() - .5) * .3,
+      vx: 0, vy: 0, grav: 0, life: .8, max: 1, color: 'rgba(225,243,255,.5)', size: 2.5,
+    });
+    this.anim = 'walk';
+    return true;
+  }
+  setDir(vx, vy) {
+    const sdx = vx - vy, sdy = (vx + vy) * 0.5;
+    if (Math.abs(sdx) > Math.abs(sdy) * 1.1) this.dir = sdx < 0 ? 1 : 3;
+    else this.dir = sdy > 0 ? 0 : 2;
+  }
+
+  distTo(e) {
+    if (e.kind === 'bld') {
+      const cx = clamp(this.x, e.x, e.x + e.size), cy = clamp(this.y, e.y, e.y + e.size);
+      return dist(this.x, this.y, cx, cy);
+    }
+    return dist(this.x, this.y, e.x, e.y);
+  }
+
+  /* ---- combat ---- */
+  tryAttack(game, dt) {
+    const t = this.order.target;
+    if (!t || t.dead) { this.clearOrder(); return; }
+    const range = Math.max(this.effRange(game), this.def.naval ? 1.6 : 1.0);
+    const d = this.distTo(t);
+    const minR = this.def.minRange || 0;
+    if (d <= range + 0.15 && d >= minR) {
+      if (this.def.suicide) { Sim.fireshipExplode(game, this, t); return; } // fire ship!
+      this.path = null;
+      this.setDir((t.cx() - this.x) || .01, (t.cy() - this.y) || 0);
+      if (this.atkCd <= 0) {
+        this.atkCd = this.def.cd;
+        this.anim = 'attack'; this.animT = 0;
+        if (this.def.burst) { this.burstLeft = this.def.burst; this.burstT = 0; }
+        else if (range > 1.2) Sim.fireProjectile(game, this, t);
+        else Sim.meleeHit(game, this, t);
+      }
+    } else if (d < minR) {
+      // step away from target
+      const ang = Math.atan2(this.y - t.cy(), this.x - t.cx());
+      const nx = clamp(this.x + Math.cos(ang) * 2, 1, World.N - 2), ny = clamp(this.y + Math.sin(ang) * 2, 1, World.N - 2);
+      if (this.ensurePath(game, nx, ny)) this.moveAlong(game, dt);
+    } else {
+      if (this.ensurePath(game, t.cx(), t.cy())) this.moveAlong(game, dt);
+      else if (!this.path) { this.clearOrder(); }
+    }
+  }
+
+  /* ---- main update ---- */
+  update(game, dt) {
+    if (this.dead) return;
+    if (this.inShip) { // riding a transport: follow it, do nothing else
+      if (this.inShip.dead) { this.dead = true; game.popFree(this); return; }
+      this.x = this.inShip.x; this.y = this.inShip.y;
+      return;
+    }
+    this.atkCd -= dt; this.repathT -= dt; this.scanT -= dt;
+    if (this.buffT > 0) this.buffT -= dt;
+    this.animT += dt;
+
+    // burst fire (chu ko nu)
+    if (this.burstLeft > 0) {
+      this.burstT -= dt;
+      if (this.burstT <= 0) {
+        const t = this.order && this.order.target;
+        if (t && !t.dead) Sim.fireProjectile(game, this, t);
+        this.burstLeft--; this.burstT = 0.13;
+      }
+    }
+    // burning
+    if (this.burn) {
+      this.burn.t -= dt;
+      this.takeDamage(game, this.burn.dps * dt, null, true);
+      if (Math.random() < dt * 8) Sim.flame(game, this.x, this.y - .5);
+      if (this.burn.t <= 0) this.burn = null;
+    }
+    // regen (India / medicine near TC)
+    const p = game.players[this.owner];
+    if (p && this.hp < this.maxHp && game.time - this.lastHitT > 4) {
+      let r = (p.civ && p.civ.regen) || 0;
+      if (p.bonus.tcHeal && game.nearDropoff(this.owner, this.x, this.y, 6)) r += 1;
+      if (r) this.hp = Math.min(this.maxHp, this.hp + r * dt);
+    }
+
+    const prevAnim = this.anim;
+    if (this.anim !== 'attack' || this.animT > 0.55) this.anim = 'idle';
+
+    // ===== state machine =====
+    const o = this.order;
+    if (o) {
+      switch (o.kind) {
+        case 'move': {
+          if (this.ensurePath(game, o.x, o.y)) {
+            if (!this.moveAlong(game, dt)) this.clearOrder();
+          } else if (!this.path) this.clearOrder();
+          break;
+        }
+        case 'attack': this.tryAttack(game, dt); break;
+        case 'gather': {
+          let obj = o.obj;
+          const isFarm = obj && obj.kind === 'bld';   // farm building vs world resource node
+          const gone = !obj || (isFarm ? (obj.dead || !obj.built) : !obj.alive);
+          if (gone) {
+            // find another nearby node of same resource
+            const nk = o.lastKind;
+            const nxt = nk ? World.nearestObj(nk, this.x, this.y, 12) : null;
+            if (nxt) { o.obj = nxt; break; }
+            this.clearOrder(); break;
+          }
+          if (!isFarm) o.lastKind = obj.kind;
+          const cap = this.def.carry || CFG.CARRY;
+          if (this.carry && this.carry.amt >= cap) { this.orderDeposit(game); this.order.resume = obj; break; }
+          const ox = isFarm ? obj.cx() : obj.x + .5;
+          const oy = isFarm ? obj.cy() : obj.y + .5;
+          const adj = isFarm ? this.distTo(obj) < 0.7
+                    : dist(this.x, this.y, ox, oy) < (this.def.naval ? 1.7 : 1.45);
+          if (adj) {
+            this.path = null;
+            this.setDir(ox - this.x || .01, oy - this.y);
+            if (isFarm && !obj.irrigated) {
+              // no water supply: crops won't grow
+              this.anim = 'idle';
+              if (this.owner === game.humanId && game.time - (game.dryMsgT || -99) > 12) {
+                game.dryMsgT = game.time;
+                game.message('A farm has no water! Build it near water or connect a Canal.', true);
+                Audio2.say('Our farms need water, build canals from a lake.');
+              }
+              break;
+            }
+            this.anim = 'attack'; // swing tool
+            const gk = isFarm ? 'farm' : obj.kind;
+            const pl = game.players[this.owner];
+            const rate = GATHER_RATE[gk] * pl.bonus.gather *
+                         (OBJ_RES[gk] === 'gold' && pl.civ ? pl.civ.goldMult : 1);
+            this.gatherT += rate * dt;
+            if (this.gatherT >= 1) {
+              const take = this.gatherT | 0; this.gatherT %= 1;
+              const res = OBJ_RES[gk];
+              if (!this.carry || this.carry.res !== res) this.carry = { res, amt: 0 };
+              this.carry.amt += take;
+              if (!isFarm) {
+                obj.amount -= take;
+                if (Math.random() < .3 && this.owner === game.humanId) Audio2.sfx('chop');
+                if (obj.amount <= 0) { World.removeObj(obj); }
+              }
+            }
+          } else {
+            if (this.ensurePath(game, ox, oy)) this.moveAlong(game, dt);
+            else if (!this.path) this.clearOrder();
+          }
+          break;
+        }
+        case 'deposit': {
+          if (!this.carry) { this.order = o.resume ? { kind: 'gather', obj: o.resume } : null; if (!this.order) this.state = 'idle'; break; }
+          const d = game.findDropoff(this.owner, this.x, this.y, this.def.naval);
+          if (!d) { this.clearOrder(); break; }
+          if (this.distTo(d) < (this.def.naval ? 1.5 : 0.7)) {
+            game.players[this.owner].res[this.carry.res] += this.carry.amt;
+            this.carry = null;
+            const rs = o.resume;
+            const ok = rs && (rs.kind === 'bld' ? (!rs.dead && rs.built) : rs.alive);
+            this.order = ok ? { kind: 'gather', obj: rs } : null;
+            if (!this.order) this.state = 'idle';
+          } else {
+            if (this.ensurePath(game, d.cx(), d.cy())) this.moveAlong(game, dt);
+            else if (!this.path) this.clearOrder();
+          }
+          break;
+        }
+        case 'board': {
+          const t = o.target;
+          if (!t || t.dead || !t.cargo) { this.clearOrder(); break; }
+          if (this.distTo(t) < 2.7) {
+            const used = t.cargo.reduce((s, c2) => s + c2.def.pop, 0);
+            if (used + this.def.pop > t.def.capacity) {
+              if (this.owner === game.humanId) game.message('Transport is full!', true);
+              this.clearOrder(); break;
+            }
+            t.cargo.push(this); this.inShip = t;
+            this.path = null; this.order = null; this.state = 'idle';
+            const si = game.selected.indexOf(this);
+            if (si >= 0) game.selected.splice(si, 1);
+            if (this.owner === game.humanId) Audio2.sfx('click');
+          } else {
+            if (this.ensurePath(game, t.x, t.y)) this.moveAlong(game, dt);
+            else if (!this.path) this.clearOrder();
+          }
+          break;
+        }
+        case 'unload': { // transports: sail to the shore point, then land the troops
+          if (!this.cargo || !this.cargo.length) { this.clearOrder(); break; }
+          if (dist(this.x, this.y, o.x, o.y) < 2.6) {
+            this.path = null;
+            Sim.unloadCargo(game, this, o.x, o.y);
+            this.clearOrder();
+          } else {
+            if (this.ensurePath(game, o.x, o.y)) this.moveAlong(game, dt);
+            else if (!this.path) { Sim.unloadCargo(game, this, this.x, this.y); this.clearOrder(); }
+          }
+          break;
+        }
+        case 'build': {
+          const b = o.target;
+          if (!b || b.dead || b.built) { this.clearOrder(); break; }
+          if (this.distTo(b) < (b.def.naval ? 1.3 : 0.7)) {
+            this.path = null; this.anim = 'attack';
+            const spd = (game.players[this.owner].civ || {}).buildSpd || 1;
+            b.progress += dt * spd / b.def.buildTime;
+            b.hp = Math.min(b.maxHp, b.hp + b.maxHp * 0.9 * dt * spd / b.def.buildTime);
+            if (Math.random() < .25 && this.owner === game.humanId) Audio2.sfx('build');
+            if (b.progress >= 1) { b.finish(game); this.clearOrder(); }
+          } else {
+            if (this.ensurePath(game, b.cx(), b.cy())) this.moveAlong(game, dt);
+            else if (!this.path) this.clearOrder();
+          }
+          break;
+        }
+      }
+    }
+
+    // ===== auto-behaviors =====
+    if (this.scanT <= 0) {
+      this.scanT = 0.45;
+      if (!this.def.npc) {
+        if (!this.civilian && (!this.order || (this.order.kind === 'move' && false))) {
+          // idle military: engage nearby enemies (fire ships wait for explicit orders)
+          if (!this.order && !this.def.suicide) {
+            const e = game.nearestEnemy(this, CFG.AGGRO);
+            if (e && !(this.def.naval && !e.def.naval && this.effRange(game) <= 1.6)) this.orderAttack(e);
+          }
+        }
+        // ruins & traders pickup
+        const ru = World.objAt(Math.round(this.x - .5), Math.round(this.y - .5));
+        if (ru && ru.alive && ru.kind === 'ruin') {
+          World.removeObj(ru);
+          const pl = game.players[this.owner];
+          if (pl) { pl.res.knowledge += ru.amount;
+            Sim.puff(game, this.x, this.y - 1, '#b58cff', 10);
+            if (this.owner === game.humanId) { game.message(`Ancient ruins explored: +${ru.amount} Knowledge`); Audio2.sfx('capture'); } }
+        }
+      } else if (this.type === 'trader' && !this.gaveKnow) {
+        // trader: gift knowledge to first nearby unit's owner
+        const near = game.queryUnits(this.x, this.y, 1.8).find(u => u !== this && u.owner >= 0 && !u.dead);
+        if (near) {
+          this.gaveKnow = true;
+          const pl = game.players[near.owner];
+          pl.res.knowledge += 30;
+          Sim.puff(game, this.x, this.y - 1, '#b58cff', 12);
+          if (near.owner === game.humanId) { game.message('A trader shares wisdom: +30 Knowledge'); Audio2.sfx('capture'); }
+        }
+      }
+    }
+
+    // trader wander / leave
+    if (this.type === 'trader' && !this.order) {
+      if (this.gaveKnow) { this.fade -= dt * 0.5; if (this.fade <= 0) { this.dead = true; game.popFree(this); } }
+      else {
+        const nx = clamp(this.x + (Math.random() * 16 - 8), 2, World.N - 3);
+        const ny = clamp(this.y + (Math.random() * 16 - 8), 2, World.N - 3);
+        if (!game.world.blocked[World.idx(nx | 0, ny | 0)]) this.orderMove(nx, ny);
+      }
+    }
+
+    // stuck detection
+    if (this.state !== 'idle' && this.path) {
+      if (dist2(this.x, this.y, this.lastX, this.lastY) < 0.0004) {
+        this.stuckT += dt;
+        if (this.stuckT > 1.4) { this.path = null; this.repathT = 0; this.stuckT = 0; }
+      } else this.stuckT = 0;
+    }
+    this.lastX = this.x; this.lastY = this.y;
+
+    // animation frames
+    if (this.anim === 'walk') this.frame = ((this.animT / 0.14) | 0) % 4;
+    else if (this.anim === 'attack') this.frame = Math.min(2, (this.animT / 0.18) | 0);
+    else { this.frame = 0; if (prevAnim !== 'idle') this.animT = 0; }
+  }
+
+  takeDamage(game, dmg, from, silent) {
+    if (this.dead) return;
+    this.hp -= dmg;
+    this.lastHitT = game.time;
+    if (this.owner === game.humanId || (from && from.owner === game.humanId)) game.combatT = game.time;
+    if (!silent && Math.random() < 0.5) Sim.puff(game, this.x, this.y - 0.6, '#a3322a', 3);
+    // settlers flee, idle military retaliate
+    if (from && !this.dead) {
+      if (this.civilian && !this.def.npc && (!this.order || this.order.kind !== 'move')) {
+        const d = game.findDropoff(this.owner, this.x, this.y);
+        if (d && this.type === 'settler' && (!this.order || this.order.kind === 'gather')) this.orderMove(d.cx(), d.cy());
+      } else if (!this.civilian && !this.order) this.orderAttack(from);
+    }
+    if (this.hp <= 0) {
+      this.dead = true;
+      game.popFree(this);
+      Sim.puff(game, this.x, this.y - 0.4, '#5b1f18', 9);
+      if (from && from.kind === 'unit') from.addXP(8 + (this.def.pop || 1) * 3, game);
+      if (this.owner === game.humanId) game.checkAttackAlert(this.x, this.y, true);
+    }
+  }
+
+  drawSprite(g, view) {
+    const civ = this.civKey || 'none';
+    const s = Sprites.unit(this.type, this.owner < 0 ? -1 : this.owner, civ, this.dir, this.anim, this.frame);
+    const ix = (World.isoX(this.x, this.y) - view.left) * view.z;
+    const iy = (World.isoY(this.x, this.y) - view.top) * view.z;
+    const sc = view.z * (this.def.big ? 0.95 : 0.78);
+    const bob = this.def.naval ? Math.sin(performance.now() / 450 + this.id * 1.7) * 2 * view.z : 0;
+    if (this.fade < 1) g.globalAlpha = this.fade;
+    g.drawImage(s.cv, ix - s.ax * sc, iy - s.ay * sc + bob, s.cv.width * sc, s.cv.height * sc);
+    g.globalAlpha = 1;
+    // transport cargo count
+    if (this.cargo && this.cargo.length) {
+      g.fillStyle = 'rgba(15,10,5,.8)'; g.beginPath();
+      g.arc(ix + 14 * view.z, iy - 30 * view.z, 8 * view.z, 0, 7); g.fill();
+      g.fillStyle = '#ffe9b0'; g.font = `bold ${Math.max(9, 10 * view.z)}px sans-serif`;
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(String(this.cargo.reduce((s2, c2) => s2 + c2.def.pop, 0)), ix + 14 * view.z, iy - 30 * view.z + bob);
+    }
+    // carry indicator
+    if (this.carry && this.carry.amt > 0) {
+      const cols = { food: '#c97e4f', wood: '#8a6a48', gold: '#ffd34d', stone: '#9a948a', iron: '#7d7872' };
+      g.fillStyle = cols[this.carry.res]; g.beginPath();
+      g.arc(ix + 8 * view.z, iy - 18 * view.z, 3 * view.z, 0, 7); g.fill();
+    }
+    // rank chevrons
+    if (this.rank > 0) {
+      g.strokeStyle = '#ffd34d'; g.lineWidth = Math.max(1, 1.6 * view.z);
+      for (let i = 0; i < this.rank; i++) {
+        const yy = iy - (this.def.big ? 64 : 46) * view.z - i * 4 * view.z;
+        g.beginPath(); g.moveTo(ix - 4 * view.z, yy); g.lineTo(ix, yy + 3 * view.z); g.lineTo(ix + 4 * view.z, yy); g.stroke();
+      }
+    }
+    return { ix, iy };
+  }
+}
+
+/* ================= BUILDING ================= */
+class Building {
+  constructor(owner, type, bx, by, civKey, built) {
+    const B = BUILDINGS[type];
+    this.id = NEXT_ID++; this.kind = 'bld';
+    this.owner = owner; this.type = type; this.civKey = civKey;
+    this.x = bx; this.y = by; this.size = B.size;
+    this.los = B.los;
+    this.maxHp = B.hp; this.hp = built ? B.hp : B.hp * 0.1;
+    this.built = !!built; this.progress = built ? 1 : 0;
+    this.dead = false;
+    this.queue = [];               // {uKey, t, total}
+    this.atkCd = 0; this.auraT = 0;
+    this.capture = {};             // playerId -> progress 0..1
+    this.captureBy = -2;           // current sole capturer (for UI)
+    this.irrigated = false;        // farms: water supply present
+    this.flowing = false;          // canals: connected to a water source
+  }
+  cx() { return this.x + this.size / 2; }
+  cy() { return this.y + this.size / 2; }
+  get def() { return BUILDINGS[this.type]; }
+
+  applyHpBonus(p) {
+    const mult = (p.civ ? p.civ.bldHp : 1) * p.bonus.bldHp;
+    const ratio = this.hp / this.maxHp;
+    this.maxHp = Math.round(BUILDINGS[this.type].hp * mult);
+    this.hp = this.maxHp * ratio;
+  }
+
+  finish(game) {
+    this.built = true; this.progress = 1;
+    const p = game.players[this.owner];
+    if (p) this.applyHpBonus(p);
+    this.hp = this.maxHp;
+    if (this.type === 'canal' || this.type === 'farm') Sim.recomputeIrrigation(game);
+    if (this.owner === game.humanId) { game.message(`${this.def.name} complete`); Audio2.sfx('train'); }
+  }
+
+  trainable(game) {
+    const p = game.players[this.owner];
+    if (!p || !this.def.trains) return [];
+    return this.def.trains.filter(k => p.canTrain(k));
+  }
+  enqueue(game, uKey) {
+    const p = game.players[this.owner];
+    const u = UNITS[uKey];
+    if (this.queue.length >= 5 || !p.canAfford(u.cost)) return false;
+    if (uKey === 'centurion') {
+      const n = game.units.filter(x => !x.dead && x.owner === this.owner && x.type === 'centurion').length +
+                this.queue.filter(q => q.uKey === 'centurion').length;
+      if (n >= (u.limit || 99)) { if (this.owner === game.humanId) game.message('Centurion limit reached', true); return false; }
+    }
+    if (p.pop + game.queuedPop(this.owner) + u.pop > p.popCap) {
+      if (this.owner === game.humanId) game.message('Need more population — capture a town!', true);
+      return false;
+    }
+    p.pay(u.cost);
+    const mult = (p.civ && !u.civilian) ? p.civ.trainMult : 1;
+    this.queue.push({ uKey, t: 0, total: u.time * mult });
+    return true;
+  }
+
+  update(game, dt) {
+    if (this.dead) return;
+    const p = game.players[this.owner];
+
+    // training
+    if (this.built && this.queue.length) {
+      const q = this.queue[0];
+      q.t += dt;
+      if (q.t >= q.total) {
+        this.queue.shift();
+        const spot = game.freeSpotNear(this, !!UNITS[q.uKey].naval);
+        if (spot) {
+          const u = Sim.spawnUnit(game, this.owner, q.uKey, spot[0], spot[1], p.civKey);
+          if (u && this.rally) u.orderMove(this.rally.x, this.rally.y);
+          if (this.owner === game.humanId) Audio2.sfx('train');
+          if (q.uKey === 'elephant' && this.owner === game.humanId) Audio2.sfx('trumpet');
+        } else this.queue.unshift(q); // wait for space
+      }
+    }
+
+    // tower attack
+    if (this.built && this.def.atk && (this.atkCd -= dt) <= 0) {
+      const e = game.nearestEnemy(this, this.def.range);
+      if (e) { this.atkCd = this.def.cd; Sim.fireProjectile(game, this, e); }
+    }
+
+    // training grounds aura: XP drip
+    if (this.built && this.def.aura && (this.auraT += dt) >= 1) {
+      this.auraT = 0;
+      for (const u of game.queryUnits(this.cx(), this.cy(), this.def.aura)) {
+        if (u.owner === this.owner && !u.civilian && !u.dead) u.addXP(0.7, game);
+      }
+    }
+
+    // ===== neutral town capture =====
+    if (this.type === 'town' && this.built) {
+      const claimants = new Map();
+      let contested = false;
+      for (const u of game.queryUnits(this.cx(), this.cy(), 3.0)) {
+        if (u.dead || u.civilian || u.def.naval || u.inShip) continue; // boots on the ground only
+        if (u.owner === this.owner) { contested = true; continue; } // defenders block capture
+        claimants.set(u.owner, (claimants.get(u.owner) || 0) + 1);
+      }
+      if (claimants.size === 1 && !contested) {
+        const [pid, n] = claimants.entries().next().value;
+        const rate = Math.min(n, 3) / CFG.CAPTURE_TIME * dt;
+        this.capture[pid] = (this.capture[pid] || 0) + rate;
+        this.captureBy = pid;
+        for (const k in this.capture) if (+k !== pid) this.capture[k] = Math.max(0, this.capture[k] - rate);
+        if (this.capture[pid] >= 1) Sim.captureTown(game, this, pid);
+      } else {
+        this.captureBy = -2;
+        for (const k in this.capture) this.capture[k] = Math.max(0, this.capture[k] - dt / CFG.CAPTURE_TIME * 0.5);
+      }
+    }
+  }
+
+  takeDamage(game, dmg, from) {
+    if (this.dead) return;
+    this.hp -= dmg;
+    if (this.owner === game.humanId || (from && from.owner === game.humanId)) game.combatT = game.time;
+    if (this.owner === game.humanId) game.checkAttackAlert(this.cx(), this.cy(), false);
+    if (this.hp <= 0) {
+      this.dead = true;
+      game.unblockBuilding(this);
+      Sim.rubble(game, this);
+      if (this.type === 'canal' || this.type === 'farm') Sim.recomputeIrrigation(game);
+      if (from && from.kind === 'unit') from.addXP(20, game);
+      if (this.type === 'town') {
+        // razed towns revert to neutral ruins-with-hp; previous owner loses cap
+        const prev = game.players[this.owner];
+        if (prev) { prev.towns--; prev.popCap -= CFG.TOWN_POP; }
+      }
+    }
+  }
+
+  drawSprite(g, view) {
+    const style = this.type === 'town' ? 'none' : (this.civKey || 'none');
+    let flag = '';
+    if (this.built) {
+      if (this.type === 'farm' && !this.irrigated) flag = 'dry';
+      if (this.type === 'canal' && !this.flowing) flag = 'dry';
+    }
+    const s = Sprites.building(this.type, style, this.owner < 0 ? -1 : this.owner, this.built, flag);
+    const ix = (World.isoX(this.cx(), this.cy()) - view.left) * view.z;
+    const iy = (World.isoY(this.cx(), this.cy()) - view.top) * view.z;
+    g.drawImage(s.cv, ix - s.ax * view.z, iy - s.ay * view.z, s.cv.width * view.z, s.cv.height * view.z);
+    // construction progress
+    if (!this.built) {
+      g.fillStyle = 'rgba(0,0,0,.5)';
+      g.fillRect(ix - 22 * view.z, iy + 4 * view.z, 44 * view.z, 5 * view.z);
+      g.fillStyle = '#e7cf8e';
+      g.fillRect(ix - 21 * view.z, iy + 5 * view.z, 42 * view.z * this.progress, 3 * view.z);
+    }
+    // capture progress ring
+    if (this.type === 'town' && this.captureBy >= -1) {
+      const pr = this.capture[this.captureBy] || 0;
+      if (pr > 0.02) {
+        const tc = this.captureBy >= 0 ? PLAYER_COLORS[this.captureBy] : GAIA_COLOR;
+        g.strokeStyle = tc.main; g.lineWidth = 4 * view.z;
+        g.beginPath(); g.arc(ix, iy - 40 * view.z, 14 * view.z, -Math.PI / 2, -Math.PI / 2 + pr * Math.PI * 2); g.stroke();
+        g.strokeStyle = 'rgba(255,255,255,.25)';
+        g.beginPath(); g.arc(ix, iy - 40 * view.z, 14 * view.z, 0, 7); g.stroke();
+      }
+    }
+    return { ix, iy };
+  }
+}
+
+/* ================= PROJECTILES & FX ================= */
+const Sim = {
+  spawnUnit(game, owner, type, x, y, civKey) {
+    const p = game.players[owner];
+    const u = UNITS[type];
+    if (p) { p.pop += u.pop; }
+    const unit = new Unit(owner, type, x, y, civKey || (p ? p.civKey : 'none'));
+    // apply current player armor/hp upgrades? hp upgrades via rank only; fine
+    game.units.push(unit);
+    return unit;
+  },
+
+  canPlace(game, type, bx, by) {
+    const B = BUILDINGS[type];
+    if (bx < 1 || by < 1 || bx + B.size > World.N - 1 || by + B.size > World.N - 1) return false;
+    if (B.naval) {
+      // docks: every tile on open water (no puddles), free of fish/ships, touching the shore
+      let touchesLand = false;
+      const reg = game.world.waterRegion[World.idx(bx, by)];
+      if (!reg || game.world.regionSizes[reg] < 60) return false;
+      for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++) {
+        const i = World.idx(x, y);
+        if (game.world.ter[i] > TERRAIN.SHALLOW || game.world.objGrid[i] || game.world.navBlocked[i]) return false;
+      }
+      for (let y = by - 1; y <= by + B.size; y++) for (let x = bx - 1; x <= bx + B.size; x++)
+        if (World.inB(x, y) && game.world.ter[World.idx(x, y)] >= TERRAIN.SAND) touchesLand = true;
+      if (!touchesLand) return false;
+    } else {
+      for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++) {
+        const i = World.idx(x, y);
+        if (game.world.blocked[i] || game.world.objGrid[i] || game.world.ter[i] < TERRAIN.SAND) return false;
+      }
+    }
+    // not on top of units
+    for (const u of game.queryUnits(bx + B.size / 2, by + B.size / 2, B.size + 1)) {
+      if (!u.dead && u.x >= bx - .2 && u.x <= bx + B.size + .2 && u.y >= by - .2 && u.y <= by + B.size + .2) return false;
+    }
+    // not overlapping existing buildings (farms don't block the grid)
+    for (const b of game.buildings) {
+      if (b.dead) continue;
+      if (bx < b.x + b.size && bx + B.size > b.x && by < b.y + b.size && by + B.size > b.y) return false;
+    }
+    return true;
+  },
+
+  placeBuilding(game, owner, type, bx, by, built) {
+    const p = game.players[owner];
+    const b = new Building(owner, type, bx, by, p ? p.civKey : 'none', built);
+    if (built && p) { b.applyHpBonus(p); b.hp = b.maxHp; }
+    game.buildings.push(b);
+    const B = BUILDINGS[type];
+    if (B.naval) { // docks block ships, not the (already unwalkable) water
+      for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++)
+        game.world.navBlocked[World.idx(x, y)] = 1;
+    } else if (!B.farm) { // farms walkable
+      for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++)
+        game.world.blocked[World.idx(x, y)] = 1;
+    }
+    return b;
+  },
+
+  meleeHit(game, src, t) {
+    const dmg = this.calcDamage(game, src, t);
+    t.takeDamage(game, dmg, src);
+    if (src.owner === game.humanId || t.owner === game.humanId) Audio2.sfx('clang');
+    // elephant splash
+    if (src.def.splash && t.kind === 'unit') {
+      for (const o of game.queryUnits(t.x, t.y, src.def.splash)) {
+        if (o !== t && o !== src && !o.dead && game.hostile(src.owner, o.owner))
+          o.takeDamage(game, dmg * 0.5, src);
+      }
+    }
+  },
+
+  calcDamage(game, src, t) {
+    const atk = src.kind === 'unit' ? src.effAtk(game) : src.def.atk;
+    let mult = 1;
+    const bv = src.def.bonusVs;
+    if (bv) {
+      const tags = t.kind === 'bld' ? ['building'] : t.def.tags || [];
+      for (const tag of tags) if (bv[tag]) mult = Math.max(mult, bv[tag]);
+    }
+    const armor = t.kind === 'unit' ? t.effArmor(game) : 1;
+    return Math.max(1, atk * mult - armor);
+  },
+
+  fireProjectile(game, src, t) {
+    const p = game.players[src.owner];
+    const burn = p && p.bonus.greekFire && (src.type === 'catapult' || src.type === 'tower');
+    game.projectiles.push({
+      x: src.cx(), y: src.cy() - (src.kind === 'bld' ? 1.2 : 0.5),
+      target: t, speed: src.type === 'catapult' ? 7 : 13,
+      src, t0: game.time, dmg: this.calcDamage(game, src, t),
+      splash: src.def.splash || 0, burn,
+      stone: src.type === 'catapult',
+    });
+    if (src.owner === game.humanId || t.owner === game.humanId) Audio2.sfx('arrow');
+  },
+
+  updateProjectiles(game, dt) {
+    const ps = game.projectiles;
+    for (let i = ps.length - 1; i >= 0; i--) {
+      const pr = ps[i];
+      const t = pr.target;
+      if (!t || t.dead) { ps.splice(i, 1); continue; }
+      const tx = t.cx(), ty = t.cy();
+      const d = dist(pr.x, pr.y, tx, ty);
+      const step = pr.speed * dt;
+      if (d <= step) {
+        ps.splice(i, 1);
+        if (pr.splash) {
+          if (pr.stone) Audio2.sfx('boom');
+          this.puff(game, tx, ty, '#c2b9a0', 10);
+          for (const o of game.queryUnits(tx, ty, pr.splash)) {
+            if (!o.dead && game.hostile(pr.src.owner, o.owner)) {
+              o.takeDamage(game, pr.dmg * (o === t ? 1 : 0.6), pr.src);
+              if (pr.burn) { o.burn = { t: 3, dps: 5 }; this.flame(game, o.x, o.y); }
+            }
+          }
+          if (t.kind === 'bld') {
+            t.takeDamage(game, pr.dmg, pr.src);
+            if (pr.burn) this.flame(game, tx, ty);
+          }
+        } else {
+          t.takeDamage(game, pr.dmg, pr.src);
+          if (pr.burn && t.kind === 'unit') { t.burn = { t: 3, dps: 5 }; this.flame(game, tx, ty); }
+        }
+      } else {
+        pr.x += (tx - pr.x) / d * step;
+        pr.y += (ty - pr.y) / d * step;
+      }
+    }
+  },
+
+  captureTown(game, town, pid) {
+    const prev = game.players[town.owner];
+    if (prev) { prev.towns--; prev.popCap -= CFG.TOWN_POP; }
+    town.owner = pid;
+    town.capture = {}; town.captureBy = -2;
+    const p = game.players[pid]; // undefined when neutral garrison reclaims it
+    if (p) {
+      p.towns++; p.popCap = Math.min(CFG.MAX_POP, p.popCap + CFG.TOWN_POP);
+      p.res.knowledge += 40;
+      town.applyHpBonus(p); town.hp = town.maxHp;
+    }
+    this.puff(game, town.cx(), town.cy() - 1, '#ffd34d', 16);
+    if (pid === game.humanId) {
+      game.message(`Town captured! +${CFG.TOWN_POP} population, +40 Knowledge`);
+      Audio2.sfx('capture');
+      Audio2.say('Town captured! Our empire grows.', true);
+    } else if (prev && prev.id === game.humanId) {
+      game.message('We lost a town!', true); Audio2.sfx('alert');
+      Audio2.say('We have lost a town!', true);
+    } else if (p) game.message(`${PLAYER_COLORS[pid].name} captured a town`, false);
+    game.ping(town.cx(), town.cy());
+  },
+
+  /* ---- irrigation: BFS water flow through canal chains ---- */
+  recomputeIrrigation(game) {
+    const isWater = (x, y) => World.inB(x, y) && game.world.ter[World.idx(x, y)] <= TERRAIN.SHALLOW;
+    const canals = [], farms = [];
+    for (const b of game.buildings) {
+      if (b.dead) continue;
+      if (b.type === 'canal' && b.built) canals.push(b);
+      else if (b.type === 'farm') farms.push(b);
+    }
+    // seed: canals touching natural water
+    const queue = [];
+    for (const c of canals) {
+      c.flowing = false;
+      for (let dy = -1; dy <= 1 && !c.flowing; dy++) for (let dx = -1; dx <= 1; dx++)
+        if (isWater(c.x + dx, c.y + dy)) { c.flowing = true; queue.push(c); break; }
+    }
+    // spread through adjacent canals
+    while (queue.length) {
+      const c = queue.pop();
+      for (const o of canals) {
+        if (o.flowing || Math.abs(o.x - c.x) > 1 || Math.abs(o.y - c.y) > 1) continue;
+        o.flowing = true; queue.push(o);
+      }
+    }
+    // farms: direct water OR a flowing canal within IRRIGATION range of the farm's edge
+    const R = CFG.IRRIGATION;
+    const nearRect = (px, py, f, r) => {
+      const cx2 = clamp(px, f.x, f.x + f.size), cy2 = clamp(py, f.y, f.y + f.size);
+      return dist2(px, py, cx2, cy2) <= r * r;
+    };
+    for (const f of farms) {
+      const fx = f.cx(), fy = f.cy();
+      let ok = false;
+      const x0 = Math.max(0, (f.x - R - 1) | 0), x1 = Math.min(World.N - 1, (f.x + f.size + R + 1) | 0);
+      const y0 = Math.max(0, (f.y - R - 1) | 0), y1 = Math.min(World.N - 1, (f.y + f.size + R + 1) | 0);
+      for (let y = y0; y <= y1 && !ok; y++) for (let x = x0; x <= x1; x++)
+        if (isWater(x, y) && nearRect(x + .5, y + .5, f, R)) { ok = true; break; }
+      if (!ok) for (const c of canals)
+        if (c.flowing && nearRect(c.cx(), c.cy(), f, R - 0.5)) { ok = true; break; }
+      if (f.irrigated && !ok && f.built && f.owner === game.humanId) {
+        game.message('A farm lost its water supply!', true);
+        Audio2.say('Our water supply has been cut!', true);
+        game.ping(fx, fy);
+      }
+      f.irrigated = ok;
+    }
+  },
+
+  /* particles */
+  puff(game, x, y, color, n) {
+    for (let i = 0; i < n; i++) game.particles.push({
+      x: x + (Math.random() - .5) * .6, y: y + (Math.random() - .5) * .4,
+      vx: (Math.random() - .5) * 2, vy: -Math.random() * 2 - .5,
+      life: .6 + Math.random() * .5, max: 1, color, size: 2 + Math.random() * 3, grav: 3,
+    });
+  },
+  flame(game, x, y) {
+    for (let i = 0; i < 4; i++) game.particles.push({
+      x: x + (Math.random() - .5) * .5, y,
+      vx: (Math.random() - .5), vy: -1.5 - Math.random() * 1.5,
+      life: .5 + Math.random() * .4, max: 1, color: Math.random() < .5 ? '#ff7a30' : '#ffc14d',
+      size: 2.5 + Math.random() * 3, grav: -2,
+    });
+  },
+  rubble(game, b) {
+    for (let i = 0; i < 22; i++) game.particles.push({
+      x: b.cx() + (Math.random() - .5) * b.size, y: b.cy() + (Math.random() - .5) * b.size * .6,
+      vx: (Math.random() - .5) * 3, vy: -Math.random() * 3,
+      life: .8 + Math.random() * .6, max: 1, color: ['#9a948a', '#6e5638', '#4e3f2a'][i % 3],
+      size: 3 + Math.random() * 4, grav: 7,
+    });
+    Audio2.sfx('boom');
+  },
+
+  updateParticles(game, dt) {
+    const ps = game.particles;
+    for (let i = ps.length - 1; i >= 0; i--) {
+      const p = ps[i];
+      p.life -= dt;
+      if (p.life <= 0) { ps.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt * 0.5;
+      p.vy += p.grav * dt;
+      if (p.vz) p.z = (p.z || 0) + p.vz * dt; // screen-space height (smoke rises)
+    }
+  },
+
+  /* chimney smoke from town centers & keeps */
+  smoke(game, b) {
+    game.particles.push({
+      x: b.cx() - 0.4 + Math.random() * 0.3, y: b.cy() - 0.4,
+      vx: 0.12 + Math.random() * 0.1, vy: 0, grav: 0,
+      z: (b.size * 26) + 14, vz: 16 + Math.random() * 8,
+      life: 1.6 + Math.random() * 0.8, max: 2.2,
+      color: 'rgba(160,150,135,0.5)', size: 3 + Math.random() * 3,
+    });
+  },
+
+  /* separation: gently push overlapping units apart */
+  separate(game, dt) {
+    const units = game.units;
+    for (const u of units) {
+      if (u.dead || u.inShip) continue;
+      const grid = u.def.naval ? game.world.navBlocked : game.world.blocked;
+      for (const o of game.queryUnits(u.x, u.y, 0.9)) {
+        if (o === u || o.dead || o.inShip || !!o.def.naval !== !!u.def.naval) continue;
+        const d2 = dist2(u.x, u.y, o.x, o.y);
+        if (d2 < 0.20 && d2 > 0.0001) {
+          const d = Math.sqrt(d2), push = (0.45 - d) * dt * 2.2;
+          const px = (u.x - o.x) / d * push, py = (u.y - o.y) / d * push;
+          const nx = u.x + px, ny = u.y + py;
+          if (!grid[World.idx(clamp(nx | 0, 0, World.N - 1), clamp(ny | 0, 0, World.N - 1))]) { u.x = nx; u.y = ny; }
+        }
+      }
+    }
+  },
+
+  /* transport: land cargo on free shore tiles near (tx, ty) */
+  unloadCargo(game, ship, tx, ty) {
+    const spots = [];
+    const sx = ship.x | 0, sy = ship.y | 0;
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      const x = sx + dx, y = sy + dy;
+      if (!World.inB(x, y)) continue;
+      const i = World.idx(x, y);
+      if (game.world.ter[i] >= TERRAIN.SAND && !game.world.blocked[i])
+        spots.push([x, y, dist2(x + .5, y + .5, tx, ty)]);
+    }
+    spots.sort((a, b) => a[2] - b[2]);
+    let landed = 0;
+    while (ship.cargo.length && landed < spots.length) {
+      const u = ship.cargo.shift();
+      const [x, y] = spots[landed++];
+      u.inShip = null; u.x = x + .5; u.y = y + .5;
+      u.clearOrder();
+    }
+    if (ship.cargo.length) {
+      if (ship.owner === game.humanId) game.message('No room to land all troops here!', true);
+    } else if (landed && ship.owner === game.humanId) {
+      Audio2.ack('move', false);
+    }
+  },
+
+  /* fire ship: ram and burn */
+  fireshipExplode(game, ship, target) {
+    ship.dead = true;
+    game.popFree(ship);
+    const dmg = this.calcDamage(game, ship, target);
+    target.takeDamage(game, dmg, ship);
+    if (target.kind === 'unit') target.burn = { t: 4, dps: 6 };
+    for (const o of game.queryUnits(target.cx(), target.cy(), ship.def.splash)) {
+      if (o === target || o.dead || !game.hostile(ship.owner, o.owner)) continue;
+      o.takeDamage(game, dmg * 0.6, ship);
+      if (o.def.naval) o.burn = { t: 3, dps: 5 };
+    }
+    for (let i = 0; i < 14; i++) this.flame(game, target.cx() + (Math.random() - .5) * 1.5, target.cy() + (Math.random() - .5));
+    this.puff(game, target.cx(), target.cy(), '#5a5550', 10);
+    Audio2.sfx('boom');
+  },
+
+  /* centurion aura */
+  auras(game) {
+    for (const u of game.units) {
+      if (u.dead || u.type !== 'centurion') continue;
+      for (const o of game.queryUnits(u.x, u.y, u.def.aura)) {
+        if (o.owner === u.owner && o !== u && !o.civilian) o.buffT = 0.8;
+      }
+    }
+  },
+};
