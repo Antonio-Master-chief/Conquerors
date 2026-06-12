@@ -143,10 +143,14 @@ class Unit {
     this.anim = 'walk';
     return true;
   }
+  /* true 8-direction facing from the on-screen movement vector.
+     dir: 0=S 1=SW 2=W 3=NW 4=N 5=NE 6=E 7=SE */
   setDir(vx, vy) {
-    const sdx = vx - vy, sdy = (vx + vy) * 0.5;
-    if (Math.abs(sdx) > Math.abs(sdy) * 1.1) this.dir = sdx < 0 ? 1 : 3;
-    else this.dir = sdy > 0 ? 0 : 2;
+    const sdx = vx - vy, sdy = (vx + vy) * 0.5; // tile velocity -> screen velocity
+    if (sdx * sdx + sdy * sdy < 1e-8) return;
+    const a = Math.atan2(sdy, sdx); // 0 = screen-east, +90° = screen-south
+    const sector = Math.round(((a * 180 / Math.PI + 360) % 360) / 45) % 8; // 0=E,1=SE,2=S,3=SW,4=W,5=NW,6=N,7=NE
+    this.dir = [6, 7, 0, 1, 2, 3, 4, 5][sector];
   }
 
   distTo(e) {
@@ -686,7 +690,8 @@ class Building {
     const s = Sprites.building(this.type, style, this.owner < 0 ? -1 : this.owner, this.built, flag);
     const ix = (World.isoX(this.cx(), this.cy()) - view.left) * view.z;
     const iy = (World.isoY(this.cx(), this.cy()) - view.top) * view.z;
-    g.drawImage(s.cv, ix - s.ax * view.z, iy - s.ay * view.z, s.cv.width * view.z, s.cv.height * view.z);
+    const bk = s.k || 1;
+    g.drawImage(s.cv, ix - s.ax * view.z, iy - s.ay * view.z, s.cv.width * view.z / bk, s.cv.height * view.z / bk);
     // construction progress
     if (!this.built) {
       g.fillStyle = 'rgba(0,0,0,.5)';

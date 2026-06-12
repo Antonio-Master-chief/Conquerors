@@ -1,4 +1,4 @@
-/* ============ CONQUERORS — procedural sprite factory ============
+﻿/* ============ CONQUERORS — procedural sprite factory ============
    Everything is drawn in code and cached: terrain, units (4 facings,
    walk/attack frames), buildings per-civ, icons. No external assets. */
 'use strict';
@@ -249,78 +249,117 @@ const Sprites = (() => {
     trader:   { tunic: '#7a5d8a', helmet: 'turban',weapon: 'staff',   shield: 'none', pack: true },
   };
 
+  /* facing table for the 5 baked directions; E/NE/SE come from mirroring.
+     fx: -1 = facing screen-left, 0 = frontal; fy: +1 = toward viewer, -1 = away */
+  const POSES = [
+    { fx: 0,     fy: 1 },     // 0 S  (front)
+    { fx: -0.71, fy: 0.71 },  // 1 SW (3/4 front)
+    { fx: -1,    fy: 0 },     // 2 W  (profile)
+    { fx: -0.71, fy: -0.71 }, // 3 NW (3/4 back)
+    { fx: 0,     fy: -1 },    // 4 N  (back)
+  ];
+
   function drawHumanoid(g, type, colorIdx, civ, dir, anim, fr) {
     const v = UNIT_VIS[type] || UNIT_VIS.spearman;
     const tc = teamCols(colorIdx);
     const skin = SKIN[civ] || SKIN.none;
     const tunic = v.tunic === 'team' ? tc.main : v.tunic;
-    const tunicD = v.tunic === 'team' ? tc.dark : 'rgba(0,0,0,.25)';
+    const tunicD = v.tunic === 'team' ? tc.dark : null;
+    const P = POSES[dir] || POSES[0];
+    const fx = P.fx, fy = P.fy;
+    const away = fy < -0.3;                // facing away from the viewer
+    const sideAmt = Math.abs(fx);          // 0 frontal .. 1 full profile
+    const prof = sideAmt >= 0.5;           // profile-ish: use side-style weapons
+    // facing direction in screen space (iso vertical is half scale)
+    let dnx = fx, dny = fy * 0.5;
+    const dl = Math.hypot(dnx, dny) || 1; dnx /= dl; dny /= dl;
+
     // pose params
     let swing = 0, lunge = 0, raise = 0;
     if (anim === 'walk') swing = Math.sin(fr / 4 * Math.PI * 2) * 0.7;
     if (anim === 'attack') { lunge = fr === 1 ? 3.5 : fr === 0 ? -1.5 : 0.5; raise = fr === 0 ? 1 : fr === 1 ? -0.6 : 0.2; }
-    const GY = 52, hipY = 36, hipX = 24 + (dir === 1 ? -lunge : 0);
-    const side = dir === 1;
-    const F = side ? -1 : 0; // facing offset for side view (faces left)
+    const GY = 52, hipY = 36;
+    const hipX = 24 + dnx * lunge;         // attack lunge leans toward the facing
+    const shY = hipY - 13;
+    const armY = shY + 2.5;
+    const tw = 6.5 - sideAmt;              // torso half-width (narrower in profile)
+    // weapon hand: leading hand in profile, right hand when frontal
+    const wx = hipX + fx * 8 + (1 - sideAmt) * 6.5;
+    const wy = armY + 5 - raise * 3;
 
     g.save();
     // shadow
     g.fillStyle = 'rgba(0,0,0,.30)'; g.beginPath(); g.ellipse(24, GY, 9, 3.4, 0, 0, 7); g.fill();
-    g.strokeStyle = 'rgba(20,12,6,.65)';
 
-    // ----- legs (with boots) -----
-    g.lineWidth = 3.6; g.strokeStyle = '#3f3324';
-    if (side) {
-      for (const s of [-1, 1]) {
-        const a = swing * s;
-        const fx2 = hipX - Math.sin(a) * 13, fy2 = hipY + Math.cos(a) * 14;
-        g.strokeStyle = s < 0 ? '#332a1e' : '#46392a';
-        g.beginPath(); g.moveTo(hipX, hipY); g.lineTo(fx2, fy2); g.stroke();
-        g.fillStyle = s < 0 ? '#241c12' : '#33281a';
-        g.beginPath(); g.roundRect(fx2 - 3.6, fy2 - 2.4, 5.6, 3, 1.2); g.fill();
-      }
-    } else {
-      const bob = Math.abs(swing) * 1.5;
-      g.strokeStyle = '#3a2f22';
-      g.beginPath(); g.moveTo(hipX - 3.4, hipY); g.lineTo(hipX - 3.6, GY - 1 - (swing > 0 ? bob : 0)); g.stroke();
-      g.beginPath(); g.moveTo(hipX + 3.4, hipY); g.lineTo(hipX + 3.6, GY - 1 - (swing < 0 ? bob : 0)); g.stroke();
-      g.fillStyle = '#2a2014';
-      g.beginPath(); g.roundRect(hipX - 5.6, GY - 3.4 - (swing > 0 ? bob : 0), 4.4, 2.8, 1); g.fill();
-      g.beginPath(); g.roundRect(hipX + 1.4, GY - 3.4 - (swing < 0 ? bob : 0), 4.4, 2.8, 1); g.fill();
+    // ----- legs: stride along the facing axis, stance across it -----
+    for (const s of [-1, 1]) {
+      const a = swing * s;
+      const stepX = dnx * Math.sin(a) * 9, stepY = dny * Math.sin(a) * 4.5;
+      const stanceX = -dny * s * 3.4 * (1 - sideAmt * 0.55);
+      const stanceY = dnx * s * 1.4;
+      const fx2 = hipX + stanceX + stepX;
+      const fy2 = GY - 1.2 + stanceY + stepY;
+      g.strokeStyle = s < 0 ? '#332a1e' : '#46392a';
+      g.lineWidth = 3.6;
+      g.beginPath(); g.moveTo(hipX + stanceX * 0.4, hipY); g.lineTo(fx2, fy2); g.stroke();
+      g.fillStyle = s < 0 ? '#241c12' : '#33281a';
+      g.beginPath(); g.roundRect(fx2 - 2.8 + dnx * 1.4, fy2 - 2.2, 5.6, 2.8, 1.1); g.fill();
     }
 
-    // ----- cape (back layer) -----
-    if (v.cape && dir !== 0) {
+    // ----- cape & pack: hang on the side away from the facing -----
+    if (v.cape && !away && sideAmt > 0.2) { // trailing behind the body
       g.fillStyle = v.cape; g.beginPath();
-      g.moveTo(hipX - 5, hipY - 13); g.quadraticCurveTo(hipX + 8, hipY - 2, hipX + 6, hipY + 6);
-      g.lineTo(hipX - 2, hipY + 4); g.closePath(); g.fill();
+      g.moveTo(hipX - fx * 2, shY + 1); g.quadraticCurveTo(hipX - fx * 9, hipY - 2, hipX - fx * 7, hipY + 6);
+      g.lineTo(hipX - fx * 2, hipY + 4); g.closePath(); g.fill();
     }
-    if (v.pack) { g.fillStyle = '#6e5638'; g.beginPath(); g.ellipse(hipX + (side ? 6 : 0), hipY - 12, 6, 8, side ? .3 : 0, 0, 7); g.fill(); }
+    if (v.pack && !away) { g.fillStyle = '#6e5638';
+      g.beginPath(); g.ellipse(hipX - fx * 5.5, hipY - 12, 5.5, 7.5, -fx * .3, 0, 7); g.fill(); }
 
     // ----- torso -----
-    const shY = hipY - 13;
-    let grd = g.createLinearGradient(hipX - 6, shY, hipX + 6, hipY);
-    grd.addColorStop(0, tunic); grd.addColorStop(1, tunicD === 'rgba(0,0,0,.25)' ? tunic : tunicD);
+    let grd = g.createLinearGradient(hipX - tw, shY, hipX + tw, hipY);
+    grd.addColorStop(0, tunic); grd.addColorStop(1, tunicD || tunic);
     g.fillStyle = grd; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.2;
     g.beginPath();
-    if (side) { g.moveTo(hipX - 5.5, shY); g.lineTo(hipX + 5.5, shY); g.lineTo(hipX + 4.5, hipY + 2); g.lineTo(hipX - 4.5, hipY + 2); }
-    else      { g.moveTo(hipX - 6.5, shY); g.lineTo(hipX + 6.5, shY); g.lineTo(hipX + 5, hipY + 2); g.lineTo(hipX - 5, hipY + 2); }
+    g.moveTo(hipX - tw, shY); g.lineTo(hipX + tw, shY);
+    g.lineTo(hipX + tw - 1.4, hipY + 2); g.lineTo(hipX - tw + 1.4, hipY + 2);
     g.closePath(); g.fill(); g.stroke();
-    if (v.tunic === 'team' && tunicD !== tunic) { // belt + trim + shoulder pauldron
-      g.fillStyle = '#8a6420'; g.fillRect(hipX - 5, hipY - 2.5, 10, 2.2);
+    if (away) { // shaded back
+      g.fillStyle = 'rgba(20,12,6,.18)';
+      g.beginPath(); g.moveTo(hipX - tw + 1, shY + 1); g.lineTo(hipX + tw - 1, shY + 1);
+      g.lineTo(hipX + tw - 2.2, hipY); g.lineTo(hipX - tw + 2.2, hipY); g.closePath(); g.fill();
+    }
+    if (v.tunic === 'team' && tunicD) { // belt + shoulder pauldron
+      g.fillStyle = '#8a6420'; g.fillRect(hipX - tw + 1, hipY - 2.5, tw * 2 - 2, 2.2);
       g.fillStyle = tc.light; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1;
-      g.beginPath(); g.arc(hipX + (side ? -4.5 : 5), shY + 1.2, 2.4, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.arc(hipX + (fx !== 0 ? fx : 1) * (tw - 0.8), shY + 1.2, 2.4, 0, 7); g.fill(); g.stroke();
     }
     // pteruges skirt for legion types
     if (v.helmet === 'galea' || v.helmet === 'crest') {
       g.fillStyle = '#7d6235';
       for (let i = -2; i <= 2; i++) g.fillRect(hipX + i * 2.4 - 1, hipY, 2, 4.5);
     }
+    // cape / pack seen from behind: drape over the torso
+    if (v.cape && away) {
+      g.fillStyle = v.cape; g.beginPath();
+      g.moveTo(hipX - tw + .5, shY + .5); g.lineTo(hipX + tw - .5, shY + .5);
+      g.quadraticCurveTo(hipX + tw, hipY + 4, hipX + 1, hipY + 7);
+      g.quadraticCurveTo(hipX - tw, hipY + 4, hipX - tw + .5, shY + .5);
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(20,12,6,.4)'; g.stroke();
+    }
+    if (v.pack && away) { g.fillStyle = '#6e5638';
+      g.beginPath(); g.ellipse(hipX, hipY - 11, 5.8, 7.5, 0, 0, 7); g.fill();
+      g.strokeStyle = '#4e3c24'; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(hipX - 5, hipY - 15); g.lineTo(hipX + 5, hipY - 8); g.stroke(); }
 
     // ----- head -----
-    const hx = hipX + (side ? -2.5 : 0), hy = shY - 7;
+    const hx = hipX + fx * 2.5, hy = shY - 7;
     g.fillStyle = skin; g.beginPath(); g.arc(hx, hy, 5.4, 0, 7); g.fill();
-    if (dir === 0) { g.fillStyle = '#241a10'; g.fillRect(hx - 2.6, hy - 1, 1.6, 1.8); g.fillRect(hx + 1.2, hy - 1, 1.6, 1.8); }
+    if (fy > 0.25) { // eyes shift toward the facing
+      g.fillStyle = '#241a10';
+      g.fillRect(hx - 2.6 + fx * 1.4, hy - 1, 1.6, 1.8);
+      g.fillRect(hx + 1.2 + fx * 1.4, hy - 1, 1.6, 1.8);
+    }
     // helmet
     g.lineWidth = 1.1;
     switch (v.helmet) {
@@ -332,12 +371,15 @@ const Sprites = (() => {
       case 'galea': case 'crest': {
         g.fillStyle = '#aab3bf'; g.beginPath(); g.arc(hx, hy - 1, 5.8, Math.PI * .95, Math.PI * 0.05); g.fill();
         g.fillRect(hx - 5.8, hy - 1.4, 11.6, 2.2);
-        if (side) { g.fillRect(hx - 6.5, hy - .5, 2.4, 4.5); }   // cheek guard
-        const cc = v.helmet === 'crest' ? '#d22' : (type === 'legionary' ? tc.light : '#d22');
+        if (prof) g.fillRect(hx + fx * 6.5 - 1.2, hy - .5, 2.4, 4.5); // cheek guard, leading side
+        if (away) { g.fillStyle = '#8d96a3'; g.fillRect(hx - 4.5, hy - .8, 9, 3.6); } // neck guard
         if (v.helmet === 'crest' || type === 'centurion') { g.fillStyle = '#c22020';
-          if (side) g.fillRect(hx - 6, hy - 9.5, 12, 3.4); else { g.beginPath(); g.ellipse(hx, hy - 8.5, 7, 2.8, 0, 0, 7); g.fill(); } }
-        else if (v.helmet === 'galea') { g.fillStyle = tc.main;
-          g.beginPath(); g.moveTo(hx - 1.2, hy - 6); g.quadraticCurveTo(hx + (side ? 6 : 0), hy - 12, hx + (side ? 7 : 1.2), hy - 6); g.closePath(); g.fill(); }
+          if (prof) g.fillRect(hx - 6, hy - 9.5, 12, 3.4);
+          else { g.beginPath(); g.ellipse(hx, hy - 8.5, 7, 2.8, 0, 0, 7); g.fill(); } }
+        else { g.fillStyle = tc.main; // galea plume sweeps back, away from the facing
+          g.beginPath(); g.moveTo(hx - fx * 1.2, hy - 6);
+          g.quadraticCurveTo(hx - fx * 6, hy - 12, hx - fx * 7 + (fx === 0 ? 1.2 : 0), hy - 6);
+          g.closePath(); g.fill(); }
         break; }
       case 'hood': g.fillStyle = '#46552f'; g.beginPath(); g.arc(hx, hy - 1, 6, Math.PI * .9, Math.PI * .1); g.fill();
         g.beginPath(); g.moveTo(hx - 5.5, hy); g.lineTo(hx + 5.5, hy); g.lineTo(hx + 3, hy + 4); g.lineTo(hx - 3, hy + 4); g.closePath(); g.fill(); break;
@@ -347,15 +389,16 @@ const Sprites = (() => {
     }
 
     // ----- weapon & arms -----
-    const armY = shY + 2.5;
-    const wx = side ? hipX - 8 : hipX + 7; // weapon hand
     g.strokeStyle = skin; g.lineWidth = 3;
-    // back arm
-    if (dir !== 1 || v.shield === 'none') { g.beginPath(); g.moveTo(hipX + (side ? 3 : -6), armY); g.lineTo(hipX + (side ? 5 : -8), armY + 7); g.stroke(); }
+    // support arm (opposite the weapon)
+    if (!prof || v.shield === 'none') {
+      g.beginPath(); g.moveTo(hipX - fx * 3 - (1 - sideAmt) * 6, armY);
+      g.lineTo(hipX - fx * 5 - (1 - sideAmt) * 8, armY + 7); g.stroke();
+    }
     // weapon arm
-    g.beginPath(); g.moveTo(hipX + (side ? -3 : 6), armY); g.lineTo(wx, armY + 5 - raise * 3); g.stroke();
+    g.beginPath(); g.moveTo(hipX + fx * 3 + (1 - sideAmt) * 6, armY); g.lineTo(wx, wy); g.stroke();
 
-    const wy = armY + 5 - raise * 3;
+    const side = prof; // weapon renderers below use profile styling when true
     g.lineWidth = 2;
     switch (v.weapon) {
       case 'spear': {
@@ -401,26 +444,33 @@ const Sprites = (() => {
       case 'staff': g.strokeStyle = '#6e5638'; g.lineWidth = 2; g.beginPath(); g.moveTo(wx, wy + 8); g.lineTo(wx, wy - 12); g.stroke(); break;
     }
 
-    // ----- shield (front layer) -----
-    const sx2 = side ? hipX - 7.5 : hipX - 7.5, sy2 = armY + 3;
+    // ----- shield -----
+    // facing the viewer: carried on the leading arm. Facing away: slung across the back.
+    const shScale = away ? 0.8 : 1;
+    const sx2 = away ? hipX + 0.5 : (prof ? hipX + fx * 7.5 : hipX - 7.5);
+    const sy2 = away ? armY + 4 : armY + 3;
     g.lineWidth = 1.2; g.strokeStyle = 'rgba(20,12,6,.6)';
     if (v.shield === 'round') {
-      const gr = g.createRadialGradient(sx2 - 1.5, sy2 - 1.5, 1, sx2, sy2, 6);
+      const r = 6 * shScale;
+      const gr = g.createRadialGradient(sx2 - 1.5, sy2 - 1.5, 1, sx2, sy2, r);
       gr.addColorStop(0, tc.light); gr.addColorStop(1, tc.dark);
-      g.fillStyle = gr; g.beginPath(); g.arc(sx2, sy2, 6, 0, 7); g.fill(); g.stroke();
-      g.fillStyle = '#e7cf8e'; g.beginPath(); g.arc(sx2, sy2, 1.7, 0, 7); g.fill();
+      g.fillStyle = gr; g.beginPath(); g.arc(sx2, sy2, r, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = '#e7cf8e'; g.beginPath(); g.arc(sx2, sy2, 1.7 * shScale, 0, 7); g.fill();
     } else if (v.shield === 'scutum') {
-      const gr = g.createLinearGradient(sx2 - 5, 0, sx2 + 5, 0);
+      const hw2 = 5 * shScale, hh2 = 8.5 * shScale;
+      const gr = g.createLinearGradient(sx2 - hw2, 0, sx2 + hw2, 0);
       gr.addColorStop(0, tc.main); gr.addColorStop(1, tc.dark);
       g.fillStyle = gr;
-      g.beginPath(); g.roundRect(sx2 - 5, sy2 - 8.5, 10, 17, 3); g.fill(); g.stroke();
+      g.beginPath(); g.roundRect(sx2 - hw2, sy2 - hh2, hw2 * 2, hh2 * 2, 3); g.fill(); g.stroke();
       g.strokeStyle = '#e7cf8e'; g.lineWidth = 1.1;
-      g.beginPath(); g.moveTo(sx2, sy2 - 6); g.lineTo(sx2, sy2 + 6); g.stroke();
-      g.fillStyle = '#e7cf8e'; g.beginPath(); g.arc(sx2, sy2, 2, 0, 7); g.fill();
+      g.beginPath(); g.moveTo(sx2, sy2 - hh2 + 2.5); g.lineTo(sx2, sy2 + hh2 - 2.5); g.stroke();
+      g.fillStyle = '#e7cf8e'; g.beginPath(); g.arc(sx2, sy2, 2 * shScale, 0, 7); g.fill();
     } else if (v.shield === 'kite') {
+      const s2 = shScale;
       g.fillStyle = tc.main; g.beginPath();
-      g.moveTo(sx2 - 5, sy2 - 6); g.quadraticCurveTo(sx2, sy2 - 9, sx2 + 5, sy2 - 6);
-      g.quadraticCurveTo(sx2 + 4, sy2 + 4, sx2, sy2 + 9); g.quadraticCurveTo(sx2 - 4, sy2 + 4, sx2 - 5, sy2 - 6);
+      g.moveTo(sx2 - 5 * s2, sy2 - 6 * s2); g.quadraticCurveTo(sx2, sy2 - 9 * s2, sx2 + 5 * s2, sy2 - 6 * s2);
+      g.quadraticCurveTo(sx2 + 4 * s2, sy2 + 4 * s2, sx2, sy2 + 9 * s2);
+      g.quadraticCurveTo(sx2 - 4 * s2, sy2 + 4 * s2, sx2 - 5 * s2, sy2 - 6 * s2);
       g.closePath(); g.fill(); g.stroke();
     }
     g.restore();
@@ -689,28 +739,235 @@ const Sprites = (() => {
     return out;
   }
 
-  /* public: unit sprite. dir: 0 front,1 left,2 back,3 right.
-     Humanoids bake at 2x supersample (k=2) for crisp detail; renderer divides by k. */
+  /* ---------- front / back views for mounted, siege & naval units ---------- */
+  function drawBigFB(type, colorIdx, civ, dir, anim, fr) {
+    const away = dir === 4;
+    const tc = teamCols(colorIdx);
+    const swing = anim === 'walk' ? Math.sin(fr / 4 * Math.PI * 2) : 0;
+    const raise = anim === 'attack' ? (fr === 1 ? 1 : .3) : 0;
+    const W2 = type === 'elephant' ? 100 : 92, H2 = type === 'elephant' ? 84 : 78;
+    const c = mk(W2, H2), g = g2(c);
+    const cx = W2 / 2;
+
+    function horseFB(gy) {
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(cx, gy, 12, 4.5, 0, 0, 7); g.fill();
+      // two visible legs, alternating
+      for (const s of [-1, 1]) {
+        g.strokeStyle = s < 0 ? '#5f4830' : '#6e583a'; g.lineWidth = 3.4;
+        g.beginPath(); g.moveTo(cx + s * 6, gy - 22);
+        g.lineTo(cx + s * 6 + Math.sin(swing * Math.PI * s) * 3, gy - 1); g.stroke();
+      }
+      const gr = g.createLinearGradient(cx - 11, 0, cx + 11, 0);
+      gr.addColorStop(0, '#6e583a'); gr.addColorStop(.5, '#8a6a48'); gr.addColorStop(1, '#5f4830');
+      g.fillStyle = gr; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.3;
+      g.beginPath(); g.ellipse(cx, gy - 26, 10.5, 13, 0, 0, 7); g.fill(); g.stroke(); // chest / rump
+      if (away) { // tail
+        g.strokeStyle = '#3a2c1c'; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(cx, gy - 30); g.quadraticCurveTo(cx + 2, gy - 18, cx - 1, gy - 8); g.stroke();
+      }
+      // head (small over the body when seen from behind)
+      g.fillStyle = '#8a6a48';
+      g.beginPath(); g.ellipse(cx, gy - 42, 5.5, 8, 0, 0, 7); g.fill(); g.stroke();
+      if (!away) { g.fillStyle = '#6e583a'; g.beginPath(); g.ellipse(cx, gy - 36, 3.6, 4.5, 0, 0, 7); g.fill();
+        g.fillStyle = '#241a10'; g.fillRect(cx - 3.4, gy - 45, 1.8, 2); g.fillRect(cx + 1.6, gy - 45, 1.8, 2); }
+      g.fillStyle = '#6e583a'; // ears
+      g.beginPath(); g.moveTo(cx - 5, gy - 47); g.lineTo(cx - 3, gy - 53); g.lineTo(cx - 1, gy - 48); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(cx + 5, gy - 47); g.lineTo(cx + 3, gy - 53); g.lineTo(cx + 1, gy - 48); g.closePath(); g.fill();
+      g.fillStyle = tc.main; g.fillRect(cx - 9, gy - 32, 18, 5); // saddle cloth
+    }
+
+    if (type === 'scout') {
+      horseFB(72);
+      drawRiderTorso(g, cx, 22, colorIdx, civ, 'none', 0);
+      return { cv: c, ax: cx, ay: 73 };
+    }
+    if (type === 'chariot') {
+      if (!away) { // horse hides the cart; wheels peek out at the sides
+        horseFB(72);
+        g.fillStyle = '#4e3f2a';
+        for (const s of [-1, 1]) { g.beginPath(); g.arc(cx + s * 17, 64, 7.5, 0, 7); g.fill();
+          g.strokeStyle = '#8a7148'; g.lineWidth = 1.3;
+          g.beginPath(); g.arc(cx + s * 17, 64, 4.5, 0, 7); g.stroke(); }
+        drawRiderTorso(g, cx, 22, colorIdx, civ, 'none', raise);
+      } else { // cart dominates from behind
+        g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(cx, 72, 20, 5, 0, 0, 7); g.fill();
+        g.fillStyle = '#6e583a'; // horse head + ears above the cart
+        g.beginPath(); g.ellipse(cx, 26, 5, 7, 0, 0, 7); g.fill();
+        g.beginPath(); g.moveTo(cx - 4, 21); g.lineTo(cx - 2, 15); g.lineTo(cx, 20); g.closePath(); g.fill();
+        g.beginPath(); g.moveTo(cx + 4, 21); g.lineTo(cx + 2, 15); g.lineTo(cx, 20); g.closePath(); g.fill();
+        for (const s of [-1, 1]) { // wheels
+          g.fillStyle = '#4e3f2a'; g.beginPath(); g.arc(cx + s * 16, 62, 8.5, 0, 7); g.fill();
+          g.strokeStyle = '#8a7148'; g.lineWidth = 1.5;
+          for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3 + swing;
+            g.beginPath(); g.moveTo(cx + s * 16 - Math.cos(a) * 7, 62 - Math.sin(a) * 7);
+            g.lineTo(cx + s * 16 + Math.cos(a) * 7, 62 + Math.sin(a) * 7); g.stroke(); }
+        }
+        g.fillStyle = tc.main; g.strokeStyle = 'rgba(20,12,6,.6)'; g.lineWidth = 1.3;
+        g.beginPath(); g.roundRect(cx - 13, 40, 26, 18, 3); g.fill(); g.stroke();
+        g.fillStyle = '#e7cf8e'; g.fillRect(cx - 13, 46, 26, 2);
+        drawRiderTorso(g, cx, 28, colorIdx, civ, 'none', raise);
+      }
+      return { cv: c, ax: cx, ay: 73 };
+    }
+    if (type === 'elephant') {
+      g.fillStyle = 'rgba(0,0,0,.32)'; g.beginPath(); g.ellipse(cx, 76, 20, 6.5, 0, 0, 7); g.fill();
+      for (const s of [-1, 1]) { // two thick legs
+        g.fillStyle = s < 0 ? '#6b6660' : '#7d7872';
+        g.save(); g.translate(cx + s * 11, 56); g.rotate(Math.sin(swing * Math.PI * s) * 0.18);
+        g.fillRect(-4.5, 0, 9, 20); g.restore();
+      }
+      const gr = g.createLinearGradient(cx - 24, 0, cx + 24, 0);
+      gr.addColorStop(0, '#5f5a54'); gr.addColorStop(.5, '#8d8880'); gr.addColorStop(1, '#5f5a54');
+      g.fillStyle = gr; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.4;
+      g.beginPath(); g.ellipse(cx, 44, 24, 21, 0, 0, 7); g.fill(); g.stroke(); // bulk
+      // ears flank the head
+      g.fillStyle = '#6b6660';
+      g.beginPath(); g.ellipse(cx - 17, 34, 8.5, 11.5, -.15, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.ellipse(cx + 17, 34, 8.5, 11.5, .15, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = '#827d76';
+      g.beginPath(); g.ellipse(cx, 36, 12.5, 13, 0, 0, 7); g.fill(); g.stroke(); // head
+      if (!away) {
+        // trunk down the middle (lifts when attacking)
+        const t = raise;
+        g.fillStyle = '#827d76';
+        g.beginPath();
+        g.moveTo(cx - 3.4, 42); g.quadraticCurveTo(cx - 4, 56 - t * 14, cx - 2 + t * 8, 66 - t * 22);
+        g.lineTo(cx + 2 + t * 9, 64 - t * 22); g.quadraticCurveTo(cx + 4, 54 - t * 12, cx + 3.4, 42);
+        g.closePath(); g.fill(); g.stroke();
+        g.strokeStyle = '#e8e0ce'; g.lineWidth = 3.2; // tusks
+        g.beginPath(); g.moveTo(cx - 7, 44); g.quadraticCurveTo(cx - 10, 52, cx - 8, 58); g.stroke();
+        g.beginPath(); g.moveTo(cx + 7, 44); g.quadraticCurveTo(cx + 10, 52, cx + 8, 58); g.stroke();
+        g.fillStyle = '#1d1812'; g.fillRect(cx - 6.5, 31, 2.2, 2.6); g.fillRect(cx + 4.3, 31, 2.2, 2.6);
+        g.fillStyle = tc.main; g.fillRect(cx - 9, 24, 18, 4.5); // headdress band
+      } else {
+        g.strokeStyle = '#6b6660'; g.lineWidth = 2.4; // tail
+        g.beginPath(); g.moveTo(cx, 60); g.quadraticCurveTo(cx + 2, 68, cx, 74); g.stroke();
+        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.beginPath(); g.roundRect(cx - 13, 30, 26, 16, 3); g.fill(); g.stroke(); // caparison
+        g.fillStyle = '#e7cf8e'; g.fillRect(cx - 13, 43, 26, 2.4);
+      }
+      drawRiderTorso(g, cx, 10, colorIdx, civ, 'none', 0);
+      return { cv: c, ax: cx, ay: 76 };
+    }
+    if (type === 'catapult') { // symmetric head-on view
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(cx, 66, 24, 5.5, 0, 0, 7); g.fill();
+      for (const s of [-1, 1]) {
+        g.fillStyle = '#4e3f2a'; g.beginPath(); g.arc(cx + s * 22, 58, 9, 0, 7); g.fill();
+        g.strokeStyle = '#8a7148'; g.lineWidth = 1.6;
+        for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3;
+          g.beginPath(); g.moveTo(cx + s * 22 - Math.cos(a) * 8, 58 - Math.sin(a) * 8);
+          g.lineTo(cx + s * 22 + Math.cos(a) * 8, 58 + Math.sin(a) * 8); g.stroke(); }
+      }
+      g.fillStyle = '#6e5638'; g.strokeStyle = '#3a2a16'; g.lineWidth = 1.4;
+      g.beginPath(); g.roundRect(cx - 22, 50, 44, 8, 2); g.fill(); g.stroke(); // axle beam
+      g.beginPath(); g.moveTo(cx - 14, 50); g.lineTo(cx, 26); g.lineTo(cx + 14, 50); g.closePath(); g.fill(); g.stroke();
+      const armUp = anim === 'attack' && fr >= 1 ? 16 : 0; // throwing arm rises
+      g.fillStyle = '#7d5a2e'; g.fillRect(cx - 2.5, 18 - armUp, 5, 34); g.strokeRect(cx - 2.5, 18 - armUp, 5, 34);
+      g.fillStyle = '#57534a'; g.beginPath(); g.arc(cx, 16 - armUp, 5, 0, 7); g.fill();
+      return { cv: c, ax: cx, ay: 66 };
+    }
+    /* ---- ships bow-on / stern-on ---- */
+    const WL = 56;
+    function hullFB(hw, ht, col, colD) {
+      g.fillStyle = 'rgba(8,20,40,.35)';
+      g.beginPath(); g.ellipse(cx, WL + 3, hw + 4, 4.5, 0, 0, 7); g.fill();
+      const gr = g.createLinearGradient(cx - hw, 0, cx + hw, 0);
+      gr.addColorStop(0, colD); gr.addColorStop(.5, col); gr.addColorStop(1, colD);
+      g.fillStyle = gr; g.strokeStyle = 'rgba(20,12,6,.6)'; g.lineWidth = 1.4;
+      g.beginPath();
+      g.moveTo(cx - hw, WL + 1); g.quadraticCurveTo(cx - hw, WL - ht, cx, WL - ht - 4);
+      g.quadraticCurveTo(cx + hw, WL - ht, cx + hw, WL + 1);
+      g.quadraticCurveTo(cx, WL + 5, cx - hw, WL + 1);
+      g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(40,26,12,.45)'; g.lineWidth = 1; // keel line
+      g.beginPath(); g.moveTo(cx, WL - ht - 3); g.lineTo(cx, WL + 3); g.stroke();
+      if (!away) { g.fillStyle = 'rgba(235,248,255,.55)'; // bow wash
+        g.beginPath(); g.ellipse(cx, WL + 3.5, hw * .7, 2.2, 0, 0, 7); g.fill(); }
+    }
+    function sailFB(hgt, wid) {
+      g.strokeStyle = '#4e3f2a'; g.lineWidth = 2.4;
+      g.beginPath(); g.moveTo(cx, WL - 6); g.lineTo(cx, WL - 6 - hgt); g.stroke();
+      const gr = g.createLinearGradient(cx - wid / 2, 0, cx + wid / 2, 0);
+      gr.addColorStop(0, tc2.dark); gr.addColorStop(.5, tc2.main); gr.addColorStop(1, tc2.dark);
+      g.fillStyle = gr; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1.2;
+      g.beginPath();
+      g.moveTo(cx - wid / 2, WL - 4 - hgt);
+      g.quadraticCurveTo(cx, WL - hgt + 2, cx + wid / 2, WL - 4 - hgt); // wind-bellied foot
+      g.lineTo(cx + wid / 2 - 2, WL - 12); g.quadraticCurveTo(cx, WL - 18, cx - wid / 2 + 2, WL - 12);
+      g.closePath(); g.fill(); g.stroke();
+    }
+    const tc2 = teamCols(colorIdx);
+    if (type === 'fishboat') {
+      hullFB(8, 8, '#9c7e54', '#6e583a');
+      drawRiderTorso(g, cx, WL - 22, colorIdx, civ, 'none', 0);
+      return { cv: c, ax: cx, ay: WL };
+    }
+    if (type === 'catamaran') {
+      for (const s of [-1, 1]) {
+        g.fillStyle = s < 0 ? '#9c7e54' : '#b39468'; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.2;
+        g.beginPath(); g.ellipse(cx + s * 11, WL - 3, 5, 7.5, 0, 0, 7); g.fill(); g.stroke();
+      }
+      g.fillStyle = '#cdb279'; g.fillRect(cx - 13, WL - 11, 26, 4);
+      sailFB(26, 16);
+      return { cv: c, ax: cx, ay: WL };
+    }
+    const cfg = { transport: [13, 12, 0, 0], galley: [10, 10, 30, 20],
+                  quinquereme: [13, 14, 36, 26], fireship: [9, 9, 0, 0] }[type] || [10, 10, 26, 18];
+    hullFB(cfg[0], cfg[1], type === 'fireship' ? '#5d4426' : '#9c7e54', type === 'fireship' ? '#3a2a16' : '#6e583a');
+    if (cfg[2]) sailFB(cfg[2], cfg[3]);
+    if (type === 'transport') { // furled yard + crate
+      g.strokeStyle = '#4e3f2a'; g.lineWidth = 2.4;
+      g.beginPath(); g.moveTo(cx, WL - 6); g.lineTo(cx, WL - 32); g.stroke();
+      g.fillStyle = '#cdbb96'; g.fillRect(cx - 9, WL - 31, 18, 4);
+      g.fillStyle = '#9c7e54'; g.fillRect(cx - 5, WL - 19, 10, 8); g.strokeRect(cx - 5, WL - 19, 10, 8);
+    }
+    if (type === 'fireship') {
+      for (const bx of [cx - 7, cx, cx + 7]) {
+        g.fillStyle = '#8a6a48'; g.strokeStyle = '#3a2a16'; g.lineWidth = 1;
+        g.fillRect(bx - 3.4, WL - 18, 6.8, 9); g.strokeRect(bx - 3.4, WL - 18, 6.8, 9);
+        const fl = 6 + ((bx + fr * 7) % 5);
+        g.fillStyle = '#ff7a30'; g.beginPath();
+        g.moveTo(bx - 3.4, WL - 18); g.quadraticCurveTo(bx, WL - 26 - fl, bx + 1, WL - 19); g.closePath(); g.fill();
+        g.fillStyle = '#ffc14d'; g.beginPath();
+        g.moveTo(bx - 1, WL - 19); g.quadraticCurveTo(bx + 1, WL - 23 - fl * .5, bx + 3, WL - 18); g.closePath(); g.fill();
+      }
+    }
+    if (type === 'quinquereme' && away) { // stern tower
+      g.fillStyle = '#cfc7b4'; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1.2;
+      g.fillRect(cx - 8, WL - 20, 16, 14); g.strokeRect(cx - 8, WL - 20, 16, 14);
+      g.fillStyle = '#a89f8a'; for (let i = 0; i < 3; i++) g.fillRect(cx - 7 + i * 5.4, WL - 23, 3.4, 4);
+    }
+    return { cv: c, ax: cx, ay: WL };
+  }
+
+  /* public: unit sprite. dir: 0=S 1=SW 2=W 3=NW 4=N 5=NE 6=E 7=SE.
+     Humanoids bake 5 poses at 2x (k=2); NE/E/SE are mirrors of NW/W/SW.
+     Big units bake front (0), profile (2), back (4); diagonals use the profile. */
   const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1,
     fishboat: 1, transport: 1, galley: 1, quinquereme: 1, fireship: 1, catamaran: 1 };
   function unit(type, colorIdx, civ, dir, anim, fr) {
+    dir = ((dir % 8) + 8) % 8;
     const big = !!BIG_TYPES[type];
-    if (big && dir !== 3) dir = 1;
-    const key = `u_${type}_${colorIdx}_${civ}_${dir}_${anim}_${fr}`;
+    let bake = dir, mirror = false;
+    if (dir >= 5) { mirror = true; bake = 8 - dir; } // 5â†’3(NW), 6â†’2(W), 7â†’1(SW)
+    if (big && (bake === 1 || bake === 3)) bake = 2;  // big units: diagonals ride the profile
+    const key = `u_${type}_${colorIdx}_${civ}_${bake}_${mirror ? 1 : 0}_${anim}_${fr}`;
     if (cache.has(key)) return cache.get(key);
     let s;
-    if (dir === 3) { // mirror of left
-      const L = unit(type, colorIdx, civ, 1, anim, fr);
+    if (mirror) {
+      const L = unit(type, colorIdx, civ, bake, anim, fr);
       const c = mk(L.cv.width, L.cv.height), g = g2(c);
       g.translate(L.cv.width, 0); g.scale(-1, 1); g.drawImage(L.cv, 0, 0);
       s = { cv: c, ax: L.cv.width / (L.k || 1) - L.ax, ay: L.ay, k: L.k };
     } else if (big) {
-      const raw = drawBig(type, colorIdx, civ, anim, fr);
+      const raw = (bake === 0 || bake === 4)
+        ? drawBigFB(type, colorIdx, civ, bake, anim, fr)
+        : drawBig(type, colorIdx, civ, anim, fr);
       s = { cv: outlined(raw.cv, 1), ax: raw.ax, ay: raw.ay, k: raw.k };
     } else {
       const c = mk(96, 112), g = g2(c);
       g.scale(2, 2); // supersample
-      drawHumanoid(g, type, colorIdx, civ, dir, anim, fr);
+      drawHumanoid(g, type, colorIdx, civ, bake, anim, fr);
       s = { cv: outlined(c, 1.5), ax: 24, ay: 52, k: 2 };
     }
     cache.set(key, s); return s;
@@ -787,8 +1044,9 @@ const Sprites = (() => {
     if (cache.has(key)) return cache.get(key);
     const B = BUILDINGS[type], s = B.size;
     const W = s * 64 + 24, H = s * 32 + 86;
-    const c = mk(W, H), g = g2(c);
-    const cx = W / 2, cy = H - s * 16 - 4; // footprint center
+    const c = mk(W * 2, H * 2), g = g2(c); // 2x supersample for crisp detail
+    g.scale(2, 2);
+    const cx = W / 2, cy = H - s * 16 - 4; // footprint center (logical coords)
     const p = CIV_PAL[type === 'town' ? 'none' : style] || CIV_PAL.none;
 
     // ground pad + shadow
@@ -805,7 +1063,7 @@ const Sprites = (() => {
       g.beginPath(); g.moveTo(cx - hw, cy - wh); g.lineTo(cx, cy + hh - wh); g.lineTo(cx + hw, cy - wh); g.stroke();
       g.fillStyle = '#9c7e54';
       g.fillRect(cx - 16, cy - 4, 32, 6); g.fillRect(cx - 8, cy - 12, 22, 5);
-      const out = { cv: c, ax: cx, ay: cy };
+      const out = { cv: c, ax: cx, ay: cy, k: 2 };
       cache.set(key, out); return out;
     }
 
@@ -840,7 +1098,15 @@ const Sprites = (() => {
         g.strokeStyle = '#fff'; g.lineWidth = 2;
         g.beginPath(); g.moveTo(cx - 8, cy - 10); g.lineTo(cx + 8, cy - 26); g.stroke();
       }
-      const out = { cv: c, ax: cx, ay: cy }; cache.set(key, out); return out;
+      // scarecrow on the corner — farms read instantly
+      const scx = cx - s * 22, scy = cy - s * 4;
+      g.strokeStyle = '#6e5638'; g.lineWidth = 2.2;
+      g.beginPath(); g.moveTo(scx, scy); g.lineTo(scx, scy - 17); g.stroke();
+      g.beginPath(); g.moveTo(scx - 7, scy - 12); g.lineTo(scx + 7, scy - 12); g.stroke();
+      g.fillStyle = '#9a7b54'; g.fillRect(scx - 4, scy - 12, 8, 6); // ragged tunic
+      g.fillStyle = '#cdb279'; g.beginPath(); g.arc(scx, scy - 18.5, 3.4, 0, 7); g.fill();
+      g.fillStyle = '#8a6a48'; g.beginPath(); g.ellipse(scx, scy - 21, 5, 1.6, 0, 0, 7); g.fill(); // hat
+      const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 
     if (type === 'canal') {
@@ -861,7 +1127,7 @@ const Sprites = (() => {
         }
         g.fillStyle = 'rgba(255,255,255,.8)'; g.fillRect(cx + 6, cy - 4, 2, 2);
       }
-      const out = { cv: c, ax: cx, ay: cy }; cache.set(key, out); return out;
+      const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 
     if (type === 'dock') {
@@ -895,27 +1161,96 @@ const Sprites = (() => {
         g.fillStyle = '#8a6a48'; g.beginPath(); g.ellipse(bx2, deckY + s * 6, 4, 5.5, 0, 0, 7); g.fill();
         g.strokeStyle = '#3a2a16'; g.lineWidth = 1; g.stroke();
       }
+      // moored rowboat + coiled rope
+      g.fillStyle = '#9c7e54'; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.1;
+      g.beginPath(); g.moveTo(cx - s * 8, deckY + s * 14);
+      g.quadraticCurveTo(cx, deckY + s * 18, cx + s * 8, deckY + s * 14);
+      g.quadraticCurveTo(cx, deckY + s * 12, cx - s * 8, deckY + s * 14); g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = '#241a10'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(cx - s * 4, deckY + s * 13); g.lineTo(cx - s * 6, deckY + s * 8); g.stroke();
+      g.strokeStyle = '#b8a784'; g.lineWidth = 1.6;
+      g.beginPath(); g.arc(cx - s * 10, deckY + s * 4, 3, 0, 7); g.stroke();
       flag(g, cx + s * 26, deckY - s * 8, colorIdx);
-      const out = { cv: c, ax: cx, ay: cy };
+      const out = { cv: c, ax: cx, ay: cy, k: 2 };
+      cache.set(key, out); return out;
+    }
+
+    if (type === 'grounds') {
+      // open drill yard: fence ring, sparring dummies, weapon rack — no hall at all
+      const hw = s * 30, hh = s * 15;
+      g.fillStyle = '#8a7148'; // packed-earth yard
+      g.beginPath(); g.moveTo(cx, cy - hh); g.lineTo(cx + hw, cy); g.lineTo(cx, cy + hh); g.lineTo(cx - hw, cy); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(70,50,28,.45)'; g.lineWidth = 1.4;
+      g.beginPath(); g.ellipse(cx, cy, hw * .5, hh * .5, 0, 0, 7); g.stroke(); // sparring circle
+      // fence posts + rails along the yard edges
+      g.strokeStyle = '#5d4426'; g.lineWidth = 2.6;
+      for (let i = 0; i <= 4; i++) {
+        const t2 = i / 4;
+        for (const [px2, py2] of [
+          [cx - hw + hw * t2, cy - hh * t2], [cx + hw * t2, cy - hh + hh * t2],
+          [cx - hw + hw * t2, cy + hh * t2], [cx + hw * t2, cy + hh - hh * t2]]) {
+          g.beginPath(); g.moveTo(px2, py2); g.lineTo(px2, py2 - 9); g.stroke();
+        }
+      }
+      g.strokeStyle = '#6e5638'; g.lineWidth = 1.8;
+      g.beginPath();
+      g.moveTo(cx - hw, cy - 5); g.lineTo(cx, cy - hh - 5); g.lineTo(cx + hw, cy - 5);
+      g.lineTo(cx, cy + hh - 5); g.closePath(); g.stroke();
+      // two sparring dummies with padded bodies
+      for (const [dx2, dy2] of [[cx - 12, cy - 2], [cx + 14, cy + 5]]) {
+        g.strokeStyle = '#6e5638'; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(dx2, dy2); g.lineTo(dx2, dy2 - 17); g.stroke();
+        g.beginPath(); g.moveTo(dx2 - 8, dy2 - 11); g.lineTo(dx2 + 8, dy2 - 11); g.stroke();
+        g.fillStyle = '#9a3b30'; g.fillRect(dx2 - 4, dy2 - 9, 8, 6);
+        g.fillStyle = '#cdb279'; g.beginPath(); g.arc(dx2, dy2 - 19, 4, 0, 7); g.fill();
+      }
+      // spear rack
+      g.strokeStyle = '#6e5638'; g.lineWidth = 1.7;
+      for (let i = 0; i < 3; i++) {
+        g.beginPath(); g.moveTo(cx - hw * .55 + i * 5, cy + 9); g.lineTo(cx - hw * .55 + 6 + i * 5, cy - 9); g.stroke();
+        g.fillStyle = '#cfd6dd'; g.beginPath();
+        g.moveTo(cx - hw * .55 + 6 + i * 5, cy - 9); g.lineTo(cx - hw * .55 + 4.4 + i * 5, cy - 13.4);
+        g.lineTo(cx - hw * .55 + 8.2 + i * 5, cy - 11.4); g.closePath(); g.fill();
+      }
+      flag(g, cx, cy - hh - 9, colorIdx);
+      const out = { cv: c, ax: cx, ay: cy, k: 2 };
       cache.set(key, out); return out;
     }
 
     const wallH = type === 'tower' ? 46 : type === 'tc' || type === 'town' ? 26 : 20;
     if (type === 'tower') {
-      // cylinder tower
+      // tapered watchtower with arrow slits and a lit brazier
       g.fillStyle = 'rgba(0,0,0,.2)'; g.beginPath(); g.ellipse(cx, cy, 20, 9, 0, 0, 7); g.fill();
       const gr = g.createLinearGradient(cx - 14, 0, cx + 14, 0);
       gr.addColorStop(0, p.wallL); gr.addColorStop(.55, p.top); gr.addColorStop(1, p.wallR);
       g.fillStyle = gr; g.beginPath();
-      g.moveTo(cx - 14, cy - 2); g.lineTo(cx - 11, cy - wallH); g.lineTo(cx + 11, cy - wallH); g.lineTo(cx + 14, cy - 2);
+      g.moveTo(cx - 14, cy - 2); g.lineTo(cx - 10, cy - wallH); g.lineTo(cx + 10, cy - wallH); g.lineTo(cx + 14, cy - 2);
       g.ellipse(cx, cy - 2, 14, 6, 0, 0, Math.PI); g.closePath(); g.fill();
       g.strokeStyle = 'rgba(20,12,6,.45)'; g.stroke();
-      g.fillStyle = p.top; g.beginPath(); g.ellipse(cx, cy - wallH, 11, 4.5, 0, 0, 7); g.fill(); g.stroke();
+      // stone courses
+      g.strokeStyle = 'rgba(20,12,6,.14)'; g.lineWidth = 1;
+      for (let i = 1; i <= 3; i++) {
+        const yy = cy - 2 - (wallH - 4) * i / 4, ww = 14 - 4 * i / 4;
+        g.beginPath(); g.moveTo(cx - ww, yy); g.lineTo(cx + ww, yy); g.stroke();
+      }
+      // overhanging parapet
+      g.fillStyle = p.top; g.beginPath(); g.ellipse(cx, cy - wallH, 13, 5, 0, 0, 7); g.fill(); g.stroke();
       g.fillStyle = p.wallR;
-      for (let i = -1; i <= 1; i++) g.fillRect(cx + i * 8 - 2.5, cy - wallH - 6, 5, 7);
-      g.fillStyle = '#241a10'; g.fillRect(cx - 2.5, cy - wallH + 10, 5, 7);
-      flag(g, cx, cy - wallH - 8, colorIdx);
-      const out = { cv: c, ax: cx, ay: cy }; cache.set(key, out); return out;
+      for (let i = -1; i <= 1; i++) g.fillRect(cx + i * 9 - 2.5, cy - wallH - 6, 5, 7);
+      // arrow slits + door
+      g.fillStyle = '#241a10';
+      g.fillRect(cx - 1.4, cy - wallH + 9, 2.8, 8);
+      g.fillRect(cx - 7.5, cy - wallH + 20, 2.4, 6.5);
+      g.fillRect(cx + 5.1, cy - wallH + 20, 2.4, 6.5);
+      g.beginPath(); g.moveTo(cx - 4, cy + 2); g.lineTo(cx - 4, cy - 8); g.arc(cx, cy - 8, 4, Math.PI, 0); g.lineTo(cx + 4, cy + 2); g.closePath(); g.fill();
+      // brazier flame
+      g.fillStyle = '#6b6557'; g.beginPath(); g.arc(cx, cy - wallH - 7, 3, 0, 7); g.fill();
+      g.fillStyle = '#ff7a30'; g.beginPath();
+      g.moveTo(cx - 2.5, cy - wallH - 8); g.quadraticCurveTo(cx, cy - wallH - 17, cx + 2.5, cy - wallH - 8); g.closePath(); g.fill();
+      g.fillStyle = '#ffc14d'; g.beginPath();
+      g.moveTo(cx - 1.2, cy - wallH - 8.5); g.quadraticCurveTo(cx, cy - wallH - 13, cx + 1.2, cy - wallH - 8.5); g.closePath(); g.fill();
+      flag(g, cx, cy - wallH - 16, colorIdx);
+      const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 
     isoBox(g, cx, cy, s, wallH, p.top, p.wallL, p.wallR);
@@ -934,39 +1269,135 @@ const Sprites = (() => {
       flag(g, cx, cy - wallH - 36, colorIdx);
     }
 
-    // decorations per type
-    if (type === 'tc' && style === 'rome') { // columns
-      g.fillStyle = '#e3dccb';
-      for (let i = 0; i < 3; i++) g.fillRect(cx - s * 24 + i * 14, cy - 4 - wallH + 6 + i * 7, 4.5, wallH - 4);
+    // wall texture: subtle masonry / plank courses on both wall faces
+    g.strokeStyle = 'rgba(20,12,6,.13)'; g.lineWidth = 1;
+    for (const f of [0.36, 0.68]) {
+      const yo = wallH * f;
+      g.beginPath(); g.moveTo(cx - s * 32, cy - yo); g.lineTo(cx, cy + s * 16 - yo); g.lineTo(cx + s * 32, cy - yo); g.stroke();
+    }
+    // windows on the big halls
+    if (type === 'tc' || type === 'barracks' || type === 'range' || type === 'university') {
+      g.fillStyle = '#241a10';
+      for (const t2 of [0.3, 0.62]) {
+        const wx2 = cx + s * 32 * t2, wy2 = cy + s * 16 * t2 - wallH * 0.62;
+        g.fillRect(wx2 - 2.2, wy2, 4.4, 6); // right wall
+      }
+    }
+
+    // ---- signature structures per type ----
+    if (type === 'tc') {
+      // stone plinth band, columned porch, upper-story roof, bell post
+      g.fillStyle = 'rgba(255,255,255,.16)';
+      g.beginPath(); g.moveTo(cx - s * 32, cy); g.lineTo(cx, cy + s * 16); g.lineTo(cx + s * 32, cy);
+      g.lineTo(cx + s * 32, cy - 4); g.lineTo(cx, cy + s * 16 - 4); g.lineTo(cx - s * 32, cy - 4); g.closePath(); g.fill();
+      g.fillStyle = style === 'rome' ? '#e3dccb' : style === 'china' ? '#9c2f2f' : '#e0c79a';
+      for (let i = 0; i < 4; i++) { // porch colonnade along the left wall
+        const t2 = 0.18 + i * 0.2;
+        g.fillRect(cx - s * 32 + s * 32 * t2 - 2, cy + s * 16 * t2 - wallH + 2, 4, wallH - 3);
+      }
+      roofFor(g, style, cx, cy - wallH - 13, s * 0.55); // upper story
+      flag(g, cx, cy - wallH - 13 - s * 9, colorIdx);
+      // bell post by the door
+      g.strokeStyle = '#5d4426'; g.lineWidth = 2.4;
+      g.beginPath(); g.moveTo(cx - s * 18, cy + s * 11); g.lineTo(cx - s * 18, cy + s * 11 - 16); g.stroke();
+      g.fillStyle = '#c9a34f'; g.beginPath();
+      g.moveTo(cx - s * 18 - 3, cy + s * 11 - 12); g.lineTo(cx - s * 18 + 3, cy + s * 11 - 12);
+      g.lineTo(cx - s * 18 + 2, cy + s * 11 - 7); g.lineTo(cx - s * 18 - 2, cy + s * 11 - 7); g.closePath(); g.fill();
+    }
+    if (type === 'town') { // corner watch-turrets make it a fortress at a glance
+      for (const [tx2, ty2] of [[cx - s * 32, cy], [cx + s * 32, cy], [cx, cy - s * 16], [cx, cy + s * 16]]) {
+        const gr2 = g.createLinearGradient(tx2 - 5, 0, tx2 + 5, 0);
+        gr2.addColorStop(0, p.wallL); gr2.addColorStop(1, p.wallR);
+        g.fillStyle = gr2; g.strokeStyle = 'rgba(20,12,6,.45)'; g.lineWidth = 1;
+        g.fillRect(tx2 - 5, ty2 - wallH - 8, 10, wallH + 8); g.strokeRect(tx2 - 5, ty2 - wallH - 8, 10, wallH + 8);
+        g.fillStyle = p.top;
+        for (let i = -1; i <= 1; i++) g.fillRect(tx2 + i * 3.6 - 1.4, ty2 - wallH - 12, 2.8, 4.5);
+      }
     }
     if (type === 'university') {
-      g.fillStyle = '#e7cf8e'; g.beginPath(); g.arc(cx + s * 16, cy - wallH - 2, 6, 0, 7); g.fill();
-      g.fillStyle = p.roofD; g.font = 'bold 9px serif'; g.textAlign = 'center'; g.fillText('Ω', cx + s * 16, cy - wallH + 1);
+      // stepped stone base + full colonnade + golden orb: a temple of learning
+      g.fillStyle = 'rgba(255,255,255,.18)';
+      g.beginPath(); g.moveTo(cx - s * 32, cy); g.lineTo(cx, cy + s * 16); g.lineTo(cx + s * 32, cy);
+      g.lineTo(cx + s * 32, cy - 3); g.lineTo(cx, cy + s * 16 - 3); g.lineTo(cx - s * 32, cy - 3); g.closePath(); g.fill();
+      g.fillStyle = style === 'china' ? '#9c2f2f' : '#e3dccb';
+      for (let i = 0; i < 5; i++) {
+        const t2 = 0.12 + i * 0.19;
+        g.fillRect(cx - s * 32 + s * 32 * t2 - 2.2, cy + s * 16 * t2 - wallH + 2, 4.4, wallH - 3);
+      }
+      g.fillStyle = '#e7cf8e'; g.strokeStyle = '#8a6420'; g.lineWidth = 1; // golden orb finial
+      g.beginPath(); g.arc(cx, cy - wallH - (style === 'india' ? s * 18 : s * 12), 4, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(cx - 1.2, cy - wallH - (style === 'india' ? s * 18 : s * 12) - 1.2, 1.2, 0, 7); g.fill();
     }
-    if (type === 'barracks') { // weapon rack
+    if (type === 'barracks') {
+      // shield wall on the facade + crossed swords standard + spear rack
+      for (let i = 0; i < 3; i++) {
+        const t2 = 0.25 + i * 0.22;
+        const sx3 = cx - s * 32 + s * 32 * t2, sy3 = cy + s * 16 * t2 - wallH * 0.45;
+        const tcb = teamCols(colorIdx);
+        const gr2 = g.createRadialGradient(sx3 - 1, sy3 - 1, 1, sx3, sy3, 4.6);
+        gr2.addColorStop(0, tcb.light); gr2.addColorStop(1, tcb.dark);
+        g.fillStyle = gr2; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1;
+        g.beginPath(); g.arc(sx3, sy3, 4.6, 0, 7); g.fill(); g.stroke();
+        g.fillStyle = '#e7cf8e'; g.beginPath(); g.arc(sx3, sy3, 1.3, 0, 7); g.fill();
+      }
+      // crossed swords above the door
+      g.save(); g.translate(cx - s * 10, cy + s * 8.5 - wallH - 4);
+      for (const a of [-0.6, 0.6]) {
+        g.save(); g.rotate(a);
+        g.fillStyle = '#d7dde4'; g.fillRect(-1.1, -8, 2.2, 12);
+        g.fillStyle = '#8a6420'; g.fillRect(-2.6, 1.6, 5.2, 1.8);
+        g.restore();
+      }
+      g.restore();
       g.strokeStyle = '#6e5638'; g.lineWidth = 2;
       for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(cx + s * 20 + i * 5, cy + 4); g.lineTo(cx + s * 26 + i * 5, cy - 16); g.stroke(); }
       g.fillStyle = '#cfd6dd';
       for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(cx + s * 26 + i * 5, cy - 16); g.lineTo(cx + s * 24 + i * 5, cy - 21); g.lineTo(cx + s * 28 + i * 5, cy - 19); g.closePath(); g.fill(); }
     }
-    if (type === 'range') { // target
-      const tx = cx + s * 22, ty = cy + 2;
-      for (const [r, col] of [[8, '#e8e0ce'], [5.5, '#c4543f'], [3, '#e8e0ce'], [1.5, '#c4543f']]) {
+    if (type === 'range') {
+      // striped shooting awning + big target + arrow barrel
+      const ax2 = cx + s * 14, ay2 = cy + s * 2;
+      g.strokeStyle = '#5d4426'; g.lineWidth = 2.2;
+      g.beginPath(); g.moveTo(ax2 - 10, ay2 + 8); g.lineTo(ax2 - 10, ay2 - 14); g.stroke();
+      g.beginPath(); g.moveTo(ax2 + 12, ay2 + 2); g.lineTo(ax2 + 12, ay2 - 18); g.stroke();
+      for (let i = 0; i < 4; i++) { // striped canopy
+        g.fillStyle = i % 2 ? '#e8e0ce' : '#c4543f';
+        g.beginPath();
+        g.moveTo(ax2 - 12 + i * 6.5, ay2 - 14 - i * 1.2); g.lineTo(ax2 - 5.5 + i * 6.5, ay2 - 15.2 - i * 1.2);
+        g.lineTo(ax2 - 3.5 + i * 6.5, ay2 - 22 - i * 1.2); g.lineTo(ax2 - 10 + i * 6.5, ay2 - 20.8 - i * 1.2);
+        g.closePath(); g.fill();
+      }
+      const tx = cx + s * 24, ty = cy + 4;
+      for (const [r, col] of [[8.5, '#e8e0ce'], [6, '#c4543f'], [3.4, '#e8e0ce'], [1.6, '#c4543f']]) {
         g.fillStyle = col; g.beginPath(); g.ellipse(tx, ty, r, r * .8, 0, 0, 7); g.fill();
       }
-      g.strokeStyle = '#6e5638'; g.lineWidth = 2; g.beginPath(); g.moveTo(tx - 5, ty + 10); g.lineTo(tx, ty + 5); g.lineTo(tx + 5, ty + 10); g.stroke();
+      g.strokeStyle = '#6e5638'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(tx - 5, ty + 10); g.lineTo(tx, ty + 5); g.lineTo(tx + 5, ty + 10); g.stroke();
+      // barrel of arrows
+      g.fillStyle = '#8a6a48'; g.strokeStyle = '#3a2a16'; g.lineWidth = 1;
+      g.beginPath(); g.ellipse(cx - s * 22, cy + s * 6, 4.5, 5.5, 0, 0, 7); g.fill(); g.stroke();
+      g.strokeStyle = '#9a7b54'; g.lineWidth = 1.2;
+      for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(cx - s * 22 + i * 2, cy + s * 6 - 4); g.lineTo(cx - s * 22 + i * 3.4, cy + s * 6 - 12); g.stroke(); }
     }
-    if (type === 'grounds') { // training dummy
-      const dx = cx + s * 20, dy = cy + 2;
-      g.strokeStyle = '#6e5638'; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(dx, dy); g.lineTo(dx, dy - 18); g.stroke();
-      g.beginPath(); g.moveTo(dx - 8, dy - 12); g.lineTo(dx + 8, dy - 12); g.stroke();
-      g.fillStyle = '#cdb279'; g.beginPath(); g.arc(dx, dy - 20, 4, 0, 7); g.fill();
+    // civilization accents
+    if (style === 'china' && (type === 'tc' || type === 'barracks' || type === 'range' || type === 'university')) {
+      for (const lx of [cx - s * 30, cx + s * 30]) { // red lanterns at the eaves
+        g.strokeStyle = '#3a2a16'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(lx, cy - wallH - 2); g.lineTo(lx, cy - wallH + 4); g.stroke();
+        g.fillStyle = '#d04a35'; g.beginPath(); g.ellipse(lx, cy - wallH + 8, 3.4, 4.2, 0, 0, 7); g.fill();
+        g.fillStyle = '#ffd34d'; g.fillRect(lx - 1, cy - wallH + 12.2, 2, 2.6);
+      }
+    }
+    if (style === 'india' && (type === 'tc' || type === 'barracks' || type === 'range')) {
+      for (const fx2 of [cx - s * 26, cx + s * 26]) { // gold corner finials
+        g.fillStyle = '#d4a647';
+        g.beginPath(); g.moveTo(fx2 - 2.4, cy - wallH - 1); g.lineTo(fx2 + 2.4, cy - wallH - 1); g.lineTo(fx2, cy - wallH - 8); g.closePath(); g.fill();
+      }
     }
     flag(g, cx + s * 28, cy - wallH - 2, colorIdx);
     if (type === 'tc' || type === 'town') flag(g, cx - s * 28, cy - wallH - 2, colorIdx);
 
-    const out = { cv: c, ax: cx, ay: cy };
+    const out = { cv: c, ax: cx, ay: cy, k: 2 };
     cache.set(key, out); return out;
   }
 
@@ -1034,7 +1465,7 @@ const Sprites = (() => {
     gr.addColorStop(0, '#3a2c18'); gr.addColorStop(1, '#16100a');
     g.fillStyle = gr; g.beginPath(); g.arc(48, 48, 46, 0, 7); g.fill();
     g.strokeStyle = '#957437'; g.lineWidth = 2.5; g.beginPath(); g.arc(48, 48, 45, 0, 7); g.stroke();
-    const map = { rome: ['legionary', 0], china: ['chukonu', 0], india: ['elephant', 1] };
+    const map = { rome: ['legionary', 0], china: ['chukonu', 0], india: ['elephant', 2] };
     const [t, d] = map[civKey];
     const s = unit(t, civKey === 'rome' ? 1 : civKey === 'china' ? 2 : 0, civKey, d, 'idle', 0);
     g.save(); g.beginPath(); g.arc(48, 48, 44, 0, 7); g.clip();

@@ -307,8 +307,9 @@ function render(game) {
     ctx.lineTo(tx - B.size * 32 * z, ty);
     ctx.closePath(); ctx.fill();
     const s = Sprites.building(type, game.players[0].civKey, 0, true);
+    const gk = s.k || 1;
     ctx.globalAlpha = .65;
-    ctx.drawImage(s.cv, tx - s.ax * z, ty - s.ay * z, s.cv.width * z, s.cv.height * z);
+    ctx.drawImage(s.cv, tx - s.ax * z, ty - s.ay * z, s.cv.width * z / gk, s.cv.height * z / gk);
     ctx.globalAlpha = 1;
   }
 
