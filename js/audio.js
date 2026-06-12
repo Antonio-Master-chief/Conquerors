@@ -275,6 +275,54 @@ const Audio2 = (() => {
         osc('square', 1900 + Math.random() * 700, t, 0.1, g);
         const ng = ctx.createGain(); ng.connect(sfxGain); env(ng, t, 0.001, 0.08, 0.08);
         noise(t, 0.08, ng, 6000, 1800); break; }
+      case 'sword': { // bright steel ring with a shimmer tail
+        if (throttled('sword', 110)) return;
+        const f0 = 2100 + Math.random() * 500;
+        for (const [mult, vol, dur] of [[1, 0.10, 0.22], [1.51, 0.06, 0.16], [2.26, 0.035, 0.1]]) {
+          const g = ctx.createGain(); g.connect(sfxGain); env(g, t, 0.001, vol, dur);
+          osc('triangle', f0 * mult, t, dur + 0.05, g).detune.value = Math.random() * 14 - 7;
+        }
+        const ng = ctx.createGain(); ng.connect(sfxGain); env(ng, t, 0.001, 0.07, 0.04);
+        noise(t, 0.04, ng, 9000, 3000); break; }
+      case 'spear': { // shaft whoosh into a dull body thud
+        if (throttled('spear', 110)) return;
+        const wg = ctx.createGain(); wg.connect(sfxGain); env(wg, t, 0.012, 0.09, 0.07);
+        noise(t, 0.09, wg, 1400, 350);
+        const g = ctx.createGain(); g.connect(sfxGain); env(g, t + 0.05, 0.003, 0.16, 0.1);
+        const o = ctx.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(190, t + 0.05); o.frequency.exponentialRampToValueAtTime(70, t + 0.13);
+        o.connect(g); o.start(t + 0.05); o.stop(t + 0.2); break; }
+      case 'stomp': { // elephant: ground-shaking impact
+        if (throttled('stomp', 160)) return;
+        const g = ctx.createGain(); g.connect(sfxGain); env(g, t, 0.004, 0.3, 0.3);
+        const o = ctx.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(30, t + 0.22);
+        o.connect(g); o.start(t); o.stop(t + 0.4);
+        const ng = ctx.createGain(); ng.connect(sfxGain); env(ng, t, 0.002, 0.1, 0.12);
+        noise(t, 0.12, ng, 700, 60); break; }
+      case 'crossbow': { // mechanical clack + bolt hiss
+        if (throttled('crossbow', 80)) return;
+        const g = ctx.createGain(); g.connect(sfxGain); env(g, t, 0.001, 0.12, 0.05);
+        osc('square', 820, t, 0.05, g);
+        const ng = ctx.createGain(); ng.connect(sfxGain); env(ng, t + 0.015, 0.004, 0.09, 0.1);
+        noise(t + 0.015, 0.1, ng, 4200, 1400); break; }
+      case 'bowstring': { // string release twang (layered with arrow whoosh)
+        if (throttled('bowstring', 80)) return;
+        const g = ctx.createGain(); g.connect(sfxGain); env(g, t, 0.001, 0.07, 0.08);
+        const o = ctx.createOscillator(); o.type = 'triangle';
+        o.frequency.setValueAtTime(640, t); o.frequency.exponentialRampToValueAtTime(310, t + 0.07);
+        o.connect(g); o.start(t); o.stop(t + 0.12); break; }
+      case 'die': { // short falling cry
+        if (throttled('die', 280)) return;
+        const base = 150 + Math.random() * 60;
+        const g = ctx.createGain(); g.connect(sfxGain); env(g, t, 0.02, 0.32, 0.3);
+        const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 580; f1.Q.value = 3;
+        const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 1300; f2.Q.value = 4;
+        f1.connect(g); f2.connect(g);
+        const o = ctx.createOscillator(); o.type = 'sawtooth';
+        o.frequency.setValueAtTime(base, t);
+        o.frequency.linearRampToValueAtTime(base * 0.55, t + 0.28);
+        o.connect(f1); o.connect(f2); o.start(t); o.stop(t + 0.32); break; }
       case 'arrow': { if (throttled('arrow', 90)) return;
         const ng = ctx.createGain(); ng.connect(sfxGain); env(ng, t, 0.005, 0.1, 0.12);
         noise(t, 0.13, ng, 3200, 900); break; }

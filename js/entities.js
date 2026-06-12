@@ -107,26 +107,34 @@ class Unit {
   ensurePath(game, tx, ty) {
     if (this.path && this.wp < this.path.length) return true;
     if (this.repathT > 0) return false;
-    this.repathT = 0.4 + Math.random() * 0.3;
+    this.repathT = 0.25 + Math.random() * 0.2;
     const grid = this.def.naval ? game.world.navBlocked : game.world.blocked;
     // ships get an uncapped-ish search: coastlines force long detours, and a
     // capped A* strands them in dead-end bays chasing straight-line distance
     const p = Path.find(grid, this.x, this.y, tx, ty, this.def.naval ? 9500 : 4200);
-    if (p && p.length) { this.path = p; this.wp = 0; return true; }
+    if (p && p.length) {
+      this.path = Path.smooth(grid, this.x, this.y, p); // stride, don't stair-step
+      this.wp = 0;
+      return true;
+    }
     this.path = null;
     return false;
   }
   moveAlong(game, dt) {
     if (!this.path || this.wp >= this.path.length) return false;
-    const [tx, ty] = this.path[this.wp];
-    const gx = tx + .5, gy = ty + .5;
-    const d = dist(this.x, this.y, gx, gy);
-    const step = this.speed * dt;
-    if (d <= step) { this.x = gx; this.y = gy; this.wp++; }
-    else {
-      const vx = (gx - this.x) / d, vy = (gy - this.y) / d;
-      this.x += vx * step; this.y += vy * step;
-      this.setDir(vx, vy);
+    // consume the whole step across waypoints — no stutter at tile centers
+    let step = this.speed * dt;
+    while (step > 0 && this.wp < this.path.length) {
+      const [tx, ty] = this.path[this.wp];
+      const gx = tx + .5, gy = ty + .5;
+      const d = dist(this.x, this.y, gx, gy);
+      if (d <= step) { this.x = gx; this.y = gy; this.wp++; step -= d; }
+      else {
+        const vx = (gx - this.x) / d, vy = (gy - this.y) / d;
+        this.x += vx * step; this.y += vy * step;
+        this.setDir(vx, vy);
+        step = 0;
+      }
     }
     if (this.def.naval && Math.random() < dt * 5) game.particles.push({ // wake foam
       x: this.x + (Math.random() - .5) * .3, y: this.y + (Math.random() - .5) * .3,
@@ -484,6 +492,9 @@ class Unit {
       this.dead = true;
       game.popFree(this);
       Sim.puff(game, this.x, this.y - 0.4, '#5b1f18', 9);
+      if (!this.def.npc && !this.def.naval && World.visAt(this.x, this.y) === 2) {
+        this.type === 'elephant' ? Audio2.sfx('trumpet') : Audio2.sfx('die');
+      }
       if (from && from.kind === 'unit') from.addXP(8 + (this.def.pop || 1) * 3, game);
       if (this.owner === game.humanId) game.checkAttackAlert(this.x, this.y, true);
     }
@@ -495,10 +506,11 @@ class Unit {
     const ix = (World.isoX(this.x, this.y) - view.left) * view.z;
     const iy = (World.isoY(this.x, this.y) - view.top) * view.z;
     const sc = view.z * (this.def.big ? 0.95 : 0.78);
+    const k = s.k || 1; // supersampled sprites render at logical size
     let bob = this.def.naval ? Math.sin(performance.now() / 450 + this.id * 1.7) * 2 * view.z : 0;
     if (World.terAt(this.x, this.y) === TERRAIN.HILL) bob -= 5 * view.z; // standing tall on high ground
     if (this.fade < 1) g.globalAlpha = this.fade;
-    g.drawImage(s.cv, ix - s.ax * sc, iy - s.ay * sc + bob, s.cv.width * sc, s.cv.height * sc);
+    g.drawImage(s.cv, ix - s.ax * sc, iy - s.ay * sc + bob, s.cv.width * sc / k, s.cv.height * sc / k);
     g.globalAlpha = 1;
     // transport cargo count
     if (this.cargo && this.cargo.length) {
@@ -768,13 +780,26 @@ const Sim = {
       for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++)
         game.world.blocked[World.idx(x, y)] = 1;
     }
+    if (!B.farm && !B.canal && !B.naval) { // tall structures hide what's behind them
+      for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++)
+        game.world.sightBlock[World.idx(x, y)] = 1;
+    }
+    // clear decorative doodads under the foundation
+    for (const o of game.world.objects)
+      if (o.doodad && o.alive && o.x >= bx - 1 && o.x < bx + B.size && o.y >= by - 1 && o.y < by + B.size)
+        o.alive = false;
     return b;
   },
 
   meleeHit(game, src, t) {
     const dmg = this.calcDamage(game, src, t);
     t.takeDamage(game, dmg, src);
-    if (src.owner === game.humanId || t.owner === game.humanId) Audio2.sfx('clang');
+    if (src.owner === game.humanId || t.owner === game.humanId) {
+      const w = { legionary: 'sword', sword: 'sword', centurion: 'sword',
+                  spearman: 'spear', chariot: 'spear', scout: 'spear',
+                  elephant: 'stomp', settler: 'chop' }[src.type] || 'clang';
+      Audio2.sfx(w);
+    }
     // elephant splash
     if (src.def.splash && t.kind === 'unit') {
       for (const o of game.queryUnits(t.x, t.y, src.def.splash)) {
@@ -809,7 +834,11 @@ const Sim = {
       splash: src.def.splash || 0, burn,
       stone: src.type === 'catapult',
     });
-    if (src.owner === game.humanId || t.owner === game.humanId) Audio2.sfx('arrow');
+    if (src.owner === game.humanId || t.owner === game.humanId) {
+      if (src.type === 'chukonu') Audio2.sfx('crossbow');
+      else if (src.type !== 'catapult') { Audio2.sfx('bowstring'); Audio2.sfx('arrow'); }
+      else Audio2.sfx('arrow');
+    }
   },
 
   updateProjectiles(game, dt) {
@@ -1065,11 +1094,17 @@ const Sim = {
     for (const u of units) {
       if (u.dead || u.inShip) continue;
       const grid = u.def.naval ? game.world.navBlocked : game.world.blocked;
+      const uMoving = u.path && u.wp < u.path.length;
       for (const o of game.queryUnits(u.x, u.y, 0.9)) {
         if (o === u || o.dead || o.inShip || !!o.def.naval !== !!u.def.naval) continue;
+        const oMoving = o.path && o.wp < o.path.length;
+        // marching columns don't elbow each other — only resolve real overlaps
+        if (uMoving && oMoving) continue;
         const d2 = dist2(u.x, u.y, o.x, o.y);
         if (d2 < 0.20 && d2 > 0.0001) {
-          const d = Math.sqrt(d2), push = (0.45 - d) * dt * 2.2;
+          const d = Math.sqrt(d2);
+          let push = (0.45 - d) * dt * 2.2;
+          if (uMoving) push *= 0.45; // moving units get a gentler nudge
           const px = (u.x - o.x) / d * push, py = (u.y - o.y) / d * push;
           const nx = u.x + px, ny = u.y + py;
           if (!grid[World.idx(clamp(nx | 0, 0, World.N - 1), clamp(ny | 0, 0, World.N - 1))]) { u.x = nx; u.y = ny; }

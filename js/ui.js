@@ -98,8 +98,9 @@ const UI = (() => {
     const s = Sprites.unit(type, 0, civ || 'rome', 0, 'idle', 0);
     const c = document.createElement('canvas'); c.width = 30; c.height = 30;
     const g = c.getContext('2d');
+    const k = s.k || 1;
     const sc = Math.min(30 / s.cv.width, 30 / s.cv.height) * 1.4;
-    g.drawImage(s.cv, 15 - s.ax * sc, 28 - s.ay * sc, s.cv.width * sc, s.cv.height * sc);
+    g.drawImage(s.cv, 15 - s.ax * k * sc, 28 - s.ay * k * sc, s.cv.width * sc, s.cv.height * sc);
     return c;
   }
   function iconForBld(type, civ) {

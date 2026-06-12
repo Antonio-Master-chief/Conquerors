@@ -88,5 +88,41 @@ const Path = (() => {
     return path.length ? path : null;
   }
 
-  return { find };
+  /* can a unit walk a straight line between two points? (samples the grid) */
+  function lineWalkable(blocked, x0, y0, x1, y1) {
+    const d = Math.hypot(x1 - x0, y1 - y0);
+    if (d < 0.01) return true;
+    const steps = Math.ceil(d / 0.2);
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t;
+      if (blocked[(y | 0) * N + (x | 0)]) return false;
+      // don't squeeze through blocked diagonal corners
+      const fx = x - (x | 0), fy = y - (y | 0);
+      if (fx < 0.25 && blocked[(y | 0) * N + Math.max(0, (x | 0) - 1)] &&
+          (fy < 0.25 || fy > 0.75)) return false;
+    }
+    return true;
+  }
+
+  /* string-pulling: drop waypoints that a straight walk can skip,
+     so units stride diagonally instead of stair-stepping tile centers */
+  function smooth(blocked, sx, sy, path) {
+    if (!path || path.length < 3) return path;
+    const out = [];
+    let cx = sx, cy = sy, i = 0;
+    while (i < path.length) {
+      let pick = i;
+      const max = Math.min(i + 7, path.length - 1);
+      for (let j = max; j > i; j--) {
+        if (lineWalkable(blocked, cx, cy, path[j][0] + .5, path[j][1] + .5)) { pick = j; break; }
+      }
+      out.push(path[pick]);
+      cx = path[pick][0] + .5; cy = path[pick][1] + .5;
+      i = pick + 1;
+    }
+    return out;
+  }
+
+  return { find, smooth, lineWalkable };
 })();

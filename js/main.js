@@ -88,8 +88,10 @@ function makeGame(civKey, diff) {
     unblockBuilding(b) {
       if (b.def.farm) return;
       const grid = b.def.naval ? this.world.navBlocked : this.world.blocked;
-      for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++)
+      for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) {
         grid[World.idx(x, y)] = 0;
+        if (!b.def.canal && !b.def.naval) this.world.sightBlock[World.idx(x, y)] = 0;
+      }
     },
     freeSpotNear(b, naval) {
       const grid = naval ? this.world.navBlocked : this.world.blocked;

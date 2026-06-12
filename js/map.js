@@ -8,6 +8,7 @@ const World = (() => {
     ter: new Uint8Array(N * N),
     blocked: new Uint8Array(N * N),     // land-unit passability: static + buildings (not units)
     navBlocked: new Uint8Array(N * N),  // ship passability: land = blocked, open water = free
+    sightBlock: new Uint8Array(N * N),  // vision blockers: trees, tall buildings (walls later)
     vis: new Uint8Array(N * N),         // 0 unexplored 1 explored 2 visible (human player)
     objects: [],                        // resource nodes & decorations
     objGrid: new Int32Array(N * N),     // object id+1 at tile
@@ -113,7 +114,7 @@ const World = (() => {
     for (const s of W.starts) ensurePond(s.x, s.y);
 
     /* objects */
-    W.objects = []; W.objGrid.fill(0);
+    W.objects = []; W.objGrid.fill(0); W.sightBlock.fill(0);
     const free = (x, y) => inB(x, y) && !W.blocked[idx(x, y)] && !W.objGrid[idx(x, y)] && W.ter[idx(x, y)] >= TERRAIN.SAND;
     function addObj(kind, x, y, amount) {
       if (!free(x, y)) return false;
@@ -121,6 +122,7 @@ const World = (() => {
       W.objects.push(o);
       W.objGrid[idx(x, y)] = o.id + 1;
       if (kind === 'tree' || kind === 'gold' || kind === 'stone' || kind === 'iron') W.blocked[idx(x, y)] = 1;
+      if (kind === 'tree') W.sightBlock[idx(x, y)] = 1; // forests hide what's behind them
       return true;
     }
     const nearSite = (x, y, r) =>
@@ -309,6 +311,42 @@ const World = (() => {
         addFish(Math.round(t.x + 1 + Math.cos(a) * 6), Math.round(t.y + 1 + Math.sin(a) * 6));
       }
 
+    /* ---- decorative doodads: nature, not gameplay ---- */
+    function addDoodad(kind, x, y, variant) {
+      if (!inB(x, y) || W.objGrid[idx(x, y)] || W.blocked[idx(x, y)]) return false;
+      W.objects.push({ id: W.objects.length, kind, x, y, amount: 0,
+                       variant: variant | 0, alive: true, doodad: true });
+      return true;
+    }
+    const terIs = (x, y, t) => inB(x, y) && W.ter[idx(x, y)] === t;
+    const nearWaterT = (x, y) => {
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
+        if (inB(x + dx, y + dy) && W.ter[idx(x + dx, y + dy)] <= TERRAIN.SHALLOW) return true;
+      return false;
+    };
+    // sweep every tile once; each biome rolls for its own decoration
+    for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) {
+      const t = W.ter[idx(x, y)];
+      if (t === TERRAIN.GRASS) { if (rnd() < 0.02) addDoodad('flower', x, y, rnd() * 4); }
+      else if (t === TERRAIN.DIRT || t === TERRAIN.HILL) { if (rnd() < 0.035) addDoodad('rock', x, y, rnd() * 2); }
+      else if (t === TERRAIN.SAND && nearWaterT(x, y)) {
+        const r = rnd();
+        if (r < 0.055) addDoodad('reed', x, y, rnd() * 2);
+        else if (r < 0.10) addDoodad('palm', x, y, 0);
+      }
+    }
+    let mush = 0;
+    for (let i = 0; i < 600 && mush < 45; i++) { // mushrooms at the feet of trees
+      const x = (rnd() * N) | 0, y = (rnd() * N) | 0;
+      if (!terIs(x, y, TERRAIN.GRASS)) continue;
+      let byTree = false;
+      for (let dy = -1; dy <= 1 && !byTree; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const o = objAt(x + dx, y + dy);
+        if (o && o.alive && o.kind === 'tree') { byTree = true; break; }
+      }
+      if (byTree && addDoodad('mushroom', x, y, 0)) mush++;
+    }
+
     // ship passability: anything that's not water is a wall for ships
     for (let i = 0; i < N * N; i++) W.navBlocked[i] = W.ter[i] <= TERRAIN.SHALLOW ? 0 : 1;
 
@@ -322,6 +360,7 @@ const World = (() => {
     o.alive = false;
     W.objGrid[idx(o.x, o.y)] = 0;
     if (o.kind === 'tree' || o.kind === 'gold' || o.kind === 'stone' || o.kind === 'iron') W.blocked[idx(o.x, o.y)] = 0;
+    if (o.kind === 'tree') W.sightBlock[idx(o.x, o.y)] = 0;
   }
 
   function objAt(x, y) {
@@ -354,7 +393,25 @@ const World = (() => {
     const g = cv.getContext('2d');
     for (let y = y0; y < y0 + CH; y++) for (let x = x0; x < x0 + CH; x++) {
       const t = W.ter[idx(x, y)];
-      g.drawImage(Sprites.tile(t, (x * 31 + y * 17) % 4), isoX(x, y) - 32 - ox, isoY(x, y) - oy);
+      g.drawImage(Sprites.tile(t, (x * 31 + y * 17 + ((x * x + y) >> 2)) % 6), isoX(x, y) - 32 - ox, isoY(x, y) - oy);
+    }
+    // soft blending where two LAND terrains meet (kills the patchwork look)
+    const BLEND = { 2: 'rgba(205,178,121,.30)', 3: 'rgba(88,138,60,.30)', 4: 'rgba(138,113,72,.30)', 5: 'rgba(147,160,90,.30)' };
+    g.lineCap = 'round';
+    for (let y = y0; y < y0 + CH; y++) for (let x = x0; x < x0 + CH; x++) {
+      const t = W.ter[idx(x, y)];
+      if (t < TERRAIN.SAND) continue;
+      const tx2 = isoX(x, y) - ox, ty2 = isoY(x, y) - oy;
+      // down-facing edges only (each boundary drawn once)
+      for (const [nx, ny, ex0, ey0, ex1, ey1] of [
+        [x + 1, y, tx2 + 32, ty2 + 16, tx2, ty2 + 32],   // SE edge
+        [x, y + 1, tx2, ty2 + 32, tx2 - 32, ty2 + 16]]) { // SW edge
+        if (!inB(nx, ny)) continue;
+        const nt = W.ter[idx(nx, ny)];
+        if (nt < TERRAIN.SAND || nt === t) continue;
+        g.strokeStyle = BLEND[t]; g.lineWidth = 7;
+        g.beginPath(); g.moveTo(ex0, ey0); g.lineTo(ex1, ey1); g.stroke();
+      }
     }
     // coastline foam: white edge where shallow water meets land
     g.lineCap = 'round';
@@ -418,18 +475,45 @@ const World = (() => {
     W.fogDirty = false;
   }
 
+  /* line-of-sight raycast: vision stops at the first obstacle on each ray.
+     Trees, tall buildings (and future walls) block; hills block unless the
+     viewer is elevated (standing on a hill, or is a tower). */
+  function castLight(ex, ey, r, elevated, selfRect) {
+    const r2 = r * r;
+    const sx = ex | 0, sy = ey | 0;
+    if (inB(sx, sy)) W.vis[idx(sx, sy)] = 2;
+    const x0 = (ex - r) | 0, x1 = (ex + r) | 0;
+    const y0 = (ey - r) | 0, y1 = (ey + r) | 0;
+    // rays to every perimeter tile of the LOS square
+    for (let px = x0; px <= x1; px++) for (let py = y0; py <= y1; py += (px === x0 || px === x1) ? 1 : (y1 - y0)) {
+      const dx = px + .5 - ex, dy = py + .5 - ey;
+      const steps = Math.ceil(Math.hypot(dx, dy) / 0.45);
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps;
+        const x = (ex + dx * t) | 0, y = (ey + dy * t) | 0;
+        if (!inB(x, y)) break;
+        if (dist2(x + .5, y + .5, ex, ey) > r2) break;
+        const i = idx(x, y);
+        W.vis[i] = 2; // you see the obstacle itself — just not past it
+        const own = selfRect && x >= selfRect.x && x < selfRect.x + selfRect.s &&
+                    y >= selfRect.y && y < selfRect.y + selfRect.s;
+        if (own) continue;
+        if (W.sightBlock[i]) break;
+        if (!elevated && W.ter[i] === TERRAIN.HILL) break;
+      }
+    }
+  }
+
   function recomputeFog(entities, humanId) {
     // downgrade visible -> explored
     for (let i = 0; i < W.vis.length; i++) if (W.vis[i] === 2) W.vis[i] = 1;
     for (const e of entities) {
-      if (e.owner !== humanId || e.dead) continue;
-      const r = e.los || 5, r2 = r * r;
-      const ex = e.cx(), ey = e.cy();
-      const x0 = Math.max(0, (ex - r) | 0), x1 = Math.min(N - 1, (ex + r) | 0);
-      const y0 = Math.max(0, (ey - r) | 0), y1 = Math.min(N - 1, (ey + r) | 0);
-      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-        if (dist2(x + .5, y + .5, ex, ey) <= r2) W.vis[idx(x, y)] = 2;
-      }
+      if (e.owner !== humanId || e.dead || e.inShip) continue;
+      const r = e.los || 5;
+      const elevated = e.type === 'tower' ||
+        terAt(e.cx(), e.cy()) === TERRAIN.HILL; // high ground sees over hills
+      const selfRect = e.kind === 'bld' ? { x: e.x, y: e.y, s: e.size } : null;
+      castLight(e.cx(), e.cy(), r, elevated, selfRect);
     }
     W.fogDirty = true;
   }
