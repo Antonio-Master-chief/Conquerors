@@ -40,25 +40,39 @@ const Input = (() => {
     return [ix / 64 + iy / 32, iy / 32 - ix / 64];
   }
 
-  /* ---------- picking ---------- */
+  /* ---------- picking ----------
+     AoE-style: hit-test the SPRITE on screen, not the ground tile under the
+     cursor — clicking a soldier's head or a building's roof must select it. */
+  function toScreen(wx, wy) {
+    const cam = game.cam;
+    const cssW = game.canvas.width / game.dpr, cssH = game.canvas.height / game.dpr;
+    return [(World.isoX(wx, wy) - cam.x) * cam.zoom + cssW / 2,
+            (World.isoY(wx, wy) - cam.y) * cam.zoom + cssH / 2];
+  }
   function pickAt(px, py) {
-    const [tx, ty] = screenToTile(px, py);
-    // units first (visible)
-    let best = null, bestKey = -1;
+    const z = game.cam.zoom;
+    let best = null, bestScore = 1e9;
     for (const u of game.units) {
       if (u.dead || u.inShip) continue;
       if (u.owner !== game.humanId && World.visAt(u.x, u.y) !== 2) continue;
-      const r = u.def.big ? 1.1 : 0.62;
-      if (Math.abs(u.x - tx) < r && Math.abs(u.y - ty) < r + 0.35) {
-        const k = u.x + u.y + (u.owner === game.humanId ? 10 : 0); // prefer own
-        if (k > bestKey) { bestKey = k; best = u; }
-      }
+      const [sx, sy] = toScreen(u.x, u.y);
+      const hw = (u.def.big ? 28 : 14) * z;          // half-width of the body box
+      const top = (u.def.big ? 56 : 44) * z;         // sprite height above the feet
+      const bot = 9 * z;
+      if (px < sx - hw || px > sx + hw || py < sy - top || py > sy + bot) continue;
+      // nearest to body center wins; own units strongly preferred
+      let score = Math.abs(px - sx) + Math.abs(py - (sy - top * 0.45)) * 0.6;
+      if (u.owner === game.humanId) score -= 1000;
+      if (score < bestScore) { bestScore = score; best = u; }
     }
     if (best) return best;
     for (const b of game.buildings) {
       if (b.dead) continue;
       if (World.visAt(b.cx(), b.cy()) === 0) continue;
-      if (tx >= b.x - .2 && tx < b.x + b.size + .2 && ty >= b.y - .2 && ty < b.y + b.size + .2) return b;
+      const [sx, sy] = toScreen(b.cx(), b.cy());
+      const hw = b.size * 33 * z;
+      const top = (b.size * 26 + 40) * z, bot = b.size * 17 * z;
+      if (px >= sx - hw && px <= sx + hw && py >= sy - top && py <= sy + bot) return b;
     }
     return null;
   }
@@ -70,10 +84,23 @@ const Input = (() => {
   }
 
   /* ---------- commands ---------- */
+  function mark(kind, x, y) { game.markers.push({ kind, x, y, t0: game.time }); }
+
   function commandAt(px, py) {
     const sel = game.selected.filter(e => !e.dead && e.kind === 'unit' && e.owner === game.humanId);
-    if (!sel.length) return false;
     const [tx, ty] = screenToTile(px, py);
+    // production buildings: set rally point (classic AoE)
+    if (!sel.length) {
+      const blds = game.selected.filter(e => !e.dead && e.kind === 'bld' && e.owner === game.humanId && e.def.trains);
+      if (blds.length && World.inB(tx | 0, ty | 0)) {
+        for (const b of blds) b.rally = { x: tx, y: ty };
+        mark('rally', tx, ty);
+        UI.message('Rally point set');
+        Audio2.sfx('click');
+        return true;
+      }
+      return false;
+    }
     const target = pickAt(px, py);
     const settlers = sel.filter(u => u.type === 'settler');
 
@@ -85,6 +112,7 @@ const Input = (() => {
         return true;
       }
       for (const u of sel) if (!u.civilian) u.orderAttack(target);
+      mark('attack', target.x, target.y);
       Audio2.ack('attack', big);
       return true;
     }
@@ -99,19 +127,22 @@ const Input = (() => {
     }
     if (target && target.kind === 'unit' && game.hostile(game.humanId, target.owner) && !target.def.npc) {
       for (const u of sel) u.orderAttack(target);
+      mark('attack', target.x, target.y);
       if (sel.some(u => u.type === 'elephant')) Audio2.sfx('trumpet'); else Audio2.ack('attack', big);
       return true;
     }
     if (target && target.kind === 'bld') {
       if (target.owner === game.humanId) {
-        if (!target.built && settlers.length) { for (const s of settlers) s.orderBuild(target); Audio2.sfx('click'); return true; }
-        if (target.def.farm && settlers.length) { for (const s of settlers) s.orderGather(target); Audio2.sfx('click'); return true; }
+        if (!target.built && settlers.length) { for (const s of settlers) s.orderBuild(target); mark('move', target.cx(), target.cy()); Audio2.sfx('click'); return true; }
+        if (target.def.farm && settlers.length) { for (const s of settlers) s.orderGather(target); mark('gather', target.cx(), target.cy()); Audio2.sfx('click'); return true; }
       } else if (target.type === 'town') {
         // move military adjacent to capture / fight garrison
         for (const u of sel) u.orderMove(target.cx() + (Math.random() * 2.4 - 1.2), target.cy() + (Math.random() * 2.4 - 1.2));
-        Audio2.sfx('click'); return true;
+        mark('attack', target.cx(), target.cy());
+        Audio2.ack('move', big); return true;
       } else if (game.hostile(game.humanId, target.owner)) {
         for (const u of sel) u.orderAttack(target);
+        mark('attack', target.cx(), target.cy());
         Audio2.sfx('click'); return true;
       }
       return true;
@@ -120,11 +151,13 @@ const Input = (() => {
     const obj = objPick(tx, ty, !!fishers.length);
     if (obj && obj.kind === 'fish' && fishers.length) {
       for (const f of fishers) f.orderGather(obj);
+      mark('gather', obj.x + .5, obj.y + .5);
       Audio2.sfx('click'); return true;
     }
     if (obj && obj.kind !== 'fish' && settlers.length) {
       for (const s of settlers) s.orderGather(obj);
       for (const u of sel) if (u.type !== 'settler') u.orderMove(tx, ty);
+      mark('gather', obj.x + .5, obj.y + .5);
       Audio2.sfx('click'); return true;
     }
     // loaded transports tapped onto land: beach landing
@@ -133,16 +166,21 @@ const Input = (() => {
         game.world.ter[World.idx(tx | 0, ty | 0)] >= TERRAIN.SAND) {
       for (const t of loaded) t.orderUnload(tx, ty);
       for (const u of sel) if (!loaded.includes(u)) u.orderMove(tx, ty);
+      mark('move', tx, ty);
       Audio2.sfx('click'); return true;
     }
-    // formation move
+    // formation move — never assign a slot that sits on a blocked tile
     const n = sel.length;
     const cols = Math.ceil(Math.sqrt(n));
     sel.forEach((u, i) => {
       const ox = (i % cols - (cols - 1) / 2) * 0.9;
       const oy = (Math.floor(i / cols) - (Math.ceil(n / cols) - 1) / 2) * 0.9;
-      u.orderMove(clamp(tx + ox, 1, World.N - 2), clamp(ty + oy, 1, World.N - 2));
+      let gx = clamp(tx + ox, 1, World.N - 2), gy = clamp(ty + oy, 1, World.N - 2);
+      const grid = u.def.naval ? game.world.navBlocked : game.world.blocked;
+      if (grid[World.idx(gx | 0, gy | 0)]) { gx = tx; gy = ty; } // fall back to the click point
+      u.orderMove(gx, gy);
     });
+    mark('move', tx, ty);
     Audio2.ack('move', big);
     return true;
   }
@@ -182,18 +220,52 @@ const Input = (() => {
   }
 
   /* ---------- selection ---------- */
+  let lastSelT = 0, lastSelId = -1;
   function selectAt(px, py, additive) {
     const hit = pickAt(px, py);
     if (hit) {
-      if (hit.kind === 'unit' && hit.owner === game.humanId)
-        hit.type === 'elephant' ? Audio2.sfx('trumpet') : Audio2.ack('select', !!hit.def.big);
       if (hit.kind === 'unit' && hit.owner === game.humanId) {
+        hit.type === 'elephant' ? Audio2.sfx('trumpet') : Audio2.ack('select', !!hit.def.big);
+        // double-click: select every unit of this type on screen (AoE classic)
+        if (performance.now() - lastSelT < 380 && lastSelId === hit.id) {
+          const cssW = game.canvas.width / game.dpr, cssH = game.canvas.height / game.dpr;
+          const picked = [];
+          for (const u of game.units) {
+            if (u.dead || u.inShip || u.owner !== game.humanId || u.type !== hit.type) continue;
+            const [sx, sy] = toScreen(u.x, u.y);
+            if (sx > -30 && sx < cssW + 30 && sy > -30 && sy < cssH + 30) picked.push(u);
+          }
+          if (!picked.includes(hit)) picked.push(hit); // the unit you clicked always counts
+          game.selected = picked;
+          if (picked.length > 1) UI.message(`${picked.length} × ${hit.def.name} selected`);
+          lastSelT = 0; lastSelId = -1;
+          UI.refreshPanels(true);
+          return;
+        }
+        lastSelT = performance.now(); lastSelId = hit.id;
         if (additive && game.selected[0] && game.selected[0].kind === 'unit') {
           if (!game.selected.includes(hit)) game.selected.push(hit);
         } else game.selected = [hit];
       } else game.selected = [hit];
     } else if (!additive) game.selected = [];
     UI.refreshPanels(true);
+  }
+
+  /* one tap/click does the right thing: select friends, command everything else */
+  function tapAction(px, py, additive, allowBldRally) {
+    const hit = pickAt(px, py);
+    const haveUnits = game.selected.some(s => !s.dead && s.kind === 'unit' && s.owner === game.humanId);
+    const haveBlds = game.selected.some(s => !s.dead && s.kind === 'bld' && s.owner === game.humanId && s.def.trains);
+    if (hit && hit.kind === 'unit' && hit.owner === game.humanId) {
+      // own loaded-transport special case: clicking it with troops selected = board
+      if (hit.cargo && haveUnits &&
+          game.selected.some(u => u.kind === 'unit' && !u.def.naval && u !== hit)) { commandAt(px, py); return; }
+      selectAt(px, py, additive);
+    } else if (haveUnits || (allowBldRally && haveBlds)) {
+      commandAt(px, py); // left-click the map: GO THERE
+    } else {
+      selectAt(px, py, additive);
+    }
   }
   function boxSelect(x0, y0, x1, y1) {
     const [ax, ay] = [Math.min(x0, x1), Math.min(y0, y1)];
@@ -228,7 +300,7 @@ const Input = (() => {
   }
 
   function onDown(e) {
-    game.canvas.setPointerCapture && game.canvas.setPointerCapture(e.pointerId);
+    try { game.canvas.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/stale pointer */ }
     Audio2.resume();
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -305,11 +377,7 @@ const Input = (() => {
         if (panMoved < 9) { // tap
           if (game.targeting) { resolveTargeting(e.clientX, e.clientY); return; }
           if (game.placing) { placeAt(e.clientX, e.clientY); return; }
-          const hit = pickAt(e.clientX, e.clientY);
-          const haveUnits = game.selected.some(s => !s.dead && s.kind === 'unit' && s.owner === game.humanId);
-          if (hit && hit.kind === 'unit' && hit.owner === game.humanId) selectAt(e.clientX, e.clientY, false);
-          else if (haveUnits) commandAt(e.clientX, e.clientY);
-          else selectAt(e.clientX, e.clientY, false);
+          tapAction(e.clientX, e.clientY, false, true);
         }
       }
       return;
@@ -318,7 +386,7 @@ const Input = (() => {
     if (e.button === 0 && dragging) {
       dragging = false;
       const dx = Math.abs(dragNow.x - dragStart.x), dy = Math.abs(dragNow.y - dragStart.y);
-      if (dx + dy < 7) selectAt(e.clientX, e.clientY, e.shiftKey);
+      if (dx + dy < 7) tapAction(e.clientX, e.clientY, e.shiftKey, false);
       else boxSelect(dragStart.x, dragStart.y, dragNow.x, dragNow.y);
       dragStart = null;
     }

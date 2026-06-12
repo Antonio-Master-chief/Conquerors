@@ -75,27 +75,27 @@ class Unit {
     }
   }
 
-  /* ---- orders ---- */
+  /* ---- orders (repathT reset = commands respond INSTANTLY) ---- */
   clearOrder() { this.order = null; this.path = null; this.state = 'idle'; }
-  orderMove(x, y) { this.order = { kind: 'move', x, y }; this.path = null; this.state = 'move'; }
-  orderAttack(t) { this.order = { kind: 'attack', target: t }; this.path = null; this.state = 'attack'; }
+  orderMove(x, y) { this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; }
+  orderAttack(t) { this.order = { kind: 'attack', target: t }; this.path = null; this.repathT = 0; this.state = 'attack'; }
   orderGather(obj) {
     const canGather = obj.kind === 'fish' ? this.type === 'fishboat'
                     : this.type === 'settler';
     if (!canGather) return this.orderMove(obj.x + .5, obj.y + .5);
-    this.order = { kind: 'gather', obj }; this.path = null; this.state = 'gather';
+    this.order = { kind: 'gather', obj }; this.path = null; this.repathT = 0; this.state = 'gather';
   }
   orderBoard(t) {
     if (this.def.naval || this.def.npc) return;
-    this.order = { kind: 'board', target: t }; this.path = null; this.state = 'move';
+    this.order = { kind: 'board', target: t }; this.path = null; this.repathT = 0; this.state = 'move';
   }
   orderPoison(x, y) {
     if (this.type !== 'scout') return;
-    this.order = { kind: 'poison', x, y, t: 0 }; this.path = null; this.state = 'move';
+    this.order = { kind: 'poison', x, y, t: 0 }; this.path = null; this.repathT = 0; this.state = 'move';
   }
   orderUnload(x, y) {
     if (!this.cargo) return;
-    this.order = { kind: 'unload', x, y }; this.path = null; this.state = 'move';
+    this.order = { kind: 'unload', x, y }; this.path = null; this.repathT = 0; this.state = 'move';
   }
   orderBuild(b) {
     if (this.type !== 'settler') return;

@@ -81,12 +81,17 @@ or just double-click `index.html` (everything is dependency-free vanilla JS — 
 
 | Action | Desktop | Touch |
 |---|---|---|
-| Select | Left-click / drag box | Tap a unit |
-| Command (move/attack/gather) | Right-click | Tap target with units selected |
+| Select | Left-click a unit (sprite hit-test) / drag box | Tap a unit |
+| Select all of one type on screen | Double-click a unit | Double-tap a unit |
+| Command (move/attack/gather/board) | **Left-click or right-click** the map/target | Tap target with units selected |
+| Set rally point (production building selected) | Right-click ground | Tap ground |
 | Deselect / cancel | Escape | Long-press (hold ~half a second) |
 | Pan camera | WASD / arrows / middle-drag | One-finger drag |
 | Zoom | Mouse wheel | Pinch |
 | Jump camera | Click/drag minimap | Tap/drag minimap |
+
+Every command answers with a ground marker (green move, red attack, gold gather,
+blue rally) and units respond instantly.
 
 To play on your iPhone: run the server on this PC, find the PC's local IP
 (`ipconfig` → IPv4), then open `http://<that-ip>:8123` in Safari on the phone

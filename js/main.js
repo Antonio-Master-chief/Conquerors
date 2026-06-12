@@ -12,6 +12,7 @@ function makeGame(civKey, diff) {
     cam: { x: 0, y: 0, zoom: 0.9 },
     world: World.W,
     players: [], units: [], buildings: [], projectiles: [], particles: [], pings: [],
+    markers: [],                  // command feedback (move/attack/gather/rally)
     selected: [], placing: null, targeting: null,
     ai: [], time: 0, humanId: 0, over: false, speed: 1,
     lastAlertT: -99, traderT: 25,
@@ -244,15 +245,51 @@ function render(game) {
 
   World.drawTerrain(ctx, { x: game.cam.x, y: game.cam.y, zoom: z }, cv.width, cv.height);
 
-  // selection rings (under entities)
+  // selection rings (under entities) — dark base + bright ring, AoE-style
   for (const e of game.selected) {
     if (e.dead) continue;
     const ix = (World.isoX(e.cx(), e.cy()) - view.left) * z;
     const iy = (World.isoY(e.cx(), e.cy()) - view.top) * z;
     const r = e.kind === 'bld' ? e.size * 30 : (e.def.big ? 24 : 13);
-    ctx.strokeStyle = e.owner === game.humanId ? 'rgba(140,255,120,.85)' : 'rgba(255,255,255,.6)';
-    ctx.lineWidth = 2 * z;
-    ctx.beginPath(); ctx.ellipse(ix, iy + (e.kind === 'bld' ? 0 : 1 * z), r * z, r * z * .5, 0, 0, 7); ctx.stroke();
+    const yy = iy + (e.kind === 'bld' ? 0 : 1 * z);
+    ctx.strokeStyle = 'rgba(10,20,8,.6)';
+    ctx.lineWidth = 3.6 * z;
+    ctx.beginPath(); ctx.ellipse(ix, yy, r * z, r * z * .5, 0, 0, 7); ctx.stroke();
+    ctx.strokeStyle = e.owner === game.humanId ? 'rgba(150,255,130,.95)' : 'rgba(255,255,255,.7)';
+    ctx.lineWidth = 1.8 * z;
+    ctx.beginPath(); ctx.ellipse(ix, yy, r * z, r * z * .5, 0, 0, 7); ctx.stroke();
+    // rally flag for selected production buildings
+    if (e.kind === 'bld' && e.owner === game.humanId && e.rally) {
+      const rx = (World.isoX(e.rally.x, e.rally.y) - view.left) * z;
+      const ry = (World.isoY(e.rally.x, e.rally.y) - view.top) * z;
+      ctx.strokeStyle = 'rgba(120,200,255,.9)'; ctx.lineWidth = 2 * z;
+      ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx, ry - 18 * z); ctx.stroke();
+      ctx.fillStyle = 'rgba(120,200,255,.9)';
+      ctx.beginPath(); ctx.moveTo(rx, ry - 18 * z); ctx.lineTo(rx + 11 * z, ry - 14.5 * z); ctx.lineTo(rx, ry - 11 * z);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(rx, ry, 6 * z, 3 * z, 0, 0, 7); ctx.stroke();
+    }
+  }
+
+  // command feedback markers (the "yes, I heard you" pulse)
+  for (const m of game.markers) {
+    const tt = clamp((game.time - m.t0) / 0.9, 0, 1);
+    const ix = (World.isoX(m.x, m.y) - view.left) * z;
+    const iy = (World.isoY(m.x, m.y) - view.top) * z;
+    const col = m.kind === 'attack' ? '230,80,55' : m.kind === 'gather' ? '255,211,77'
+              : m.kind === 'rally' ? '120,200,255' : '130,235,95';
+    const a = (1 - tt).toFixed(2);
+    ctx.strokeStyle = `rgba(${col},${a})`;
+    ctx.lineWidth = 2.6 * z;
+    const r = (19 - tt * 13) * z;
+    ctx.beginPath(); ctx.ellipse(ix, iy, r, r * .5, 0, 0, 7); ctx.stroke();
+    ctx.lineWidth = 1.4 * z;
+    ctx.beginPath(); ctx.ellipse(ix, iy, r * .55, r * .27, 0, 0, 7); ctx.stroke();
+    if (m.kind === 'attack') { // crossed slashes
+      ctx.lineWidth = 2.2 * z;
+      ctx.beginPath(); ctx.moveTo(ix - 5 * z, iy - 5 * z); ctx.lineTo(ix + 5 * z, iy + 5 * z);
+      ctx.moveTo(ix + 5 * z, iy - 5 * z); ctx.lineTo(ix - 5 * z, iy + 5 * z); ctx.stroke();
+    }
   }
 
   // build ghost
@@ -457,6 +494,7 @@ function simStep(game, dt) {
 
   // cleanup
   game.pings = game.pings.filter(p => game.time - p.t < 2);
+  if (game.markers.length) game.markers = game.markers.filter(m => game.time - m.t0 < 0.9);
   if (game.units.some(u => u.dead)) game.units = game.units.filter(u => !u.dead);
   if (game.buildings.some(b => b.dead)) {
     game.selected = game.selected.filter(e => !e.dead);
