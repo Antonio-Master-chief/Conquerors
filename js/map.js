@@ -508,7 +508,7 @@ const World = (() => {
     // downgrade visible -> explored
     for (let i = 0; i < W.vis.length; i++) if (W.vis[i] === 2) W.vis[i] = 1;
     for (const e of entities) {
-      if (e.owner !== humanId || e.dead || e.inShip) continue;
+      if (e.owner !== humanId || e.dead || e.inShip || e.inWall) continue;
       const r = e.los || 5;
       const elevated = e.type === 'tower' ||
         terAt(e.cx(), e.cy()) === TERRAIN.HILL; // high ground sees over hills

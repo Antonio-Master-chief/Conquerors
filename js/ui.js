@@ -181,7 +181,26 @@ const UI = (() => {
       let sub = b.built ? (b.def.desc || '') : `Building… ${Math.floor(b.progress * 100)}%`;
       if (b.built && b.type === 'farm') sub = b.irrigated ? '💧 Irrigated — infinite food' : '⚠ NO WATER — crops won\'t grow!';
       if (b.built && b.type === 'canal') sub = b.flowing ? '💧 Water is flowing' : '⚠ Not connected to a water source';
+      if (b.built && b.garrison) sub = b.garrison.length
+        ? `🏹 Manned: ${b.garrison.length}/${b.def.garrison} — firing at enemies in range`
+        : 'Send archers here to man the wall (+25% attack, Rome: protected by slits)';
       el('div', 'sub', c).textContent = sub;
+      if (b.built && b.garrison && b.garrison.length && b.owner === game.humanId) {
+        actionBtn(actP, {
+          label: 'Eject', icon: makeIconCv('flag'), enabled: true,
+          title: 'Order the archers down from the wall',
+          onClick: () => {
+            for (const u of b.garrison) {
+              u.inWall = null;
+              const spot = game.freeSpotNear(b, false);
+              if (spot) { u.x = spot[0]; u.y = spot[1]; }
+            }
+            b.garrison = [];
+            Audio2.sfx('click');
+            refreshPanels(true);
+          },
+        });
+      }
       // training queue
       if (b.queue.length) {
         const qc = el('div', 'card', selP);
@@ -210,7 +229,7 @@ const UI = (() => {
     if (first.kind === 'unit' && first.owner === game.humanId) {
       const settlers = sel.filter(u => u.type === 'settler');
       if (settlers.length) {
-        for (const bt of ['farm', 'canal', 'dock', 'barracks', 'range', 'university', 'grounds', 'tower']) {
+        for (const bt of ['farm', 'canal', 'wall', 'dock', 'barracks', 'range', 'university', 'grounds', 'tower']) {
           const B = BUILDINGS[bt];
           const lockAge = B.age > p.age;
           actionBtn(actP, {

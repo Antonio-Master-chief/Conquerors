@@ -53,7 +53,7 @@ const Input = (() => {
     const z = game.cam.zoom;
     let best = null, bestScore = 1e9;
     for (const u of game.units) {
-      if (u.dead || u.inShip) continue;
+      if (u.dead || u.inShip || u.inWall) continue;
       if (u.owner !== game.humanId && World.visAt(u.x, u.y) !== 2) continue;
       const [sx, sy] = toScreen(u.x, u.y);
       const hw = (u.def.big ? 28 : 14) * z;          // half-width of the body box
@@ -133,8 +133,19 @@ const Input = (() => {
     }
     if (target && target.kind === 'bld') {
       if (target.owner === game.humanId) {
-        if (!target.built && settlers.length) { for (const s of settlers) s.orderBuild(target); mark('move', target.cx(), target.cy()); Audio2.sfx('click'); return true; }
+        if (!target.built && settlers.length) { for (const s of settlers) s.orderBuildQueued(target); mark('move', target.cx(), target.cy()); Audio2.sfx('click'); return true; }
         if (target.def.farm && settlers.length) { for (const s of settlers) s.orderGather(target); mark('gather', target.cx(), target.cy()); Audio2.sfx('click'); return true; }
+        // man the walls: ranged units garrison inside
+        if (target.garrison && target.built) {
+          const bowmen = sel.filter(u => u.def.tags.includes('ranged') && !u.def.naval);
+          if (bowmen.length) {
+            const room = (target.def.garrison || 0) - target.garrison.length;
+            bowmen.slice(0, Math.max(0, room)).forEach(u => u.orderGarrison(target));
+            if (room <= 0) UI.message('Wall is fully manned', true);
+            else { mark('move', target.cx(), target.cy()); Audio2.ack('move', false); }
+            return true;
+          }
+        }
       } else if (target.type === 'town') {
         // move military adjacent to capture / fight garrison
         for (const u of sel) u.orderMove(target.cx() + (Math.random() * 2.4 - 1.2), target.cy() + (Math.random() * 2.4 - 1.2));
@@ -213,9 +224,51 @@ const Input = (() => {
     p.pay(B.cost);
     const b = Sim.placeBuilding(game, game.humanId, type, bx, by, false);
     const settlers = game.selected.filter(e => !e.dead && e.kind === 'unit' && e.type === 'settler');
-    for (const s of settlers) s.orderBuild(b);
+    for (const s of settlers) s.orderBuildQueued(b); // queues if already building (AoE style)
     Audio2.sfx('build');
     game.placing = null;
+    UI.refreshPanels(true);
+  }
+
+  /* ---------- drag-placement for walls & canals ---------- */
+  let placeDrag = null;
+  function dragCells(x0, y0, x1, y1) { // straight tile line, Bresenham
+    const cells = [];
+    let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+    const sx2 = x0 < x1 ? 1 : -1, sy2 = y0 < y1 ? 1 : -1;
+    let err = dx + dy, x = x0, y = y0, guard = 0;
+    while (guard++ < 40) {
+      cells.push([x, y]);
+      if (x === x1 && y === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x += sx2; }
+      if (e2 <= dx) { err += dx; y += sy2; }
+    }
+    return cells;
+  }
+  function updatePlaceDrag(px, py) {
+    const [tx, ty] = screenToTile(px, py);
+    placeDrag.cells = dragCells(placeDrag.x0, placeDrag.y0, tx | 0, ty | 0);
+    game.placing.cells = placeDrag.cells;
+  }
+  function finishPlaceDrag() {
+    const type = game.placing.type, B = BUILDINGS[type];
+    const p = game.players[game.humanId];
+    const placed = [];
+    for (const [x, y] of placeDrag.cells) {
+      if (!Sim.canPlace(game, type, x, y)) continue;
+      if (!p.canAfford(B.cost)) { UI.message('Out of resources', true); break; }
+      p.pay(B.cost);
+      placed.push(Sim.placeBuilding(game, game.humanId, type, x, y, false));
+    }
+    if (placed.length) {
+      const settlers = game.selected.filter(e => !e.dead && e.kind === 'unit' && e.type === 'settler');
+      for (const s of settlers) for (const b of placed) s.orderBuildQueued(b);
+      Audio2.sfx('build');
+      UI.message(`${placed.length} × ${B.name} placed`);
+    }
+    placeDrag = null;
+    game.placing.cells = null; // stay in placing mode: drag the next stretch
     UI.refreshPanels(true);
   }
 
@@ -272,7 +325,7 @@ const Input = (() => {
     const [bx, by] = [Math.max(x0, x1), Math.max(y0, y1)];
     const picked = [];
     for (const u of game.units) {
-      if (u.dead || u.inShip || u.owner !== game.humanId) continue;
+      if (u.dead || u.inShip || u.inWall || u.owner !== game.humanId) continue;
       const cssW = game.canvas.width / game.dpr, cssH = game.canvas.height / game.dpr;
       const sx = (World.isoX(u.x, u.y) - game.cam.x) * game.cam.zoom + cssW / 2;
       const sy = (World.isoY(u.x, u.y) - game.cam.y) * game.cam.zoom + cssH / 2;
@@ -312,6 +365,14 @@ const Input = (() => {
         clearTimeout(longPressTimer);
         return;
       }
+      // drag-buildable tool active: one-finger drag paints the wall line
+      if (game.placing && BUILDINGS[game.placing.type].drag) {
+        const [tx, ty] = screenToTile(e.clientX, e.clientY);
+        placeDrag = { x0: tx | 0, y0: ty | 0, cells: [[tx | 0, ty | 0]] };
+        game.placing.cells = placeDrag.cells;
+        panPointer = null;
+        return;
+      }
       panPointer = e.pointerId;
       panLast = { x: e.clientX, y: e.clientY };
       panMoved = 0;
@@ -325,7 +386,14 @@ const Input = (() => {
     // mouse
     if (e.button === 0) {
       if (game.targeting) { resolveTargeting(e.clientX, e.clientY); return; }
-      if (game.placing) { placeAt(e.clientX, e.clientY); return; }
+      if (game.placing) {
+        if (BUILDINGS[game.placing.type].drag) {
+          const [tx, ty] = screenToTile(e.clientX, e.clientY);
+          placeDrag = { x0: tx | 0, y0: ty | 0, cells: [[tx | 0, ty | 0]] };
+          game.placing.cells = placeDrag.cells;
+        } else placeAt(e.clientX, e.clientY);
+        return;
+      }
       dragStart = { x: e.clientX, y: e.clientY }; dragNow = { ...dragStart }; dragging = true;
     } else if (e.button === 2) {
       if (game.targeting) { game.targeting = null; UI.message('Cancelled'); return; }
@@ -357,18 +425,64 @@ const Input = (() => {
       return;
     }
     if (dragging && dragStart) dragNow = { x: e.clientX, y: e.clientY };
+    if (placeDrag) { updatePlaceDrag(e.clientX, e.clientY); return; }
     if (game.placing) {
       const [tx, ty] = screenToTile(e.clientX, e.clientY);
       const B = BUILDINGS[game.placing.type];
       game.placing.bx = Math.round(tx - B.size / 2);
       game.placing.by = Math.round(ty - B.size / 2);
     }
+    if (!isTouch(e)) updateHoverCursor(e.clientX, e.clientY);
+  }
+
+  /* ---------- context cursor (desktop): axe / hammer / sword ---------- */
+  const cursorCache = {};
+  function cursorFor(iconName) {
+    if (cursorCache[iconName]) return cursorCache[iconName];
+    const c = document.createElement('canvas'); c.width = 26; c.height = 26;
+    c.getContext('2d').drawImage(Sprites.icon(iconName), 0, 0);
+    cursorCache[iconName] = `url(${c.toDataURL()}) 5 5, auto`;
+    return cursorCache[iconName];
+  }
+  let hoverT = 0, lastCursor = '';
+  function setCursor(v) {
+    if (v === lastCursor) return;
+    lastCursor = v;
+    game.canvas.style.cursor = v;
+  }
+  function updateHoverCursor(px, py) {
+    const now = performance.now();
+    if (now - hoverT < 80) return;
+    hoverT = now;
+    if (game.placing || game.targeting) { setCursor('crosshair'); return; }
+    const sel = game.selected.filter(s => !s.dead && s.kind === 'unit' && s.owner === game.humanId);
+    if (!sel.length) { setCursor('default'); return; }
+    const settlers = sel.some(u => u.type === 'settler');
+    const military = sel.some(u => !u.civilian);
+    const hit = pickAt(px, py);
+    if (hit && game.hostile(game.humanId, hit.owner) && hit.owner >= -1 &&
+        !(hit.kind === 'unit' && hit.def.npc && game.inTerritory(hit.x, hit.y) >= 0)) {
+      if (military || hit.kind === 'bld') { setCursor(cursorFor('sword2')); return; }
+    }
+    if (hit && hit.kind === 'bld' && hit.owner === game.humanId && !hit.built && settlers) {
+      setCursor(cursorFor('hammer')); return;
+    }
+    if (settlers) {
+      const [tx, ty] = screenToTile(px, py);
+      const o = objPick(tx, ty, false);
+      if (o && o.kind !== 'fish' && !o.doodad) { setCursor(cursorFor('axe2')); return; }
+      if (hit && hit.kind === 'bld' && hit.owner === game.humanId && hit.def.farm && hit.built) {
+        setCursor(cursorFor('axe2')); return;
+      }
+    }
+    setCursor('default');
   }
 
   function onUp(e) {
     pointers.delete(e.pointerId);
     clearTimeout(longPressTimer);
 
+    if (placeDrag) { finishPlaceDrag(); return; }
     if (isTouch(e)) {
       if (pointers.size > 0) { pinchDist = 0; return; }
       pinchDist = 0;

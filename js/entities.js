@@ -31,6 +31,9 @@ class Unit {
     this.fade = 1;
     this.cargo = u.capacity ? [] : null; // transports
     this.inShip = null;            // set while riding a transport
+    this.inWall = null;            // set while garrisoned in a wall
+    this.buildQueue = [];          // queued construction sites
+    this.flashUntil = 0;           // hit flash timestamp (ms)
     this.hungerT = -99;            // siege starvation
     this.poisonT = -99;            // poisoned water
     this.starveT = -99;            // prolonged siege: hp decay
@@ -77,8 +80,13 @@ class Unit {
 
   /* ---- orders (repathT reset = commands respond INSTANTLY) ---- */
   clearOrder() { this.order = null; this.path = null; this.state = 'idle'; }
-  orderMove(x, y) { this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; }
-  orderAttack(t) { this.order = { kind: 'attack', target: t }; this.path = null; this.repathT = 0; this.state = 'attack'; }
+  resetQueue() { if (this.buildQueue) this.buildQueue.length = 0; }
+  orderMove(x, y) { this.resetQueue(); this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; }
+  orderAttack(t) { this.resetQueue(); this.order = { kind: 'attack', target: t }; this.path = null; this.repathT = 0; this.state = 'attack'; }
+  orderGarrison(b) { // ranged units man the walls
+    if (!this.def.tags.includes('ranged') || this.def.naval) return;
+    this.order = { kind: 'garrison', target: b }; this.path = null; this.repathT = 0; this.state = 'move';
+  }
   orderGather(obj) {
     const canGather = obj.kind === 'fish' ? this.type === 'fishboat'
                     : this.type === 'settler';
@@ -99,7 +107,12 @@ class Unit {
   }
   orderBuild(b) {
     if (this.type !== 'settler') return;
-    this.order = { kind: 'build', target: b }; this.path = null; this.state = 'build';
+    this.order = { kind: 'build', target: b }; this.path = null; this.repathT = 0; this.state = 'build';
+  }
+  orderBuildQueued(b) { // queue construction like AoE villagers
+    if (this.type !== 'settler') return;
+    if (this.order && this.order.kind === 'build') this.buildQueue.push(b);
+    else this.orderBuild(b);
   }
   orderDeposit(game) { this.order = { kind: 'deposit', resume: this.order && this.order.kind === 'gather' ? this.order.obj : null }; this.path = null; }
 
@@ -199,6 +212,10 @@ class Unit {
       this.x = this.inShip.x; this.y = this.inShip.y;
       return;
     }
+    if (this.inWall) { // manning a wall: the wall fights for us
+      this.x = this.inWall.cx(); this.y = this.inWall.cy();
+      return;
+    }
     this.atkCd -= dt; this.repathT -= dt; this.scanT -= dt;
     if (this.buffT > 0) this.buffT -= dt;
     this.animT += dt;
@@ -245,7 +262,35 @@ class Unit {
         case 'move': {
           if (this.ensurePath(game, o.x, o.y)) {
             if (!this.moveAlong(game, dt)) this.clearOrder();
-          } else if (!this.path) this.clearOrder();
+          } else if (!this.path) {
+            // way is barred: soldiers breach the structure in front of them
+            if (!this.civilian && !this.def.npc && dist(this.x, this.y, o.x, o.y) > 3) {
+              let blk = null, bd = 2.4;
+              for (const b of game.buildings) {
+                if (b.dead || b.owner < 0 || !game.hostile(this.owner, b.owner)) continue;
+                const d = this.distTo(b);
+                if (d < bd) { bd = d; blk = b; }
+              }
+              if (blk) { this.orderAttack(blk); break; }
+            }
+            this.clearOrder();
+          }
+          break;
+        }
+        case 'garrison': {
+          const b = o.target;
+          if (!b || b.dead || !b.built || !b.garrison || b.owner !== this.owner ||
+              b.garrison.length >= (b.def.garrison || 0)) { this.clearOrder(); break; }
+          if (this.distTo(b) < 1.6) {
+            b.garrison.push(this); this.inWall = b;
+            this.path = null; this.order = null; this.state = 'idle';
+            const si = game.selected.indexOf(this);
+            if (si >= 0) game.selected.splice(si, 1);
+            if (this.owner === game.humanId) Audio2.sfx('click');
+          } else {
+            if (this.ensurePath(game, b.cx(), b.cy())) this.moveAlong(game, dt);
+            else if (!this.path) this.clearOrder();
+          }
           break;
         }
         case 'attack': this.tryAttack(game, dt); break;
@@ -367,17 +412,32 @@ class Unit {
         }
         case 'build': {
           const b = o.target;
-          if (!b || b.dead || b.built) { this.clearOrder(); break; }
+          // next job: queued site first, then any nearby foundation (AoE improvising)
+          const nextJob = () => {
+            while (this.buildQueue.length) {
+              const n = this.buildQueue.shift();
+              if (n && !n.dead && !n.built) { this.orderBuild(n); return true; }
+            }
+            let best = null, bd = 14 * 14;
+            for (const f of game.buildings) {
+              if (f.dead || f.built || f.owner !== this.owner) continue;
+              const d = dist2(this.x, this.y, f.cx(), f.cy());
+              if (d < bd) { bd = d; best = f; }
+            }
+            if (best) { this.orderBuild(best); return true; }
+            return false;
+          };
+          if (!b || b.dead || b.built) { if (!nextJob()) this.clearOrder(); break; }
           if (this.distTo(b) < (b.def.naval ? 1.3 : 0.7)) {
             this.path = null; this.anim = 'attack';
             const spd = (game.players[this.owner].civ || {}).buildSpd || 1;
             b.progress += dt * spd / b.def.buildTime;
             b.hp = Math.min(b.maxHp, b.hp + b.maxHp * 0.9 * dt * spd / b.def.buildTime);
             if (Math.random() < .25 && this.owner === game.humanId) Audio2.sfx('build');
-            if (b.progress >= 1) { b.finish(game); this.clearOrder(); }
+            if (b.progress >= 1) { b.finish(game); if (!nextJob()) this.clearOrder(); }
           } else {
             if (this.ensurePath(game, b.cx(), b.cy())) this.moveAlong(game, dt);
-            else if (!this.path) this.clearOrder();
+            else if (!this.path) { if (!nextJob()) this.clearOrder(); }
           }
           break;
         }
@@ -483,6 +543,7 @@ class Unit {
     if (this.def.npc && game.inTerritory(this.x, this.y) >= 0) return;
     this.hp -= dmg;
     this.lastHitT = game.time;
+    if (!silent) this.flashUntil = performance.now() + 90; // white impact flash
     if (this.owner === game.humanId || (from && from.owner === game.humanId)) game.combatT = game.time;
     if (!silent && Math.random() < 0.5) Sim.puff(game, this.x, this.y - 0.6, '#a3322a', 3);
     // settlers flee, idle military retaliate
@@ -515,6 +576,11 @@ class Unit {
     if (World.terAt(this.x, this.y) === TERRAIN.HILL) bob -= 5 * view.z; // standing tall on high ground
     if (this.fade < 1) g.globalAlpha = this.fade;
     g.drawImage(s.cv, ix - s.ax * sc, iy - s.ay * sc + bob, s.cv.width * sc / k, s.cv.height * sc / k);
+    if (performance.now() < this.flashUntil) { // hit flash
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.55;
+      g.drawImage(s.cv, ix - s.ax * sc, iy - s.ay * sc + bob, s.cv.width * sc / k, s.cv.height * sc / k);
+      g.globalCompositeOperation = 'source-over';
+    }
     g.globalAlpha = 1;
     // transport cargo count
     if (this.cargo && this.cargo.length) {
@@ -559,6 +625,8 @@ class Building {
     this.captureBy = -2;           // current sole capturer (for UI)
     this.irrigated = false;        // farms: water supply present
     this.flowing = false;          // canals: connected to a water source
+    this.garrison = B.garrison ? [] : null; // walls: archers firing from inside
+    this.wallMask = 0;             // walls: which neighbors to connect to
   }
   cx() { return this.x + this.size / 2; }
   cy() { return this.y + this.size / 2; }
@@ -630,6 +698,19 @@ class Building {
       if (e) { this.atkCd = this.def.cd; Sim.fireProjectile(game, this, e); }
     }
 
+    // manned wall: every garrisoned archer fires a clean shot
+    if (this.built && this.garrison) {
+      this.los = this.def.los + (this.garrison.length ? 5 : 0);
+      if (this.garrison.length && (this.atkCd -= dt) <= 0) {
+        const rome2 = p && p.civKey === 'rome';
+        const e = game.nearestEnemy(this, rome2 ? 5.5 : 4.8);
+        if (e) {
+          this.atkCd = 1.8;
+          for (const u of this.garrison) Sim.garrisonShot(game, this, u, e);
+        }
+      }
+    }
+
     // training grounds aura: XP drip
     if (this.built && this.def.aura && (this.auraT += dt) >= 1) {
       this.auraT = 0;
@@ -670,6 +751,19 @@ class Building {
       this.dead = true;
       game.unblockBuilding(this);
       Sim.rubble(game, this);
+      if (this.garrison && this.garrison.length) {
+        // the wall falls: Roman arrow slits double as sally ports — their archers
+        // escape unharmed; everyone else gets crushed in the collapse
+        for (const u of this.garrison) {
+          u.inWall = null;
+          const spot = game.freeSpotNear(this, false);
+          if (spot) { u.x = spot[0]; u.y = spot[1]; }
+          const pu = game.players[u.owner];
+          if (!(pu && pu.civKey === 'rome')) u.takeDamage(game, u.maxHp * 0.55, from, true);
+        }
+        this.garrison = [];
+      }
+      if (this.type === 'wall') Sim.refreshWallMasks(game);
       if (this.type === 'canal' || this.type === 'farm') Sim.recomputeIrrigation(game);
       if (from && from.kind === 'unit') from.addXP(20, game);
       if (this.type === 'town') {
@@ -686,6 +780,7 @@ class Building {
     if (this.built) {
       if (this.type === 'farm' && !this.irrigated) flag = 'dry';
       if (this.type === 'canal' && !this.flowing) flag = 'dry';
+      if (this.type === 'wall') flag = String(this.wallMask);
     }
     const s = Sprites.building(this.type, style, this.owner < 0 ? -1 : this.owner, this.built, flag);
     const ix = (World.isoX(this.cx(), this.cy()) - view.left) * view.z;
@@ -698,6 +793,16 @@ class Building {
       g.fillRect(ix - 22 * view.z, iy + 4 * view.z, 44 * view.z, 5 * view.z);
       g.fillStyle = '#e7cf8e';
       g.fillRect(ix - 21 * view.z, iy + 5 * view.z, 42 * view.z * this.progress, 3 * view.z);
+    }
+    // garrison pips: helmets peeking over the wall
+    if (this.garrison && this.garrison.length) {
+      for (let i = 0; i < this.garrison.length; i++) {
+        const px2 = ix + (i - (this.garrison.length - 1) / 2) * 9 * view.z;
+        g.fillStyle = '#9aa2ad'; g.beginPath();
+        g.arc(px2, iy - 30 * view.z, 3.2 * view.z, Math.PI, 0); g.fill();
+        g.fillStyle = Sprites.teamCols(this.owner < 0 ? -1 : this.owner).main;
+        g.fillRect(px2 - 3.2 * view.z, iy - 30 * view.z, 6.4 * view.z, 1.6 * view.z);
+      }
     }
     // siege banner
     if (this.besieged) {
@@ -793,12 +898,22 @@ const Sim = {
     for (const o of game.world.objects)
       if (o.doodad && o.alive && o.x >= bx - 1 && o.x < bx + B.size && o.y >= by - 1 && o.y < by + B.size)
         o.alive = false;
+    if (type === 'wall') Sim.refreshWallMasks(game);
     return b;
   },
 
   meleeHit(game, src, t) {
     const dmg = this.calcDamage(game, src, t);
     t.takeDamage(game, dmg, src);
+    // slash sparks at the point of impact
+    if (World.visAt(t.cx(), t.cy()) === 2) {
+      for (let i = 0; i < 4; i++) game.particles.push({
+        x: t.cx() + (Math.random() - .5) * .5, y: t.cy() - .2 + (Math.random() - .5) * .3,
+        vx: (Math.random() - .5) * 3, vy: -Math.random() * 1.5, grav: 2,
+        z: 12 + Math.random() * 8, vz: 0,
+        life: .16 + Math.random() * .08, max: .22, color: i % 2 ? '#fff8d8' : '#ffd34d', size: 2.2,
+      });
+    }
     if (src.owner === game.humanId || t.owner === game.humanId) {
       const w = { legionary: 'sword', sword: 'sword', centurion: 'sword',
                   spearman: 'spear', chariot: 'spear', scout: 'spear',
@@ -904,6 +1019,31 @@ const Sim = {
       Audio2.say('We have lost a town!', true);
     } else if (p) game.message(`${PLAYER_COLORS[pid].name} captured a town`, false);
     game.ping(town.cx(), town.cy());
+  },
+
+  /* ---- walls: connect neighbors + garrison fire ---- */
+  refreshWallMasks(game) {
+    const walls = new Map();
+    for (const b of game.buildings)
+      if (!b.dead && b.type === 'wall') walls.set(b.y * World.N + b.x, b);
+    for (const b of walls.values()) {
+      b.wallMask = (walls.has(b.y * World.N + b.x + 1) ? 1 : 0) |
+                   (walls.has(b.y * World.N + b.x - 1) ? 2 : 0) |
+                   (walls.has((b.y + 1) * World.N + b.x) ? 4 : 0) |
+                   (walls.has((b.y - 1) * World.N + b.x) ? 8 : 0);
+    }
+  },
+
+  garrisonShot(game, wall, u, t) {
+    const p = game.players[u.owner];
+    const mult = p && p.civKey === 'rome' ? 1.5 : 1.25; // clean shots from the slits
+    const armor = t.kind === 'unit' ? t.effArmor(game) : 1;
+    const dmg = Math.max(1, u.effAtk(game) * mult - armor);
+    game.projectiles.push({
+      x: wall.cx(), y: wall.cy() - 0.8, target: t, speed: 13,
+      src: wall, t0: game.time, dmg, splash: 0,
+    });
+    if (wall.owner === game.humanId || t.owner === game.humanId) Audio2.sfx('arrow');
   },
 
   /* ---- sieges: surround a settlement to starve its defenders ---- */

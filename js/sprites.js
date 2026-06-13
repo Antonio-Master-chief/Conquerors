@@ -403,14 +403,14 @@ const Sprites = (() => {
     switch (v.weapon) {
       case 'spear': {
         g.strokeStyle = '#6e5638'; g.lineWidth = 2.2;
-        const ext = anim === 'attack' && fr === 1 ? 8 : 0;
+        const ext = anim === 'attack' ? (fr === 1 ? 13 : fr === 0 ? -3 : 4) : 0; // thrust!
         if (side) { g.beginPath(); g.moveTo(wx + 12, wy + 3); g.lineTo(wx - 14 - ext, wy - 4); g.stroke();
           g.fillStyle = '#cfd6dd'; g.beginPath(); g.moveTo(wx - 14 - ext, wy - 4); g.lineTo(wx - 20 - ext, wy - 6.2); g.lineTo(wx - 13.4 - ext, wy - 1); g.closePath(); g.fill(); }
         else { g.beginPath(); g.moveTo(wx, wy + 9); g.lineTo(wx, wy - 16 - ext); g.stroke();
           g.fillStyle = '#cfd6dd'; g.beginPath(); g.moveTo(wx - 2.4, wy - 16 - ext); g.lineTo(wx + 2.4, wy - 16 - ext); g.lineTo(wx, wy - 23 - ext); g.closePath(); g.fill(); }
         break; }
       case 'sword': {
-        const a = side ? (-2.2 + raise * 1.4) : (-1.2 + raise * 1.2);
+        const a = side ? (-2.5 + raise * 2.6) : (-1.4 + raise * 2.2); // big readable swing
         g.save(); g.translate(wx, wy); g.rotate(a);
         g.fillStyle = '#d7dde4'; g.fillRect(-1.4, -15, 2.8, 15);
         g.fillStyle = '#9aa3ad'; g.fillRect(0.2, -15, 1.2, 15); // blade edge shading
@@ -419,7 +419,7 @@ const Sprites = (() => {
         g.fillStyle = '#5d4426'; g.beginPath(); g.arc(0, 1.6, 1.4, 0, 7); g.fill(); // pommel
         g.restore(); break; }
       case 'axe': {
-        const a = side ? (-2.0 + raise * 1.6) : (-1.0 + raise * 1.4);
+        const a = side ? (-2.3 + raise * 2.8) : (-1.2 + raise * 2.4); // full chop arc
         g.save(); g.translate(wx, wy); g.rotate(a);
         g.strokeStyle = '#6e5638'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(0, 2); g.lineTo(0, -12); g.stroke();
         g.fillStyle = '#aab3bf'; g.beginPath(); g.moveTo(0, -12); g.quadraticCurveTo(7, -12, 7, -6); g.lineTo(0, -8); g.closePath(); g.fill();
@@ -1130,6 +1130,64 @@ const Sprites = (() => {
       const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 
+    if (type === 'wall') {
+      // auto-connecting stone wall. variant = neighbor mask:
+      // bit1: x+1 (screen SE), bit2: x-1 (NW), bit4: y+1 (SW), bit8: y-1 (NE)
+      const mask = parseInt(variant, 10) || 0;
+      const EL = 20, SW2 = 5.5, L = 17;
+      const segs = []; // [vx, vy] screen direction to each connected edge
+      if (mask & 2) segs.push([-15.5, -7.75]); // NW (back)
+      if (mask & 8) segs.push([15.5, -7.75]);  // NE (back)
+      if (mask & 4) segs.push([-15.5, 7.75]);  // SW (front)
+      if (mask & 1) segs.push([15.5, 7.75]);   // SE (front)
+      const stoneT = style === 'rome' ? '#ddd6c4' : p.top;
+      const stoneL = style === 'rome' ? '#c2bba8' : p.wallL;
+      const stoneR = style === 'rome' ? '#9b9482' : p.wallR;
+      function slab(vx2, vy2) {
+        const len = Math.hypot(vx2, vy2);
+        const px2 = -vy2 / len * SW2, py2 = vx2 / len * SW2;
+        const quad = [[cx + px2, cy + py2], [cx + px2 + vx2, cy + py2 + vy2],
+                      [cx - px2 + vx2, cy - py2 + vy2], [cx - px2, cy - py2]];
+        // drop faces from each top edge that faces the viewer (lower on screen)
+        for (const [a, b2] of [[quad[0], quad[1]], [quad[3], quad[2]], [quad[1], quad[2]]]) {
+          if ((a[1] + b2[1]) / 2 < cy - 1) continue; // back-facing
+          g.fillStyle = (a[0] + b2[0]) / 2 < cx ? stoneL : stoneR;
+          g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(a[0], a[1] - EL); g.lineTo(b2[0], b2[1] - EL);
+          g.lineTo(b2[0], b2[1]); g.lineTo(a[0], a[1]); g.closePath(); g.fill(); g.stroke();
+          // masonry courses + roman arrow slit on the front faces
+          g.strokeStyle = 'rgba(20,12,6,.16)';
+          g.beginPath(); g.moveTo(a[0], a[1] - EL * .5); g.lineTo(b2[0], b2[1] - EL * .5); g.stroke();
+          if (style === 'rome' && Math.abs(b2[0] - a[0]) > 10) {
+            const mx2 = (a[0] + b2[0]) / 2, my2 = (a[1] + b2[1]) / 2;
+            g.fillStyle = '#241a10'; g.fillRect(mx2 - 1.1, my2 - EL + 4, 2.2, 9);
+          }
+        }
+        // top face
+        g.fillStyle = stoneT; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(quad[0][0], quad[0][1] - EL);
+        for (let i = 1; i < 4; i++) g.lineTo(quad[i][0], quad[i][1] - EL);
+        g.closePath(); g.fill(); g.stroke();
+        // crenellations along the top
+        g.fillStyle = stoneR;
+        for (const t2 of [0.42, 0.85]) {
+          g.fillRect(cx + vx2 * t2 - 2.2, cy + vy2 * t2 - EL - 4, 4.4, 4.5);
+        }
+      }
+      // back segments first, then the center post, then front segments
+      for (const [vx2, vy2] of segs) if (vy2 < 0) slab(vx2, vy2);
+      // center post (always: it's the joint; alone it reads as a pillar)
+      g.fillStyle = stoneL; g.strokeStyle = 'rgba(20,12,6,.45)'; g.lineWidth = 1;
+      g.fillRect(cx - 6, cy - EL - 3, 6, EL + 3); g.strokeRect(cx - 6, cy - EL - 3, 6, EL + 3);
+      g.fillStyle = stoneR; g.fillRect(cx, cy - EL - 3, 6, EL + 3); g.strokeRect(cx, cy - EL - 3, 6, EL + 3);
+      g.fillStyle = stoneT; g.beginPath();
+      g.moveTo(cx, cy - EL - 7); g.lineTo(cx + 7.5, cy - EL - 3); g.lineTo(cx, cy - EL + 1); g.lineTo(cx - 7.5, cy - EL - 3);
+      g.closePath(); g.fill(); g.stroke();
+      for (const [vx2, vy2] of segs) if (vy2 > 0) slab(vx2, vy2);
+      const out = { cv: c, ax: cx, ay: cy, k: 2 };
+      cache.set(key, out); return out;
+    }
+
     if (type === 'dock') {
       // wooden pier deck on posts over the water, with a roofed hut + crane
       const deckY = cy - 7;
@@ -1212,6 +1270,10 @@ const Sprites = (() => {
         g.moveTo(cx - hw * .55 + 6 + i * 5, cy - 9); g.lineTo(cx - hw * .55 + 4.4 + i * 5, cy - 13.4);
         g.lineTo(cx - hw * .55 + 8.2 + i * 5, cy - 11.4); g.closePath(); g.fill();
       }
+      // tethered horse by the fence (cavalry drills here)
+      drawHorse(g, cx + hw * .55, cy - hh * .3, colorIdx, 0);
+      g.strokeStyle = '#241a10'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(cx + hw * .55 - 20, cy - hh * .3 - 28); g.lineTo(cx + hw * .55 - 26, cy - hh * .3 - 6); g.stroke();
       flag(g, cx, cy - hh - 9, colorIdx);
       const out = { cv: c, ax: cx, ay: cy, k: 2 };
       cache.set(key, out); return out;
@@ -1353,6 +1415,25 @@ const Sprites = (() => {
       for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(cx + s * 20 + i * 5, cy + 4); g.lineTo(cx + s * 26 + i * 5, cy - 16); g.stroke(); }
       g.fillStyle = '#cfd6dd';
       for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(cx + s * 26 + i * 5, cy - 16); g.lineTo(cx + s * 24 + i * 5, cy - 21); g.lineTo(cx + s * 28 + i * 5, cy - 19); g.closePath(); g.fill(); }
+      // forge: glowing furnace mouth + anvil + quench barrel (the armory is a workshop)
+      const fgx = cx - s * 24, fgy = cy + s * 2;
+      g.fillStyle = '#57534a'; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(fgx - 8, fgy); g.lineTo(fgx - 8, fgy - 12); g.arc(fgx, fgy - 12, 8, Math.PI, 0); g.lineTo(fgx + 8, fgy); g.closePath(); g.fill(); g.stroke();
+      const fg = g.createRadialGradient(fgx, fgy - 4, 1, fgx, fgy - 4, 6.5);
+      fg.addColorStop(0, '#ffd34d'); fg.addColorStop(.55, '#ff7a30'); fg.addColorStop(1, '#9a3b30');
+      g.fillStyle = fg; g.beginPath(); g.moveTo(fgx - 5, fgy); g.lineTo(fgx - 5, fgy - 8); g.arc(fgx, fgy - 8, 5, Math.PI, 0); g.lineTo(fgx + 5, fgy); g.closePath(); g.fill();
+      g.fillStyle = '#3f3a33'; // anvil
+      g.fillRect(fgx + 11, fgy - 7, 9, 3.4); g.fillRect(fgx + 13.5, fgy - 4, 4, 4.5);
+      g.beginPath(); g.moveTo(fgx + 20, fgy - 7); g.lineTo(fgx + 24, fgy - 5.4); g.lineTo(fgx + 20, fgy - 3.6); g.closePath(); g.fill();
+      // armor stand: cuirass + helm on a post
+      const asx = cx - s * 28, asy = cy - s * 6;
+      g.strokeStyle = '#5d4426'; g.lineWidth = 2.2;
+      g.beginPath(); g.moveTo(asx, asy + 6); g.lineTo(asx, asy - 12); g.stroke();
+      g.beginPath(); g.moveTo(asx - 6, asy - 8); g.lineTo(asx + 6, asy - 8); g.stroke();
+      const tcb2 = teamCols(colorIdx);
+      g.fillStyle = tcb2.main; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(asx - 4.5, asy - 8); g.lineTo(asx + 4.5, asy - 8); g.lineTo(asx + 3.4, asy + 1); g.lineTo(asx - 3.4, asy + 1); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#9aa2ad'; g.beginPath(); g.arc(asx, asy - 12.5, 3.6, Math.PI, 0); g.fill(); g.stroke();
     }
     if (type === 'range') {
       // striped shooting awning + big target + arrow barrel
@@ -1440,6 +1521,16 @@ const Sprites = (() => {
           g.beginPath(); g.ellipse(13 + Math.cos(a) * 8, 14 + Math.sin(a) * 8, 2.6, 1.4, a, 0, 7); g.fill(); } break;
       case 'flag': g.strokeStyle = '#6e5638'; g.lineWidth = 2; g.beginPath(); g.moveTo(8, 22); g.lineTo(8, 4); g.stroke();
         g.fillStyle = '#c4543f'; g.beginPath(); g.moveTo(8, 4); g.lineTo(21, 7.5); g.lineTo(8, 11); g.closePath(); g.fill(); break;
+      case 'axe2': g.strokeStyle = '#6e5638'; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(8, 21); g.lineTo(17, 7); g.stroke();
+        g.fillStyle = '#aab3bf'; g.beginPath(); g.moveTo(17, 7); g.quadraticCurveTo(24, 8, 22, 15); g.lineTo(15.5, 10); g.closePath(); g.fill(); g.stroke(); break;
+      case 'hammer': g.strokeStyle = '#6e5638'; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(9, 21); g.lineTo(16, 8); g.stroke();
+        g.fillStyle = '#9aa2ad'; g.beginPath(); g.roundRect(11.5, 3.5, 10, 6.5, 1.5); g.fill(); g.stroke(); break;
+      case 'sword2': g.fillStyle = '#d7dde4'; g.save(); g.translate(13, 13); g.rotate(-0.78);
+        g.fillRect(-1.5, -10, 3, 13); g.fillStyle = '#8a6420'; g.fillRect(-4, 2.4, 8, 2.4);
+        g.fillStyle = '#5d4426'; g.beginPath(); g.arc(0, 6, 1.8, 0, 7); g.fill(); g.restore();
+        g.strokeStyle = 'rgba(20,12,6,.7)'; break;
       case 'stop': g.fillStyle = '#c4543f'; g.beginPath(); g.roundRect(6, 6, 14, 14, 3); g.fill(); g.stroke(); break;
       case 'poison': g.fillStyle = '#5fae3f'; g.beginPath();
         g.moveTo(13, 4); g.quadraticCurveTo(20, 13, 13, 21); g.quadraticCurveTo(6, 13, 13, 4); g.closePath(); g.fill(); g.stroke();

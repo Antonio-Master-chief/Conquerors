@@ -34,7 +34,7 @@ function makeGame(civKey, diff) {
     rebuildGrid() {
       this.grid.clear();
       for (const u of this.units) {
-        if (u.dead) continue;
+        if (u.dead || u.inWall) continue;
         const k = ((u.x / 3) | 0) + ((u.y / 3) | 0) * 64;
         let arr = this.grid.get(k);
         if (!arr) { arr = []; this.grid.set(k, arr); }
@@ -292,8 +292,20 @@ function render(game) {
     }
   }
 
-  // build ghost
-  if (game.placing && game.placing.bx !== undefined) {
+  // drag-build ghost line (walls / canals)
+  if (game.placing && game.placing.cells) {
+    const type = game.placing.type;
+    for (const [bx2, by2] of game.placing.cells) {
+      const ok = Sim.canPlace(game, type, bx2, by2);
+      ctx.fillStyle = ok ? 'rgba(110,220,90,.4)' : 'rgba(220,70,50,.4)';
+      const gx = (World.isoX(bx2 + .5, by2 + .5) - view.left) * z;
+      const gy = (World.isoY(bx2 + .5, by2 + .5) - view.top) * z;
+      ctx.beginPath();
+      ctx.moveTo(gx, gy - 16 * z); ctx.lineTo(gx + 32 * z, gy);
+      ctx.lineTo(gx, gy + 16 * z); ctx.lineTo(gx - 32 * z, gy);
+      ctx.closePath(); ctx.fill();
+    }
+  } else if (game.placing && game.placing.bx !== undefined) {
     const { type, bx, by } = game.placing;
     const B = BUILDINGS[type];
     const ok = Sim.canPlace(game, type, bx, by);
@@ -334,7 +346,7 @@ function render(game) {
     draws.push({ key: b.x + b.y + b.size, bld: b });
   }
   for (const u of game.units) {
-    if (u.dead || u.inShip) continue;
+    if (u.dead || u.inShip || u.inWall) continue;
     if (u.owner !== game.humanId && World.visAt(u.x, u.y) !== 2) continue;
     const ix = World.isoX(u.x, u.y), iy = World.isoY(u.x, u.y);
     if (ix < sxMin || ix > sxMax || iy < syMin || iy > syMax) continue;
@@ -469,8 +481,9 @@ function simStep(game, dt) {
   if ((smokeT += dt) > 0.5) { // chimney smoke from visible settlements
     smokeT = 0;
     for (const b of game.buildings) {
-      if (b.dead || !b.built || (b.type !== 'tc' && b.type !== 'town')) continue;
-      if (World.visAt(b.cx(), b.cy()) === 2 && Math.random() < 0.7) Sim.smoke(game, b);
+      if (b.dead || !b.built || (b.type !== 'tc' && b.type !== 'town' && b.type !== 'barracks')) continue;
+      if (World.visAt(b.cx(), b.cy()) === 2 && Math.random() < (b.type === 'barracks' ? 0.45 : 0.7))
+        Sim.smoke(game, b); // barracks smoke = the forge at work
     }
   }
   if ((moodT += dt) > 1) { // adaptive soundtrack: war drums when fighting, calm theme in peace
