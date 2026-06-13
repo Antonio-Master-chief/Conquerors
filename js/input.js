@@ -9,6 +9,7 @@ const Input = (() => {
   const pointers = new Map();
   let pinchDist = 0;
   let longPressTimer = null;
+  let hoverX = -1, hoverY = -1, hoverInside = false; // mouse position for edge-pan
 
   function init(g) {
     game = g;
@@ -26,6 +27,12 @@ const Input = (() => {
     cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerup', onUp);
     cv.addEventListener('pointercancel', onUp);
+    // edge-pan needs to know when the mouse leaves the window entirely
+    window.addEventListener('pointermove', e => {
+      if (e.pointerType !== 'touch') { hoverX = e.clientX; hoverY = e.clientY; hoverInside = true; }
+    }, true);
+    window.addEventListener('pointerout', e => { if (!e.relatedTarget) hoverInside = false; });
+    window.addEventListener('blur', () => { hoverInside = false; for (const k in keys) keys[k] = false; });
   }
 
   const isTouch = (e) => e.pointerType === 'touch';
@@ -53,12 +60,12 @@ const Input = (() => {
     const z = game.cam.zoom;
     let best = null, bestScore = 1e9;
     for (const u of game.units) {
-      if (u.dead || u.inShip || u.inWall) continue;
+      if (u.dead || u.inShip || u.inWall || u.def.cart) continue; // carts auto-route, not selectable
       if (u.owner !== game.humanId && World.visAt(u.x, u.y) !== 2) continue;
       const [sx, sy] = toScreen(u.x, u.y);
-      const hw = (u.def.big ? 28 : 14) * z;          // half-width of the body box
-      const top = (u.def.big ? 56 : 44) * z;         // sprite height above the feet
-      const bot = 9 * z;
+      const hw = (u.def.big ? 30 : 19) * z;          // half-width of the body box (matches sprite)
+      const top = (u.def.big ? 58 : 44) * z;         // sprite height above the feet
+      const bot = 10 * z;
       if (px < sx - hw || px > sx + hw || py < sy - top || py > sy + bot) continue;
       // nearest to body center wins; own units strongly preferred
       let score = Math.abs(px - sx) + Math.abs(py - (sy - top * 0.45)) * 0.6;
@@ -320,21 +327,29 @@ const Input = (() => {
       selectAt(px, py, additive);
     }
   }
-  function boxSelect(x0, y0, x1, y1) {
-    const [ax, ay] = [Math.min(x0, x1), Math.min(y0, y1)];
-    const [bx, by] = [Math.max(x0, x1), Math.max(y0, y1)];
+  function boxSelect(x0, y0, x1, y1, additive) {
+    const ax = Math.min(x0, x1), ay = Math.min(y0, y1);
+    const bx = Math.max(x0, x1), by = Math.max(y0, y1);
+    const cssW = game.canvas.width / game.dpr, cssH = game.canvas.height / game.dpr;
     const picked = [];
     for (const u of game.units) {
-      if (u.dead || u.inShip || u.inWall || u.owner !== game.humanId) continue;
-      const cssW = game.canvas.width / game.dpr, cssH = game.canvas.height / game.dpr;
+      if (u.dead || u.inShip || u.inWall || u.def.cart || u.owner !== game.humanId) continue;
+      // test the unit's body center (slightly above the feet), not just the feet point
       const sx = (World.isoX(u.x, u.y) - game.cam.x) * game.cam.zoom + cssW / 2;
-      const sy = (World.isoY(u.x, u.y) - game.cam.y) * game.cam.zoom + cssH / 2;
+      const sy = (World.isoY(u.x, u.y) - game.cam.y) * game.cam.zoom + cssH / 2 - 16 * game.cam.zoom;
       if (sx >= ax && sx <= bx && sy >= ay && sy <= by) picked.push(u);
     }
-    if (picked.length) {
-      const military = picked.filter(u => !u.civilian);
-      game.selected = military.length ? military : picked;
+    if (!picked.length) {
+      if (!additive) { game.selected = []; UI.refreshPanels(true); }
+      return;
     }
+    // prefer military when the box catches a mix; civilians only if that's all there is
+    const military = picked.filter(u => !u.civilian);
+    const finalPick = military.length ? military : picked;
+    if (additive) {
+      for (const u of finalPick) if (!game.selected.includes(u)) game.selected.push(u);
+    } else game.selected = finalPick;
+    Audio2.ack('select', false);
     UI.refreshPanels(true);
   }
 
@@ -499,25 +514,45 @@ const Input = (() => {
     if (e.button === 1 && panPointer === e.pointerId) { panPointer = null; return; }
     if (e.button === 0 && dragging) {
       dragging = false;
+      // a real box-select needs a box bigger than the unit hit area — small
+      // drags are just clicks (so a jittery hand never eats a move command)
       const dx = Math.abs(dragNow.x - dragStart.x), dy = Math.abs(dragNow.y - dragStart.y);
-      if (dx + dy < 7) tapAction(e.clientX, e.clientY, e.shiftKey, false);
-      else boxSelect(dragStart.x, dragStart.y, dragNow.x, dragNow.y);
+      if (Math.max(dx, dy) < 14) tapAction(e.clientX, e.clientY, e.shiftKey, true);
+      else boxSelect(dragStart.x, dragStart.y, dragNow.x, dragNow.y, e.shiftKey);
       dragStart = null;
     }
   }
 
   function update(dt) {
-    // keyboard pan
     const sp = 620 / game.cam.zoom * dt;
-    if (keys['w'] || keys['arrowup']) game.cam.y -= sp;
-    if (keys['s'] || keys['arrowdown']) game.cam.y += sp;
-    if (keys['a'] || keys['arrowleft']) game.cam.x -= sp;
-    if (keys['d'] || keys['arrowright']) game.cam.x += sp;
+    let dx = 0, dy = 0;
+    // keyboard pan
+    if (keys['w'] || keys['arrowup']) dy -= 1;
+    if (keys['s'] || keys['arrowdown']) dy += 1;
+    if (keys['a'] || keys['arrowleft']) dx -= 1;
+    if (keys['d'] || keys['arrowright']) dx += 1;
+    // edge-pan: push the mouse to a screen edge to scroll the map (AoE-style).
+    // Suppressed while box-selecting or placing so it never fights the cursor.
+    if (edgePanOn && hoverInside && !dragging && !placeDrag) {
+      const cssW = game.canvas.width / game.dpr, cssH = game.canvas.height / game.dpr;
+      const M = 28; // edge band thickness in CSS px
+      if (hoverX < M) dx -= (M - hoverX) / M;
+      else if (hoverX > cssW - M) dx += (hoverX - (cssW - M)) / M;
+      if (hoverY < M) dy -= (M - hoverY) / M;
+      else if (hoverY > cssH - M) dy += (hoverY - (cssH - M)) / M;
+    }
+    if (dx || dy) {
+      const len = Math.hypot(dx, dy) || 1;
+      game.cam.x += dx / len * sp;
+      game.cam.y += dy / len * sp;
+    }
     // clamp camera to map bounds (iso extent)
     const lim = World.N * 32;
     game.cam.x = clamp(game.cam.x, -lim, lim);
     game.cam.y = clamp(game.cam.y, 0, World.N * 32);
   }
+  let edgePanOn = true;
+  function setEdgePan(v) { edgePanOn = v; }
 
   function dragRect() { return dragging && dragStart ? { a: dragStart, b: dragNow } : null; }
 

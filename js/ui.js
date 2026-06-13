@@ -184,6 +184,12 @@ const UI = (() => {
       if (b.built && b.garrison) sub = b.garrison.length
         ? `🏹 Manned: ${b.garrison.length}/${b.def.garrison} — firing at enemies in range`
         : 'Send archers here to man the wall (+25% attack, Rome: protected by slits)';
+      if (b.built && b.store) {
+        const held = b.store.food + b.store.wood + b.store.gold + b.store.stone + b.store.iron;
+        sub = b.cart ? `🛒 Ox cart hauling ${Math.round(held + (b.cart.carry2 ? Object.values(b.cart.carry2).reduce((a,v)=>a+v,0) : 0))} goods to the Town Center`
+                     : held > 0 ? `📦 Holding ${Math.round(held)} goods — a cart will haul them home`
+                                : 'Drop-off point — settlers deposit here instead of walking home';
+      }
       el('div', 'sub', c).textContent = sub;
       if (b.built && b.garrison && b.garrison.length && b.owner === game.humanId) {
         actionBtn(actP, {
@@ -229,7 +235,7 @@ const UI = (() => {
     if (first.kind === 'unit' && first.owner === game.humanId) {
       const settlers = sel.filter(u => u.type === 'settler');
       if (settlers.length) {
-        for (const bt of ['farm', 'canal', 'wall', 'dock', 'barracks', 'range', 'university', 'grounds', 'tower']) {
+        for (const bt of ['storehouse', 'farm', 'canal', 'wall', 'dock', 'barracks', 'range', 'university', 'grounds', 'tower']) {
           const B = BUILDINGS[bt];
           const lockAge = B.age > p.age;
           actionBtn(actP, {
@@ -274,12 +280,18 @@ const UI = (() => {
       if (b.type === 'tc' && p.age < 4) {
         const a = AGES[p.age];
         const needT = (a.towns || 0) - p.towns;
+        const advancing = p.researching && p.researching.ageUp;
         actionBtn(actP, {
-          label: a.name, icon: makeIconCv('age'), cost: a.cost,
+          label: advancing ? 'Advancing…' : 'Advance: ' + a.name.split(' ')[0],
+          icon: makeIconCv('age'), cost: advancing ? null : a.cost,
           enabled: p.canAgeUp(),
-          badge: needT > 0 ? `${needT}🏰` : null,
-          title: needT > 0 ? `Capture ${needT} more town(s) first` : 'Advance to the next Age',
-          onClick: () => { p.startAgeUp(); message(`Advancing to the ${a.name}…`); },
+          badge: advancing ? '⏳' : needT > 0 ? `${needT}🏰` : null,
+          title: advancing ? 'Advancing to the next Age…'
+               : needT > 0 ? `Capture ${needT} more town(s) first, then pay ${costStr(a.cost)}`
+               : `Advance to the ${a.name} for ${costStr(a.cost)}`,
+          onClick: () => { if (p.canAgeUp()) { p.startAgeUp(); message(`Advancing to the ${a.name}…`); refreshPanels(true); }
+                           else if (needT > 0) message(`Capture ${needT} more town(s) first`, true);
+                           else message('Not enough resources to advance', true); },
         });
       }
       if (b.type === 'university') {

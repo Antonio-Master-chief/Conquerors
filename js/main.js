@@ -76,6 +76,16 @@ function makeGame(civKey, diff) {
       const d = this.findDropoff(owner, x, y);
       return d && dist(x, y, d.cx(), d.cy()) <= r;
     },
+    // a cart's destination: the nearest TRUE base (TC / captured town), never a storehouse
+    findHomeTC(owner, x, y) {
+      let best = null, bd = 1e9;
+      for (const b of this.buildings) {
+        if (b.dead || !b.built || b.owner !== owner || !b.def.dropoff || b.store) continue;
+        const d = dist2(x, y, b.cx(), b.cy());
+        if (d < bd) { bd = d; best = b; }
+      }
+      return best;
+    },
     playerHasBuilding(owner, type) {
       return this.buildings.some(b => !b.dead && b.built && b.owner === owner && b.type === type);
     },

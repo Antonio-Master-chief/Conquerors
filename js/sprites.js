@@ -532,6 +532,41 @@ const Sprites = (() => {
       drawRiderTorso(g, 46, 36, colorIdx, civ, 'none', 0);
       return { cv: c, ax: 46, ay: 66 };
     }
+    if (type === 'cart') { // ox-drawn supply cart (side view, ox faces left)
+      const cx2 = 56;
+      // ox
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(28, 66, 15, 4, 0, 0, 7); g.fill();
+      g.lineWidth = 3;
+      for (const [ox, ph] of [[18, 0], [22, Math.PI], [34, Math.PI], [38, 0]]) {
+        const a = Math.sin(ph + swing * Math.PI) * 0.4;
+        g.strokeStyle = ox < 26 ? '#6e5a44' : '#8a7256';
+        g.beginPath(); g.moveTo(ox, 54); g.lineTo(ox + Math.sin(a) * 6, 66); g.stroke();
+      }
+      const gr = g.createLinearGradient(0, 44, 0, 58);
+      gr.addColorStop(0, '#9a8260'); gr.addColorStop(1, '#6e5a44');
+      g.fillStyle = gr; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.2;
+      g.beginPath(); g.ellipse(28, 52, 16, 8, 0, 0, 7); g.fill(); g.stroke();        // body
+      g.beginPath(); g.moveTo(16, 50); g.quadraticCurveTo(6, 50, 8, 44); g.lineTo(15, 44); g.quadraticCurveTo(16, 48, 18, 49); g.closePath(); g.fill(); g.stroke(); // head
+      g.strokeStyle = '#e8e0ce'; g.lineWidth = 2; // horns
+      g.beginPath(); g.moveTo(11, 44); g.quadraticCurveTo(8, 40, 11, 39); g.stroke();
+      g.beginPath(); g.moveTo(14, 44); g.quadraticCurveTo(13, 40, 16, 40); g.stroke();
+      g.fillStyle = '#1d1812'; g.beginPath(); g.arc(11, 47, 1.2, 0, 7); g.fill();
+      // yoke + cart
+      g.strokeStyle = '#4e3f2a'; g.lineWidth = 2; g.beginPath(); g.moveTo(40, 50); g.lineTo(48, 50); g.stroke();
+      g.fillStyle = '#7d5a2e'; g.strokeStyle = '#3a2a16'; g.lineWidth = 1.2;
+      g.beginPath(); g.roundRect(48, 40, 30, 16, 2); g.fill(); g.stroke();           // cart box
+      // sacks of goods
+      for (const [sx3, sy3, col] of [[56, 40, '#c8a24a'], [64, 39, '#9c7e54'], [71, 41, '#b3895a']]) {
+        g.fillStyle = col; g.beginPath(); g.ellipse(sx3, sy3, 4, 5, 0, 0, 7); g.fill();
+        g.strokeStyle = 'rgba(20,12,6,.4)'; g.stroke();
+      }
+      g.fillStyle = '#4e3f2a'; g.beginPath(); g.arc(cx2 + 6, 58, 8, 0, 7); g.fill();  // wheel
+      g.fillStyle = '#2e2418'; g.beginPath(); g.arc(cx2 + 6, 58, 3, 0, 7); g.fill();
+      g.strokeStyle = '#8a7148'; g.lineWidth = 1.3;
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4 + swing; g.beginPath(); g.moveTo(cx2 + 6 - Math.cos(a) * 7, 58 - Math.sin(a) * 7); g.lineTo(cx2 + 6 + Math.cos(a) * 7, 58 + Math.sin(a) * 7); g.stroke(); }
+      const tcb = teamCols(colorIdx); g.fillStyle = tcb.main; g.fillRect(48, 53, 30, 3); // team trim
+      return { cv: c, ax: 44, ay: 64 };
+    }
     if (type === 'chariot') {
       // cart wheel + platform behind horse
       drawHorse(g, 36, 62, colorIdx, swing, '#9c7e54', '#6e583a');
@@ -781,6 +816,32 @@ const Sprites = (() => {
       drawRiderTorso(g, cx, 22, colorIdx, civ, 'none', 0);
       return { cv: c, ax: cx, ay: 73 };
     }
+    if (type === 'cart') { // ox cart head-on / from behind
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(cx, 70, 16, 5, 0, 0, 7); g.fill();
+      if (!away) { // ox facing the viewer in front of the cart
+        for (const s of [-1, 1]) { g.fillStyle = '#7d6450'; g.fillRect(cx + s * 7 - 2, 50, 4, 14); }
+        const gr = g.createLinearGradient(cx - 10, 0, cx + 10, 0);
+        gr.addColorStop(0, '#6e5a44'); gr.addColorStop(.5, '#9a8260'); gr.addColorStop(1, '#6e5a44');
+        g.fillStyle = gr; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.3;
+        g.beginPath(); g.ellipse(cx, 46, 11, 12, 0, 0, 7); g.fill(); g.stroke();
+        g.beginPath(); g.ellipse(cx, 38, 7, 6, 0, 0, 7); g.fill(); g.stroke(); // head
+        g.strokeStyle = '#e8e0ce'; g.lineWidth = 2.4;
+        g.beginPath(); g.moveTo(cx - 6, 34); g.quadraticCurveTo(cx - 11, 31, cx - 9, 36); g.stroke();
+        g.beginPath(); g.moveTo(cx + 6, 34); g.quadraticCurveTo(cx + 11, 31, cx + 9, 36); g.stroke();
+        g.fillStyle = '#1d1812'; g.fillRect(cx - 3.5, 36, 1.8, 2.2); g.fillRect(cx + 1.7, 36, 1.8, 2.2);
+      } else { // cart box + sacks dominate, ox head peeks over
+        g.fillStyle = '#7d5a2e'; g.strokeStyle = '#3a2a16'; g.lineWidth = 1.3;
+        g.beginPath(); g.roundRect(cx - 13, 40, 26, 18, 2); g.fill(); g.stroke();
+        for (const [sx3, sy3, col] of [[cx - 6, 40, '#c8a24a'], [cx + 4, 39, '#9c7e54'], [cx, 42, '#b3895a']]) {
+          g.fillStyle = col; g.beginPath(); g.ellipse(sx3, sy3, 4.5, 5, 0, 0, 7); g.fill(); }
+        g.fillStyle = teamCols(colorIdx).main; g.fillRect(cx - 13, 55, 26, 3);
+      }
+      for (const s of [-1, 1]) { // wheels
+        g.fillStyle = '#4e3f2a'; g.beginPath(); g.arc(cx + s * 14, 60, 7, 0, 7); g.fill();
+        g.fillStyle = '#2e2418'; g.beginPath(); g.arc(cx + s * 14, 60, 2.6, 0, 7); g.fill();
+      }
+      return { cv: c, ax: cx, ay: 66 };
+    }
     if (type === 'chariot') {
       if (!away) { // horse hides the cart; wheels peek out at the sides
         horseFB(72);
@@ -943,7 +1004,7 @@ const Sprites = (() => {
   /* public: unit sprite. dir: 0=S 1=SW 2=W 3=NW 4=N 5=NE 6=E 7=SE.
      Humanoids bake 5 poses at 2x (k=2); NE/E/SE are mirrors of NW/W/SW.
      Big units bake front (0), profile (2), back (4); diagonals use the profile. */
-  const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1,
+  const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1, cart: 1,
     fishboat: 1, transport: 1, galley: 1, quinquereme: 1, fireship: 1, catamaran: 1 };
   function unit(type, colorIdx, civ, dir, anim, fr) {
     dir = ((dir % 8) + 8) % 8;
@@ -1184,6 +1245,41 @@ const Sprites = (() => {
       g.moveTo(cx, cy - EL - 7); g.lineTo(cx + 7.5, cy - EL - 3); g.lineTo(cx, cy - EL + 1); g.lineTo(cx - 7.5, cy - EL - 3);
       g.closePath(); g.fill(); g.stroke();
       for (const [vx2, vy2] of segs) if (vy2 > 0) slab(vx2, vy2);
+      const out = { cv: c, ax: cx, ay: cy, k: 2 };
+      cache.set(key, out); return out;
+    }
+
+    if (type === 'storehouse') {
+      // open-sided timber depot: posts, low-pitched roof, stacked goods & barrels
+      const hw = s * 30, hh = s * 15, wallH2 = 20;
+      g.fillStyle = 'rgba(0,0,0,.18)'; g.beginPath();
+      g.moveTo(cx, cy - hh); g.lineTo(cx + hw, cy); g.lineTo(cx, cy + hh); g.lineTo(cx - hw, cy); g.closePath(); g.fill();
+      // back-corner posts
+      g.strokeStyle = '#5d4426'; g.lineWidth = 3.4;
+      for (const [px2, py2] of [[cx - hw + 4, cy - 1], [cx, cy - hh + 1], [cx + hw - 4, cy - 1], [cx, cy + hh - 1]])
+        { g.beginPath(); g.moveTo(px2, py2); g.lineTo(px2, py2 - wallH2); g.stroke(); }
+      // stacked crates + sacks under the roof
+      g.fillStyle = '#9c7e54'; g.strokeStyle = '#5d4426'; g.lineWidth = 1;
+      g.fillRect(cx - 12, cy - 12, 10, 10); g.strokeRect(cx - 12, cy - 12, 10, 10);
+      g.fillRect(cx - 1, cy - 9, 9, 8); g.strokeRect(cx - 1, cy - 9, 9, 8);
+      g.strokeStyle = 'rgba(60,42,22,.5)'; g.beginPath(); g.moveTo(cx - 7, cy - 12); g.lineTo(cx - 7, cy - 2); g.stroke();
+      for (const [bx2, by2, col] of [[cx + 9, cy + 2, '#c8a24a'], [cx + 13, cy + 4, '#b3895a']]) {
+        g.fillStyle = col; g.beginPath(); g.ellipse(bx2, by2, 4, 5.5, 0, 0, 7); g.fill();
+        g.strokeStyle = '#3a2a16'; g.lineWidth = 1; g.stroke();
+      }
+      // barrel
+      g.fillStyle = '#7d5a2e'; g.beginPath(); g.ellipse(cx - 13, cy + 4, 4, 5.5, 0, 0, 7); g.fill();
+      g.strokeStyle = '#3a2a16'; g.stroke();
+      g.strokeStyle = '#9a7b54'; g.beginPath(); g.ellipse(cx - 13, cy + 4, 4, 2, 0, 0, 7); g.stroke();
+      // low hip roof
+      g.fillStyle = '#8a5a3a'; g.beginPath();
+      g.moveTo(cx - hw - 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6);
+      g.lineTo(cx + hw + 3, cy - wallH2); g.lineTo(cx, cy + hh - wallH2 + 2); g.closePath(); g.fill();
+      g.fillStyle = '#6e4630'; g.beginPath();
+      g.moveTo(cx + hw + 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6); g.lineTo(cx, cy + hh - wallH2 + 2); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(cx - hw - 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6); g.lineTo(cx + hw + 3, cy - wallH2); g.stroke();
+      flag(g, cx + hw - 6, cy - wallH2 - 2, colorIdx);
       const out = { cv: c, ax: cx, ay: cy, k: 2 };
       cache.set(key, out); return out;
     }

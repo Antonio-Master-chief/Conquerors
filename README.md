@@ -19,7 +19,13 @@ or just double-click `index.html` (everything is dependency-free vanilla JS — 
 - Settlers gather / build / repair; farms; full economy
 - **Population grows ONLY by capturing neutral NPC towns** (the core differentiator)
 - Fog of war, minimap, exploration encounters (traders grant Knowledge, ruins give bonuses)
-- 4 Ages: Settlement → Bronze → Imperial → Conquest (town-count gated)
+- 4 Ages: Settlement → Bronze → Imperial → Conquest, advanced from the Town Center for
+  gold + food (Bronze is resource-only; Imperial/Conquest also want captured towns)
+- **Storehouses + ox carts**: build a drop-off near forests/mines so settlers don't trek
+  to the Town Center; ox carts haul batches home (resources dip in transit, restored on
+  delivery — raid a cart to cut the supply line)
+- Mouse map navigation: **edge-pan** (push cursor to a screen edge) + arrow/WASD; left-click
+  to command, drag to box-select, double-click to select all of a type
 - University tech tree fueled by Knowledge (blades, armor, masonry, Greek Fire, Wootz Steel…)
 - Veterancy: combat XP + Training Grounds drill aura (Recruit → Veteran → Elite, chevron insignia)
 - 3 civilizations, fully asymmetric:

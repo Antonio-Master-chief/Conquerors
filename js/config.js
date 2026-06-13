@@ -15,6 +15,8 @@ const CFG = {
   AGGRO: 6,                // auto-engage radius (tiles)
   IRRIGATION: 3,           // farm-to-water/canal supply distance (tiles)
   DAY_CYCLE: 300,          // seconds per full day/night cycle
+  CART_BATCH: 90,          // storehouse waits to accumulate this, then dispatches a cart
+  CART_FLUSH: 8,           // ...or after this many idle seconds, haul the remainder
   TERRITORY: 12,           // kingdom border radius around TCs & owned towns
   SIEGE_R: 10,             // enemy presence radius that blockades a settlement
   SIEGE_MEN: 5,            // enemies needed to enforce a siege
@@ -28,9 +30,11 @@ const TERRAIN = { DEEP:0, SHALLOW:1, SAND:2, GRASS:3, DIRT:4, HILL:5 };
 
 const AGES = [
   { name:'Settlement Age', cost:null },
-  { name:'Bronze Age',    cost:{food:500,  gold:250},                 towns:1 },
-  { name:'Imperial Age',  cost:{food:1000, gold:500,  iron:250},      towns:2 },
-  { name:'Conquest Age',  cost:{food:1500, gold:900,  iron:500},      towns:3 },
+  // Bronze is pure gold+food (AoE-style, always reachable). Higher ages also
+  // want captured towns — towns remain the path to population & late power.
+  { name:'Bronze Age',    cost:{food:500,  gold:250},                 towns:0 },
+  { name:'Imperial Age',  cost:{food:1000, gold:500,  iron:200},      towns:1 },
+  { name:'Conquest Age',  cost:{food:1500, gold:900,  iron:450},      towns:2 },
 ];
 
 const RES_KEYS = ['food','wood','gold','stone','iron','knowledge'];
@@ -92,6 +96,8 @@ const UNITS = {
               bonusVs:{building:4}, splash:0.9, minRange:1.6, big:true },
   trader:   { name:'Trader',    hp:40,  atk:0,  range:1,   speed:0.8,  cd:2,   armor:0, los:4,
               cost:{}, pop:0, time:0, age:1, tags:['civilian'], civilian:true, npc:true },
+  cart:     { name:'Ox Cart',   hp:110, atk:0,  range:1,   speed:1.05, cd:2,   armor:1, los:4,
+              cost:{}, pop:0, time:0, age:1, tags:['civilian'], civilian:true, cart:true, big:true },
   /* ---- ships (Phase 2: naval) ---- */
   fishboat: { name:'Fishing Boat', hp:45, atk:0, range:1, speed:1.15, cd:2, armor:0, los:6,
               cost:{wood:40}, pop:1, time:18, age:1, tags:['ship','civilian'], civilian:true,
@@ -118,6 +124,9 @@ const BUILDINGS = {
               trains:['settler','scout'], desc:'Trains settlers & scouts. Researches Ages.' },
   town:     { name:'Town', hp:1300, size:3, los:7, cost:null, dropoff:true, capturable:true,
               desc:'Capture to gain +10 population.' },
+  storehouse:{ name:'Storehouse', hp:600, size:1, los:4, cost:{wood:70}, buildTime:16, age:1,
+              dropoff:true, store:true, cap:160,
+              desc:'Drop-off near forests, mines & quarries — no long walk to Town Center. Ox carts haul stored goods home (resources dip in transit, restored on arrival).' },
   farm:     { name:'Farm', hp:120, size:2, los:2, cost:{wood:45}, buildTime:18, age:1,
               farm:true, desc:'Infinite food — needs water within 3 tiles, or a flowing canal.' },
   canal:    { name:'Canal', hp:150, size:1, los:2, cost:{wood:15}, buildTime:7, age:1,

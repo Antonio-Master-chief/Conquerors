@@ -353,7 +353,9 @@ class Unit {
           const d = game.findDropoff(this.owner, this.x, this.y, this.def.naval);
           if (!d) { this.clearOrder(); break; }
           if (this.distTo(d) < (this.def.naval ? 1.5 : 0.7)) {
-            game.players[this.owner].res[this.carry.res] += this.carry.amt;
+            const pl = game.players[this.owner];
+            pl.res[this.carry.res] += this.carry.amt;      // usable immediately
+            if (d.store) d.store[this.carry.res] += this.carry.amt; // also held here, awaiting a cart
             this.carry = null;
             const rs = o.resume;
             const ok = rs && (rs.kind === 'bld' ? (!rs.dead && rs.built) : rs.alive);
@@ -362,6 +364,18 @@ class Unit {
           } else {
             if (this.ensurePath(game, d.cx(), d.cy())) this.moveAlong(game, dt);
             else if (!this.path) this.clearOrder();
+          }
+          break;
+        }
+        case 'haul': { // ox cart carries a batch from a storehouse to the Town Center
+          let tc = this.haulTC;
+          if (!tc || tc.dead) tc = this.haulTC = game.findHomeTC(this.owner, this.x, this.y);
+          if (!tc) { Sim.cartArrive(game, this, null); break; } // no TC: refund where it stands
+          if (this.distTo(tc) < 1.6) {
+            Sim.cartArrive(game, this, tc);
+          } else {
+            if (this.ensurePath(game, tc.cx(), tc.cy())) this.moveAlong(game, dt);
+            else if (!this.path) { Sim.cartArrive(game, this, tc); } // unreachable: deliver anyway
           }
           break;
         }
@@ -546,9 +560,9 @@ class Unit {
     if (!silent) this.flashUntil = performance.now() + 90; // white impact flash
     if (this.owner === game.humanId || (from && from.owner === game.humanId)) game.combatT = game.time;
     if (!silent && Math.random() < 0.5) Sim.puff(game, this.x, this.y - 0.6, '#a3322a', 3);
-    // settlers flee, idle military retaliate
+    // settlers flee, idle military retaliate (ox carts plod on stoically)
     if (from && !this.dead) {
-      if (this.civilian && !this.def.npc && (!this.order || this.order.kind !== 'move')) {
+      if (this.civilian && !this.def.npc && !this.def.cart && (!this.order || this.order.kind !== 'move')) {
         const d = game.findDropoff(this.owner, this.x, this.y);
         if (d && this.type === 'settler' && (!this.order || this.order.kind === 'gather')) this.orderMove(d.cx(), d.cy());
       } else if (!this.civilian && !this.order) this.orderAttack(from);
@@ -557,8 +571,15 @@ class Unit {
       this.dead = true;
       game.popFree(this);
       Sim.puff(game, this.x, this.y - 0.4, '#5b1f18', 9);
-      if (!this.def.npc && !this.def.naval && World.visAt(this.x, this.y) === 2) {
-        this.type === 'elephant' ? Audio2.sfx('trumpet') : Audio2.sfx('die');
+      if (this.def.cart) {
+        // supply cart destroyed: its in-transit goods are lost for good
+        if (this.haulHome) this.haulHome.cart = null;
+        Sim.rubble(game, this);
+        if (this.owner === game.humanId) { game.message('A supply cart was destroyed — its goods are lost!', true); game.ping(this.x, this.y); }
+      } else {
+        if (!this.def.npc && !this.def.naval && World.visAt(this.x, this.y) === 2) {
+          this.type === 'elephant' ? Audio2.sfx('trumpet') : Audio2.sfx('die');
+        }
       }
       if (from && from.kind === 'unit') from.addXP(8 + (this.def.pop || 1) * 3, game);
       if (this.owner === game.humanId) game.checkAttackAlert(this.x, this.y, true);
@@ -627,6 +648,9 @@ class Building {
     this.flowing = false;          // canals: connected to a water source
     this.garrison = B.garrison ? [] : null; // walls: archers firing from inside
     this.wallMask = 0;             // walls: which neighbors to connect to
+    this.store = B.store ? { food: 0, wood: 0, gold: 0, stone: 0, iron: 0 } : null; // storehouse holdings
+    this.cart = null;              // the storehouse's ox cart
+    this.depositT = 0;             // time since last deposit (for cart flush)
   }
   cx() { return this.x + this.size / 2; }
   cy() { return this.y + this.size / 2; }
@@ -696,6 +720,30 @@ class Building {
     if (this.built && this.def.atk && (this.atkCd -= dt) <= 0) {
       const e = game.nearestEnemy(this, this.def.range);
       if (e) { this.atkCd = this.def.cd; Sim.fireProjectile(game, this, e); }
+    }
+
+    // storehouse: dispatch an ox cart to haul a batch home to the Town Center
+    if (this.built && this.store) {
+      const total = this.store.food + this.store.wood + this.store.gold + this.store.stone + this.store.iron;
+      this.depositT += dt;
+      const cartGone = !this.cart || this.cart.dead;
+      if (cartGone && total > 0 && (total >= CFG.CART_BATCH || this.depositT > CFG.CART_FLUSH)) {
+        const tc = game.findHomeTC(this.owner, this.cx(), this.cy());
+        const spot = game.freeSpotNear(this, false);
+        if (tc && spot) {
+          const cart = Sim.spawnUnit(game, this.owner, 'cart', spot[0], spot[1], p ? p.civKey : 'none');
+          cart.haulHome = this; cart.haulTC = tc;
+          // load the batch: it leaves the usable pool until the cart delivers it
+          cart.carry2 = {};
+          for (const k of ['food','wood','gold','stone','iron']) {
+            const take = Math.min(this.store[k], p ? p.res[k] : this.store[k]);
+            cart.carry2[k] = take; this.store[k] -= take;
+            if (p) p.res[k] -= take;             // resources dip while in transit
+          }
+          cart.order = { kind: 'haul' }; cart.state = 'move';
+          this.cart = cart; this.depositT = 0;
+        }
+      }
     }
 
     // manned wall: every garrisoned archer fires a clean shot
@@ -1044,6 +1092,15 @@ const Sim = {
       src: wall, t0: game.time, dmg, splash: 0,
     });
     if (wall.owner === game.humanId || t.owner === game.humanId) Audio2.sfx('arrow');
+  },
+
+  /* ---- ox cart delivers its batch to the Town Center (resources restored) ---- */
+  cartArrive(game, cart, tc) {
+    const p = game.players[cart.owner];
+    if (p && cart.carry2) for (const k of ['food','wood','gold','stone','iron']) p.res[k] += cart.carry2[k] || 0;
+    if (cart.haulHome && cart.haulHome.cart === cart) cart.haulHome.cart = null;
+    cart.dead = true; game.popFree(cart);
+    if (tc && cart.owner === game.humanId) Sim.puff(game, tc.cx(), tc.cy() - 1, '#ffd34d', 6);
   },
 
   /* ---- sieges: surround a settlement to starve its defenders ---- */
