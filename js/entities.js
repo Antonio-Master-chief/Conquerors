@@ -34,6 +34,7 @@ class Unit {
     this.inWall = null;            // set while garrisoned in a wall
     this.buildQueue = [];          // queued construction sites
     this.flashUntil = 0;           // hit flash timestamp (ms)
+    this.workObj = null;           // remembered gather target (resume after deposit/flee)
     this.hungerT = -99;            // siege starvation
     this.poisonT = -99;            // poisoned water
     this.starveT = -99;            // prolonged siege: hp decay
@@ -81,8 +82,8 @@ class Unit {
   /* ---- orders (repathT reset = commands respond INSTANTLY) ---- */
   clearOrder() { this.order = null; this.path = null; this.state = 'idle'; }
   resetQueue() { if (this.buildQueue) this.buildQueue.length = 0; }
-  orderMove(x, y) { this.resetQueue(); this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; }
-  orderAttack(t) { this.resetQueue(); this.order = { kind: 'attack', target: t }; this.path = null; this.repathT = 0; this.state = 'attack'; }
+  orderMove(x, y) { this.resetQueue(); this.workObj = null; this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; }
+  orderAttack(t) { this.resetQueue(); this.workObj = null; this.order = { kind: 'attack', target: t }; this.path = null; this.repathT = 0; this.state = 'attack'; }
   orderGarrison(b) { // ranged units man the walls
     if (!this.def.tags.includes('ranged') || this.def.naval) return;
     this.order = { kind: 'garrison', target: b }; this.path = null; this.repathT = 0; this.state = 'move';
@@ -92,6 +93,7 @@ class Unit {
                     : this.type === 'settler';
     if (!canGather) return this.orderMove(obj.x + .5, obj.y + .5);
     this.order = { kind: 'gather', obj }; this.path = null; this.repathT = 0; this.state = 'gather';
+    this.workObj = obj; // remember it so we resume after depositing / fleeing
   }
   orderBoard(t) {
     if (this.def.naval || this.def.npc) return;
@@ -107,6 +109,7 @@ class Unit {
   }
   orderBuild(b) {
     if (this.type !== 'settler') return;
+    this.workObj = null;
     this.order = { kind: 'build', target: b }; this.path = null; this.repathT = 0; this.state = 'build';
   }
   orderBuildQueued(b) { // queue construction like AoE villagers
@@ -252,6 +255,8 @@ class Unit {
     }
 
     const prevAnim = this.anim;
+    // relax to idle each frame; a one-shot attack swing is allowed to finish.
+    // 'work' (gather/build) is re-asserted by the state machine and loops below.
     if (this.anim !== 'attack' || this.animT > 0.55) this.anim = 'idle';
 
     // ===== state machine =====
@@ -324,7 +329,7 @@ class Unit {
               }
               break;
             }
-            this.anim = 'attack'; // swing tool
+            this.anim = 'work'; // looping chop/mine swing
             const gk = isFarm ? 'farm' : obj.kind;
             const pl = game.players[this.owner];
             const rate = GATHER_RATE[gk] * pl.bonus.gather *
@@ -442,7 +447,8 @@ class Unit {
           };
           if (!b || b.dead || b.built) { if (!nextJob()) this.clearOrder(); break; }
           if (this.distTo(b) < (b.def.naval ? 1.3 : 0.7)) {
-            this.path = null; this.anim = 'attack';
+            this.path = null; this.anim = 'work'; // looping hammer swing
+            this.setDir((b.cx() - this.x) || .01, (b.cy() - this.y));
             const spd = (game.players[this.owner].civ || {}).buildSpd || 1;
             b.progress += dt * spd / b.def.buildTime;
             b.hp = Math.min(b.maxHp, b.hp + b.maxHp * 0.9 * dt * spd / b.def.buildTime);
@@ -477,6 +483,13 @@ class Unit {
             const e = game.nearestEnemy(this, CFG.AGGRO);
             if (e && !(this.def.naval && !e.def.naval && this.effRange(game) <= 1.6)) this.orderAttack(e);
           }
+        }
+        // idle settler with a remembered resource: go back to work once it's safe
+        if (this.type === 'settler' && !this.order && !this.carry && this.workObj) {
+          const w = this.workObj;
+          const alive = w.kind === 'bld' ? (!w.dead && w.built) : w.alive;
+          if (!alive) this.workObj = null;
+          else if (!game.nearestEnemy(this, CFG.AGGRO)) this.orderGather(w);
         }
         // ruins & traders pickup
         const ru = World.objAt(Math.round(this.x - .5), Math.round(this.y - .5));
@@ -544,10 +557,14 @@ class Unit {
     }
     this.lastX = this.x; this.lastY = this.y;
 
+    // reset the clock when the animation kind changes so each starts fresh
+    // (but 'work' stays running so its swing loops continuously)
+    if (this.anim !== prevAnim && this.anim !== 'work') this.animT = 0;
     // animation frames
     if (this.anim === 'walk') this.frame = ((this.animT / 0.14) | 0) % 4;
     else if (this.anim === 'attack') this.frame = Math.min(2, (this.animT / 0.18) | 0);
-    else { this.frame = 0; if (prevAnim !== 'idle') this.animT = 0; }
+    else if (this.anim === 'work') this.frame = ((this.animT / 0.2) | 0) % 3; // looping swing
+    else this.frame = 0;
   }
 
   takeDamage(game, dmg, from, silent) {
@@ -563,7 +580,11 @@ class Unit {
     if (from && !this.dead) {
       if (this.civilian && !this.def.npc && !this.def.cart && (!this.order || this.order.kind !== 'move')) {
         const d = game.findDropoff(this.owner, this.x, this.y);
-        if (d && this.type === 'settler' && (!this.order || this.order.kind === 'gather')) this.orderMove(d.cx(), d.cy());
+        if (d && this.type === 'settler' && (!this.order || this.order.kind === 'gather')) {
+          const resume = this.workObj;          // remember what we were chopping
+          this.orderMove(d.cx(), d.cy());        // flee to safety (clears workObj)
+          this.workObj = resume;                 // ...but keep the memory to resume later
+        }
       } else if (!this.civilian && !this.order) this.orderAttack(from);
     }
     if (this.hp <= 0) {

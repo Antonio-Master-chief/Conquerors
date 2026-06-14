@@ -266,10 +266,14 @@ const Sprites = (() => {
     let dnx = fx, dny = fy * 0.5;
     const dl = Math.hypot(dnx, dny) || 1; dnx /= dl; dny /= dl;
 
-    // pose params
+    // pose params ('work' = gather/build, swings like a softer attack)
     let swing = 0, lunge = 0, raise = 0;
     if (anim === 'walk') swing = Math.sin(fr / 4 * Math.PI * 2) * 0.7;
-    if (anim === 'attack') { lunge = fr === 1 ? 3.5 : fr === 0 ? -1.5 : 0.5; raise = fr === 0 ? 1 : fr === 1 ? -0.6 : 0.2; }
+    if (anim === 'attack' || anim === 'work') {
+      const amp = anim === 'work' ? 0.7 : 1;
+      lunge = (fr === 1 ? 3.5 : fr === 0 ? -1.5 : 0.5) * amp;
+      raise = (fr === 0 ? 1 : fr === 1 ? -0.6 : 0.2) * amp;
+    }
     const GY = 52, hipY = 36;
     const hipX = 24 + dnx * lunge;         // attack lunge leans toward the facing
     const shY = hipY - 13;
@@ -656,7 +660,7 @@ const Sprites = (() => {
         hull(38, 9, '#9c7e54', '#6e583a');
         drawRiderTorso(g, 50, 36, colorIdx, civ, 'none', 0);
         // fishing rod, jiggling while gathering
-        const dip = anim === 'attack' ? Math.sin(fr * 2.1) * 3 : 0;
+        const dip = (anim === 'attack' || anim === 'work') ? Math.sin(fr * 2.1) * 3 : 0;
         g.strokeStyle = '#6e5638'; g.lineWidth = 1.6;
         g.beginPath(); g.moveTo(52, 42); g.lineTo(30, 30 + dip); g.stroke();
         g.strokeStyle = 'rgba(220,235,250,.8)'; g.lineWidth = 0.9;
@@ -1457,23 +1461,58 @@ const Sprites = (() => {
 
     // ---- signature structures per type ----
     if (type === 'tc') {
-      // stone plinth band, columned porch, upper-story roof, bell post
-      g.fillStyle = 'rgba(255,255,255,.16)';
-      g.beginPath(); g.moveTo(cx - s * 32, cy); g.lineTo(cx, cy + s * 16); g.lineTo(cx + s * 32, cy);
-      g.lineTo(cx + s * 32, cy - 4); g.lineTo(cx, cy + s * 16 - 4); g.lineTo(cx - s * 32, cy - 4); g.closePath(); g.fill();
-      g.fillStyle = style === 'rome' ? '#e3dccb' : style === 'china' ? '#9c2f2f' : '#e0c79a';
-      for (let i = 0; i < 4; i++) { // porch colonnade along the left wall
-        const t2 = 0.18 + i * 0.2;
-        g.fillRect(cx - s * 32 + s * 32 * t2 - 2, cy + s * 16 * t2 - wallH + 2, 4, wallH - 3);
+      // ---- grand town hall: stone steps, full colonnade, banners, bell tower ----
+      const tc2 = teamCols(colorIdx);
+      // stepped stone plinth (3 courses) along the front-left & front-right faces
+      for (let stp = 0; stp < 3; stp++) {
+        const yo = cy - stp * 2.4, ext = (3 - stp) * 3;
+        g.fillStyle = stp % 2 ? '#cfc7b4' : '#ddd6c4';
+        g.beginPath();
+        g.moveTo(cx - s * 32 - ext, yo); g.lineTo(cx, yo + s * 16 + ext * 0.5);
+        g.lineTo(cx + s * 32 + ext, yo); g.lineTo(cx, yo - s * 16 - ext * 0.5);
+        g.closePath(); g.fill();
       }
-      roofFor(g, style, cx, cy - wallH - 13, s * 0.55); // upper story
-      flag(g, cx, cy - wallH - 13 - s * 9, colorIdx);
-      // bell post by the door
-      g.strokeStyle = '#5d4426'; g.lineWidth = 2.4;
-      g.beginPath(); g.moveTo(cx - s * 18, cy + s * 11); g.lineTo(cx - s * 18, cy + s * 11 - 16); g.stroke();
-      g.fillStyle = '#c9a34f'; g.beginPath();
-      g.moveTo(cx - s * 18 - 3, cy + s * 11 - 12); g.lineTo(cx - s * 18 + 3, cy + s * 11 - 12);
-      g.lineTo(cx - s * 18 + 2, cy + s * 11 - 7); g.lineTo(cx - s * 18 - 2, cy + s * 11 - 7); g.closePath(); g.fill();
+      // re-stamp the main hall body over the plinth so columns sit on it
+      isoBox(g, cx, cy - 6, s, wallH, p.top, p.wallL, p.wallR);
+      // grand entrance: tall arched doorway with steps
+      g.fillStyle = '#2a1f12';
+      g.beginPath();
+      g.moveTo(cx - s * 8, cy + s * 8 - 6); g.lineTo(cx - s * 8, cy - 4);
+      g.quadraticCurveTo(cx, cy - 16, cx + s * 8, cy - 4); g.lineTo(cx + s * 8, cy + s * 8 - 6);
+      g.closePath(); g.fill();
+      g.strokeStyle = '#8a6420'; g.lineWidth = 1.4; g.stroke();
+      // full marble colonnade across the front-left face
+      const colCol = style === 'china' ? '#b34a3a' : '#ece4d2';
+      for (let i = 0; i < 5; i++) {
+        const t2 = 0.1 + i * 0.2, capx = cx - s * 32 + s * 32 * t2, capy = cy + s * 16 * t2 - 6;
+        g.fillStyle = colCol; g.fillRect(capx - 2.6, capy - wallH + 1, 5.2, wallH - 2);
+        g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(capx + 1, capy - wallH + 1, 1.6, wallH - 2); // shade
+        g.fillStyle = '#f3ecda'; g.fillRect(capx - 3.4, capy - wallH, 6.8, 2.2);       // capital
+        g.fillRect(capx - 3.4, capy - 3, 6.8, 2.2);                                     // base
+      }
+      // civ roof: gabled pediment (rome), tiered (china), dome (india)
+      roofFor(g, style, cx, cy - wallH - 6, s);
+      // central bell tower rising above the hall
+      const tx = cx, tbase = cy - wallH - 12;
+      g.fillStyle = p.wallL; g.fillRect(tx - 9, tbase - 22, 9, 24);
+      g.fillStyle = p.wallR; g.fillRect(tx, tbase - 22, 9, 24);
+      g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1; g.strokeRect(tx - 9, tbase - 22, 18, 24);
+      g.fillStyle = '#2a1f12'; g.beginPath(); // bell arch
+      g.moveTo(tx - 5, tbase - 4); g.lineTo(tx - 5, tbase - 12);
+      g.quadraticCurveTo(tx, tbase - 18, tx + 5, tbase - 12); g.lineTo(tx + 5, tbase - 4); g.closePath(); g.fill();
+      g.fillStyle = '#c9a34f'; g.beginPath(); g.ellipse(tx, tbase - 9, 3, 3.5, 0, 0, 7); g.fill(); // bell
+      g.fillStyle = '#8a6420'; g.fillRect(tx - 0.8, tbase - 6, 1.6, 2);
+      roofFor(g, style === 'india' ? 'india' : style === 'china' ? 'china' : 'rome', tx, tbase - 24, s * 0.34);
+      flag(g, tx, tbase - 24 - s * 6, colorIdx);
+      // hanging banners flanking the entrance
+      for (const bxs of [-1, 1]) {
+        const bxp = cx + bxs * s * 13;
+        g.fillStyle = tc2.main; g.strokeStyle = tc2.dark; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(bxp - 4, cy - wallH + 2); g.lineTo(bxp + 4, cy - wallH + 2);
+        g.lineTo(bxp + 4, cy - 4); g.lineTo(bxp, cy); g.lineTo(bxp - 4, cy - 4); g.closePath();
+        g.fill(); g.stroke();
+        g.fillStyle = '#e7cf8e'; g.beginPath(); g.arc(bxp, cy - wallH * 0.55, 2, 0, 7); g.fill();
+      }
     }
     if (type === 'town') { // corner watch-turrets make it a fortress at a glance
       for (const [tx2, ty2] of [[cx - s * 32, cy], [cx + s * 32, cy], [cx, cy - s * 16], [cx, cy + s * 16]]) {
