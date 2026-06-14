@@ -156,14 +156,13 @@ class Unit {
     this.anim = 'walk';
     return true;
   }
-  /* true 8-direction facing from the on-screen movement vector.
-     dir: 0=S 1=SW 2=W 3=NW 4=N 5=NE 6=E 7=SE */
+  /* 24-direction facing from the on-screen movement vector (smooth turning).
+     dir: 0=E, 6=S(front), 12=W, 18=N(back), increasing clockwise on screen. */
   setDir(vx, vy) {
     const sdx = vx - vy, sdy = (vx + vy) * 0.5; // tile velocity -> screen velocity
     if (sdx * sdx + sdy * sdy < 1e-8) return;
     const a = Math.atan2(sdy, sdx); // 0 = screen-east, +90° = screen-south
-    const sector = Math.round(((a * 180 / Math.PI + 360) % 360) / 45) % 8; // 0=E,1=SE,2=S,3=SW,4=W,5=NW,6=N,7=NE
-    this.dir = [6, 7, 0, 1, 2, 3, 4, 5][sector];
+    this.dir = (Math.round(a / (Math.PI * 2) * 24) + 24) % 24;
   }
 
   distTo(e) {
@@ -896,13 +895,14 @@ const Sim = {
     const B = BUILDINGS[type];
     if (bx < 1 || by < 1 || bx + B.size > World.N - 1 || by + B.size > World.N - 1) return false;
     if (B.naval) {
-      // docks: every tile on open water (no puddles), free of fish/ships, touching the shore
+      // docks: on the SEA (salt water) only, free of fish/ships, touching the shore
       let touchesLand = false;
       const reg = game.world.waterRegion[World.idx(bx, by)];
       if (!reg || game.world.regionSizes[reg] < 60) return false;
       for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++) {
         const i = World.idx(x, y);
-        if (game.world.ter[i] > TERRAIN.SHALLOW || game.world.objGrid[i] || game.world.navBlocked[i]) return false;
+        if (game.world.ter[i] > TERRAIN.SHALLOW || game.world.salt[i] !== 1 ||
+            game.world.objGrid[i] || game.world.navBlocked[i]) return false;
       }
       for (let y = by - 1; y <= by + B.size; y++) for (let x = bx - 1; x <= bx + B.size; x++)
         if (World.inB(x, y) && game.world.ter[World.idx(x, y)] >= TERRAIN.SAND) touchesLand = true;
@@ -1195,7 +1195,8 @@ const Sim = {
 
   /* ---- irrigation: BFS water flow through canal chains ---- */
   recomputeIrrigation(game) {
-    const isWater = (x, y) => World.inB(x, y) && game.world.ter[World.idx(x, y)] <= TERRAIN.SHALLOW;
+    // only FRESH water irrigates — the salty sea is useless for crops
+    const isWater = (x, y) => World.isFresh(x, y);
     const canals = [], farms = [];
     for (const b of game.buildings) {
       if (b.dead) continue;

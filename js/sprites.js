@@ -249,24 +249,16 @@ const Sprites = (() => {
     trader:   { tunic: '#7a5d8a', helmet: 'turban',weapon: 'staff',   shield: 'none', pack: true },
   };
 
-  /* facing table for the 5 baked directions; E/NE/SE come from mirroring.
-     fx: -1 = facing screen-left, 0 = frontal; fy: +1 = toward viewer, -1 = away */
-  const POSES = [
-    { fx: 0,     fy: 1 },     // 0 S  (front)
-    { fx: -0.71, fy: 0.71 },  // 1 SW (3/4 front)
-    { fx: -1,    fy: 0 },     // 2 W  (profile)
-    { fx: -0.71, fy: -0.71 }, // 3 NW (3/4 back)
-    { fx: 0,     fy: -1 },    // 4 N  (back)
-  ];
-
-  function drawHumanoid(g, type, colorIdx, civ, dir, anim, fr) {
+  /* The humanoid is drawn parametrically from a facing vector:
+     fx: -1 = facing screen-left … 0 = frontal … +1 = screen-right
+     fy: +1 = toward the viewer (front) … -1 = away (back).
+     unit() drives this from any of 24 directions (right-facing ones are mirrored). */
+  function drawHumanoid(g, type, colorIdx, civ, fx, fy, anim, fr) {
     const v = UNIT_VIS[type] || UNIT_VIS.spearman;
     const tc = teamCols(colorIdx);
     const skin = SKIN[civ] || SKIN.none;
     const tunic = v.tunic === 'team' ? tc.main : v.tunic;
     const tunicD = v.tunic === 'team' ? tc.dark : null;
-    const P = POSES[dir] || POSES[0];
-    const fx = P.fx, fy = P.fy;
     const away = fy < -0.3;                // facing away from the viewer
     const sideAmt = Math.abs(fx);          // 0 frontal .. 1 full profile
     const prof = sideAmt >= 0.5;           // profile-ish: use side-style weapons
@@ -1001,34 +993,55 @@ const Sprites = (() => {
     return { cv: c, ax: cx, ay: WL };
   }
 
-  /* public: unit sprite. dir: 0=S 1=SW 2=W 3=NW 4=N 5=NE 6=E 7=SE.
-     Humanoids bake 5 poses at 2x (k=2); NE/E/SE are mirrors of NW/W/SW.
-     Big units bake front (0), profile (2), back (4); diagonals use the profile. */
+  /* public: unit sprite in 24 directions for smooth turning.
+     dir 0=E, 6=S(toward viewer), 12=W, 18=N(away); increasing clockwise.
+     Humanoids render parametrically — the 12 right-facing dirs are mirrored from
+     the 13 left-facing baked poses. Big units quantize to front / side / back. */
+  const NDIR = 24;
   const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1, cart: 1,
     fishboat: 1, transport: 1, galley: 1, quinquereme: 1, fireship: 1, catamaran: 1 };
   function unit(type, colorIdx, civ, dir, anim, fr) {
-    dir = ((dir % 8) + 8) % 8;
-    const big = !!BIG_TYPES[type];
-    let bake = dir, mirror = false;
-    if (dir >= 5) { mirror = true; bake = 8 - dir; } // 5â†’3(NW), 6â†’2(W), 7â†’1(SW)
-    if (big && (bake === 1 || bake === 3)) bake = 2;  // big units: diagonals ride the profile
-    const key = `u_${type}_${colorIdx}_${civ}_${bake}_${mirror ? 1 : 0}_${anim}_${fr}`;
+    dir = ((dir % NDIR) + NDIR) % NDIR;
+    const ang = dir / NDIR * Math.PI * 2;          // screen-space facing angle
+    const cosA = Math.cos(ang), sinA = Math.sin(ang);
+
+    if (BIG_TYPES[type]) {
+      // coarse: front (toward viewer) / back (away) / profile (mirrored for east)
+      let bake = sinA > 0.38 ? 0 : sinA < -0.38 ? 4 : 2;
+      const mirror = bake === 2 && cosA > 1e-3;
+      const key = `u_${type}_${colorIdx}_${civ}_B${bake}_${mirror ? 1 : 0}_${anim}_${fr}`;
+      if (cache.has(key)) return cache.get(key);
+      let s;
+      if (mirror) {
+        const L = unit(type, colorIdx, civ, 12, anim, fr); // dir 12 = W = side, unmirrored
+        const c = mk(L.cv.width, L.cv.height), g = g2(c);
+        g.translate(L.cv.width, 0); g.scale(-1, 1); g.drawImage(L.cv, 0, 0);
+        s = { cv: c, ax: L.cv.width / (L.k || 1) - L.ax, ay: L.ay, k: L.k };
+      } else {
+        const raw = (bake === 0 || bake === 4)
+          ? drawBigFB(type, colorIdx, civ, bake, anim, fr)
+          : drawBig(type, colorIdx, civ, anim, fr);
+        s = { cv: outlined(raw.cv, 1), ax: raw.ax, ay: raw.ay, k: raw.k };
+      }
+      cache.set(key, s); return s;
+    }
+
+    // humanoid: bake the left-facing half, mirror for right-facing dirs
+    let bakeDir = dir, mirror = false;
+    if (cosA > 1e-3) { mirror = true; bakeDir = (12 - dir + NDIR) % NDIR; }
+    const key = `u_${type}_${colorIdx}_${civ}_D${bakeDir}_${mirror ? 1 : 0}_${anim}_${fr}`;
     if (cache.has(key)) return cache.get(key);
     let s;
     if (mirror) {
-      const L = unit(type, colorIdx, civ, bake, anim, fr);
+      const L = unit(type, colorIdx, civ, bakeDir, anim, fr);
       const c = mk(L.cv.width, L.cv.height), g = g2(c);
       g.translate(L.cv.width, 0); g.scale(-1, 1); g.drawImage(L.cv, 0, 0);
       s = { cv: c, ax: L.cv.width / (L.k || 1) - L.ax, ay: L.ay, k: L.k };
-    } else if (big) {
-      const raw = (bake === 0 || bake === 4)
-        ? drawBigFB(type, colorIdx, civ, bake, anim, fr)
-        : drawBig(type, colorIdx, civ, anim, fr);
-      s = { cv: outlined(raw.cv, 1), ax: raw.ax, ay: raw.ay, k: raw.k };
     } else {
+      const a2 = bakeDir / NDIR * Math.PI * 2;
       const c = mk(96, 112), g = g2(c);
       g.scale(2, 2); // supersample
-      drawHumanoid(g, type, colorIdx, civ, bake, anim, fr);
+      drawHumanoid(g, type, colorIdx, civ, Math.cos(a2), Math.sin(a2), anim, fr);
       s = { cv: outlined(c, 1.5), ax: 24, ay: 52, k: 2 };
     }
     cache.set(key, s); return s;
@@ -1652,7 +1665,7 @@ const Sprites = (() => {
     gr.addColorStop(0, '#3a2c18'); gr.addColorStop(1, '#16100a');
     g.fillStyle = gr; g.beginPath(); g.arc(48, 48, 46, 0, 7); g.fill();
     g.strokeStyle = '#957437'; g.lineWidth = 2.5; g.beginPath(); g.arc(48, 48, 45, 0, 7); g.stroke();
-    const map = { rome: ['legionary', 0], china: ['chukonu', 0], india: ['elephant', 2] };
+    const map = { rome: ['legionary', 6], china: ['chukonu', 6], india: ['elephant', 6] };
     const [t, d] = map[civKey];
     const s = unit(t, civKey === 'rome' ? 1 : civKey === 'china' ? 2 : 0, civKey, d, 'idle', 0);
     g.save(); g.beginPath(); g.arc(48, 48, 44, 0, 7); g.clip();

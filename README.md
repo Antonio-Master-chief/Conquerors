@@ -24,8 +24,14 @@ or just double-click `index.html` (everything is dependency-free vanilla JS — 
 - **Storehouses + ox carts**: build a drop-off near forests/mines so settlers don't trek
   to the Town Center; ox carts haul batches home (resources dip in transit, restored on
   delivery — raid a cart to cut the supply line)
+- **Two kinds of water**: the salty **sea** (build docks, fish) and inland **freshwater
+  lakes** (tinted green — the only water that feeds farms & canals). Every start gets a
+  freshwater pond
+- **24-direction unit facing** — units turn smoothly, always facing where they move
+- Click any building to open its panel: train settlers/units, advance ages, dispatch carts
 - Mouse map navigation: **edge-pan** (push cursor to a screen edge) + arrow/WASD; left-click
-  to command, drag to box-select, double-click to select all of a type
+  to command, drag to box-select, double-click to select all of a type. Full touch controls
+  for mobile (tap-select, tap-command, drag-pan, pinch-zoom)
 - University tech tree fueled by Knowledge (blades, armor, masonry, Greek Fire, Wootz Steel…)
 - Veterancy: combat XP + Training Grounds drill aura (Recruit → Veteran → Elite, chevron insignia)
 - 3 civilizations, fully asymmetric:

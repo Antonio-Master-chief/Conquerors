@@ -9,6 +9,7 @@ const World = (() => {
     blocked: new Uint8Array(N * N),     // land-unit passability: static + buildings (not units)
     navBlocked: new Uint8Array(N * N),  // ship passability: land = blocked, open water = free
     sightBlock: new Uint8Array(N * N),  // vision blockers: trees, tall buildings (walls later)
+    salt: new Uint8Array(N * N),        // water type: 1 = sea (salt, docks+fish), 0 = fresh lake (farms+canals)
     vis: new Uint8Array(N * N),         // 0 unexplored 1 explored 2 visible (human player)
     objects: [],                        // resource nodes & decorations
     objGrid: new Int32Array(N * N),     // object id+1 at tile
@@ -270,16 +271,18 @@ const World = (() => {
        real seas & lakes, not landlocked puddles */
     W.waterRegion = new Int32Array(N * N);   // 0 = land, else region id
     W.regionSizes = [0];
+    const regionSalt = [false];              // does this region touch the map border / count as sea?
     {
       let rid = 0;
       const stack = [];
       for (let i = 0; i < N * N; i++) {
         if (W.ter[i] > TERRAIN.SHALLOW || W.waterRegion[i]) continue;
-        rid++; let size = 0;
+        rid++; let size = 0, touchesBorder = false;
         stack.push(i); W.waterRegion[i] = rid;
         while (stack.length) {
           const j = stack.pop(); size++;
           const jx = j % N, jy = (j / N) | 0;
+          if (jx <= 1 || jy <= 1 || jx >= N - 2 || jy >= N - 2) touchesBorder = true;
           for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
             const nx = jx + dx, ny = jy + dy;
             if (nx < 0 || ny < 0 || nx >= N || ny >= N) continue;
@@ -288,14 +291,54 @@ const World = (() => {
           }
         }
         W.regionSizes[rid] = size;
+        // SEA = open ocean reaching the map border, or any very large body.
+        // Everything else (interior ponds & lakes) is FRESH water for farming.
+        regionSalt[rid] = touchesBorder || size >= 240;
+      }
+      // stamp the salt grid
+      W.salt.fill(0);
+      for (let i = 0; i < N * N; i++) {
+        const r = W.waterRegion[i];
+        if (r && regionSalt[r]) W.salt[i] = 1;
       }
     }
     const openWater = (x, y) => W.regionSizes[W.waterRegion[idx(x, y)]] >= 60;
+    const isSeaTile = (x, y) => inB(x, y) && W.ter[idx(x, y)] <= TERRAIN.SHALLOW && W.salt[idx(x, y)] === 1;
+    const isFreshTile = (x, y) => inB(x, y) && W.ter[idx(x, y)] <= TERRAIN.SHALLOW && W.salt[idx(x, y)] === 0;
 
-    // fish shoals — gathered by fishing boats (major food source on the coast)
+    // every start must have FRESH water nearby for farming (a coastal start only
+    // borders the salty sea, so dig it a freshwater pond)
+    for (const s of W.starts) {
+      let hasFresh = false;
+      for (let dy = -11; dy <= 11 && !hasFresh; dy++) for (let dx = -11; dx <= 11; dx++)
+        if (isFreshTile(s.x + dx, s.y + dy)) { hasFresh = true; break; }
+      if (hasFresh) continue;
+      for (let tries = 0; tries < 30; tries++) {
+        const a = rnd() * Math.PI * 2, dr = 7 + rnd() * 3;
+        const px = Math.round(s.x + Math.cos(a) * dr), py = Math.round(s.y + Math.sin(a) * dr);
+        if (px < 4 || py < 4 || px > N - 5 || py > N - 5) continue;
+        if (W.towns.some(t => dist(px, py, t.x, t.y) < 6)) continue;
+        if (isSeaTile(px, py)) continue; // don't dig into the ocean
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+          const d = Math.hypot(dx, dy * 1.3);
+          if (d > 2.3) continue;
+          const i = idx(px + dx, py + dy);
+          if (W.objGrid[i]) removeObj(W.objects[W.objGrid[i] - 1]);
+          W.ter[i] = d < 1 ? TERRAIN.DEEP : TERRAIN.SHALLOW; W.blocked[i] = 1; W.salt[i] = 0; // fresh!
+        }
+        for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+          const d = Math.hypot(dx, dy * 1.3);
+          if (d > 2.3 && d <= 3.1) { const i = idx(px + dx, py + dy);
+            if (W.ter[i] > TERRAIN.SHALLOW) W.ter[i] = TERRAIN.SAND; }
+        }
+        break;
+      }
+    }
+
+    // fish shoals — only in the SEA (salt water); gathered by fishing boats
     function addFish(x, y) {
       if (!inB(x, y) || W.objGrid[idx(x, y)] || W.ter[idx(x, y)] > TERRAIN.SHALLOW) return false;
-      if (!openWater(x, y)) return false; // no fish worth boats in tiny ponds
+      if (!isSeaTile(x, y)) return false; // no sea fishing in freshwater lakes
       const o = { id: W.objects.length, kind: 'fish', x, y, amount: 400, variant: 0, alive: true };
       W.objects.push(o); W.objGrid[idx(x, y)] = o.id + 1;
       return true;
@@ -394,6 +437,14 @@ const World = (() => {
     for (let y = y0; y < y0 + CH; y++) for (let x = x0; x < x0 + CH; x++) {
       const t = W.ter[idx(x, y)];
       g.drawImage(Sprites.tile(t, (x * 31 + y * 17 + ((x * x + y) >> 2)) % 6), isoX(x, y) - 32 - ox, isoY(x, y) - oy);
+      // freshwater lakes get a green-teal wash so they read differently from the sea
+      if (t <= TERRAIN.SHALLOW && W.salt[idx(x, y)] === 0) {
+        const tx2 = isoX(x, y) - ox, ty2 = isoY(x, y) - oy;
+        g.fillStyle = t === TERRAIN.DEEP ? 'rgba(60,150,110,.32)' : 'rgba(90,180,140,.30)';
+        g.beginPath();
+        g.moveTo(tx2, ty2); g.lineTo(tx2 + 32, ty2 + 16); g.lineTo(tx2, ty2 + 32); g.lineTo(tx2 - 32, ty2 + 16);
+        g.closePath(); g.fill();
+      }
     }
     // soft blending where two LAND terrains meet (kills the patchwork look)
     const BLEND = { 2: 'rgba(205,178,121,.30)', 3: 'rgba(88,138,60,.30)', 4: 'rgba(138,113,72,.30)', 5: 'rgba(147,160,90,.30)' };
@@ -549,7 +600,8 @@ const World = (() => {
     const img = g.createImageData(N, N);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const t = W.ter[idx(x, y)];
-      const c = cols[t];
+      let c = cols[t];
+      if (t <= TERRAIN.SHALLOW && W.salt[idx(x, y)] === 0) c = t === TERRAIN.DEEP ? '#1f7a5a' : '#3aa074'; // fresh lake
       const r = parseInt(c.slice(1, 3), 16), gg = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
       const i = (y * N + x) * 4;
       img.data[i] = r; img.data[i + 1] = gg; img.data[i + 2] = b; img.data[i + 3] = 255;
@@ -562,6 +614,9 @@ const World = (() => {
     W.minimapBase = cv;
   }
 
+  const isSea = (x, y) => inB(x | 0, y | 0) && W.ter[idx(x | 0, y | 0)] <= TERRAIN.SHALLOW && W.salt[idx(x | 0, y | 0)] === 1;
+  const isFresh = (x, y) => inB(x | 0, y | 0) && W.ter[idx(x | 0, y | 0)] <= TERRAIN.SHALLOW && W.salt[idx(x | 0, y | 0)] === 0;
+
   return { W, gen, idx, inB, isoX, isoY, objAt, nearestObj, removeObj,
-           drawTerrain, drawFog, recomputeFog, visAt, terAt, explore, N };
+           drawTerrain, drawFog, recomputeFog, visAt, terAt, explore, isSea, isFresh, N };
 })();

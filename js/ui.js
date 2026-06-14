@@ -95,7 +95,7 @@ const UI = (() => {
 
   /* ---------------- selection & action panels ---------------- */
   function iconForUnit(type, civ) {
-    const s = Sprites.unit(type, 0, civ || 'rome', 0, 'idle', 0);
+    const s = Sprites.unit(type, 0, civ || 'rome', 6, 'idle', 0); // dir 6 = front, for icons
     const c = document.createElement('canvas'); c.width = 30; c.height = 30;
     const g = c.getContext('2d');
     const k = s.k || 1;
@@ -275,6 +275,16 @@ const UI = (() => {
           label: u.name.split(' ').pop(), icon: iconForUnit(uk, p.civKey), cost: u.cost,
           enabled: p.canAfford(u.cost), title: `HP ${u.hp} · ATK ${u.atk}${u.range > 1.2 ? ' · ranged' : ''}`,
           onClick: () => b.enqueue(game, uk),
+        });
+      }
+      // storehouse: manually dispatch an ox cart now (otherwise auto-dispatches)
+      if (b.store) {
+        const held = b.store.food + b.store.wood + b.store.gold + b.store.stone + b.store.iron;
+        actionBtn(actP, {
+          label: 'Send Cart', icon: iconForUnit('cart', p.civKey),
+          enabled: !b.cart && held > 0,
+          title: b.cart ? 'A cart is already hauling' : held > 0 ? 'Dispatch an ox cart to the Town Center now' : 'Nothing stored to haul yet',
+          onClick: () => { b.depositT = 999; refreshPanels(true); }, // forces dispatch next tick
         });
       }
       if (b.type === 'tc' && p.age < 4) {

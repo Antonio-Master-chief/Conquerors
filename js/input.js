@@ -311,6 +311,18 @@ const Input = (() => {
     UI.refreshPanels(true);
   }
 
+  /* does the current selection have a real job at this own-building? */
+  function workableHere(b) {
+    const sel = game.selected.filter(s => !s.dead && s.kind === 'unit' && s.owner === game.humanId);
+    if (!sel.length) return false;
+    const settlers = sel.some(u => u.type === 'settler');
+    if (!b.built && settlers) return true;          // finish construction
+    if (b.def.farm && b.built && settlers) return true; // gather a farm
+    if (b.garrison && b.built && sel.some(u => u.def.tags.includes('ranged') && !u.def.naval)
+        && b.garrison.length < (b.def.garrison || 0)) return true; // man a wall
+    return false;
+  }
+
   /* one tap/click does the right thing: select friends, command everything else */
   function tapAction(px, py, additive, allowBldRally) {
     const hit = pickAt(px, py);
@@ -321,8 +333,13 @@ const Input = (() => {
       if (hit.cargo && haveUnits &&
           game.selected.some(u => u.kind === 'unit' && !u.def.naval && u !== hit)) { commandAt(px, py); return; }
       selectAt(px, py, additive);
+    } else if (hit && hit.kind === 'bld' && hit.owner === game.humanId) {
+      // clicking your own building SELECTS it (to open its panel) unless the
+      // chosen units have an actual job there (build / gather / garrison)
+      if (haveUnits && workableHere(hit)) commandAt(px, py);
+      else selectAt(px, py, additive);
     } else if (haveUnits || (allowBldRally && haveBlds)) {
-      commandAt(px, py); // left-click the map: GO THERE
+      commandAt(px, py); // left-click the map / enemy: GO THERE
     } else {
       selectAt(px, py, additive);
     }

@@ -157,7 +157,7 @@ class AIController {
      guaranteed near every start by map gen) */
   tryBuildFarm(tc, settler) {
     const g = this.game, p = this.p;
-    const isWater = (x, y) => World.inB(x, y) && g.world.ter[World.idx(x, y)] <= TERRAIN.SHALLOW;
+    const isWater = (x, y) => World.isFresh(x, y); // crops need fresh water, not the sea
     const waterNear = (cx2, cy2) => {
       for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++)
         if (dx * dx + dy * dy <= 9 && isWater((cx2 + dx) | 0, (cy2 + dy) | 0)) return true;
