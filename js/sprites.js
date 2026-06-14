@@ -220,6 +220,18 @@ const Sprites = (() => {
       }
       cache.set(key, { cv: c, ax: 10, ay: 15 }); return cache.get(key);
     }
+    if (kind === 'carcass') {
+      c = mk(40, 28); g = g2(c); shadow(g, 20, 22, 13, 4);
+      // a side of meat with ribs + a rising scent wisp
+      const gr = g.createRadialGradient(18, 14, 2, 20, 16, 12);
+      gr.addColorStop(0, '#b5523f'); gr.addColorStop(1, '#7a2f24');
+      g.fillStyle = gr; g.strokeStyle = 'rgba(40,12,8,.5)'; g.lineWidth = 1;
+      g.beginPath(); g.ellipse(20, 16, 12, 7, .15, 0, 7); g.fill(); g.stroke();
+      g.strokeStyle = '#e7d8b8'; g.lineWidth = 1.2; // exposed ribs
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(15 + i * 4, 11); g.quadraticCurveTo(16 + i * 4, 18, 14 + i * 4, 21); g.stroke(); }
+      g.fillStyle = '#caa27a'; g.beginPath(); g.ellipse(31, 14, 3.5, 2.4, .4, 0, 7); g.fill(); // hide scrap
+      cache.set(key, { cv: c, ax: 20, ay: 22 }); return cache.get(key);
+    }
     if (kind === 'ruin') {
       c = mk(64, 56); g = g2(c); shadow(g, 32, 50, 20, 6);
       g.fillStyle = '#b5ad9c'; g.strokeStyle = '#6e6757'; g.lineWidth = 1;
@@ -527,6 +539,40 @@ const Sprites = (() => {
       drawHorse(g, 46, 64, colorIdx, swing);
       drawRiderTorso(g, 46, 36, colorIdx, civ, 'none', 0);
       return { cv: c, ax: 46, ay: 66 };
+    }
+    if (type === 'deer' || type === 'boar') {
+      // side-view quadruped (faces left), tan deer w/ antlers or dark tusked boar
+      const cx2 = 48, gy = 60, boar = type === 'boar';
+      const body = boar ? '#4a3b2c' : '#9a7b50', bodyD = boar ? '#33281c' : '#6e5638';
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(cx2, gy + 2, boar ? 16 : 14, 4, 0, 0, 7); g.fill();
+      g.lineWidth = boar ? 3 : 2.4; // legs
+      for (const [ox, ph] of [[-9, 0], [-5, Math.PI], [7, Math.PI], [11, 0]]) {
+        const a = Math.sin(ph + swing * Math.PI) * 0.5;
+        g.strokeStyle = ox < 0 ? bodyD : body;
+        g.beginPath(); g.moveTo(cx2 + ox, gy - 13); g.lineTo(cx2 + ox + Math.sin(a) * 6, gy + 2); g.stroke();
+      }
+      const gr = g.createLinearGradient(0, gy - 26, 0, gy - 8);
+      gr.addColorStop(0, body); gr.addColorStop(1, bodyD);
+      g.fillStyle = gr; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1.2;
+      g.beginPath(); g.ellipse(cx2, gy - 14, boar ? 17 : 14, boar ? 9 : 8, 0, 0, 7); g.fill(); g.stroke(); // body
+      if (boar) { g.fillStyle = '#2a2018'; for (let i=0;i<5;i++) g.fillRect(cx2-12+i*5, gy-24, 1.6, 5); } // bristles
+      // neck + head (left)
+      g.fillStyle = body;
+      g.beginPath(); g.moveTo(cx2 - 11, gy - 18); g.quadraticCurveTo(cx2 - 20, gy - 22, cx2 - 22, gy - (boar ? 16 : 24));
+      g.lineTo(cx2 - 16, gy - (boar ? 14 : 22)); g.quadraticCurveTo(cx2 - 11, gy - 16, cx2 - 7, gy - 16); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); g.ellipse(cx2 - 22, gy - (boar ? 15 : 24), boar ? 6 : 4.5, boar ? 4 : 3.4, -.3, 0, 7); g.fill(); g.stroke(); // head
+      g.fillStyle = '#1d1812'; g.beginPath(); g.arc(cx2 - 23, gy - (boar ? 16 : 25), 1.1, 0, 7); g.fill();
+      if (boar) { // tusks + snout
+        g.strokeStyle = '#e8e0ce'; g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(cx2 - 26, gy - 13); g.quadraticCurveTo(cx2 - 29, gy - 16, cx2 - 27, gy - 17); g.stroke();
+      } else { // antlers
+        g.strokeStyle = '#8a6e44'; g.lineWidth = 1.6;
+        for (const sx2 of [-1.5, 1.5]) { g.beginPath();
+          g.moveTo(cx2 - 22 + sx2, gy - 27); g.lineTo(cx2 - 22 + sx2 * 2, gy - 33);
+          g.moveTo(cx2 - 22 + sx2 * 1.6, gy - 30); g.lineTo(cx2 - 22 + sx2 * 3.4, gy - 31); g.stroke(); }
+        g.fillStyle = '#cdb98c'; g.beginPath(); g.ellipse(cx2 + 13, gy - 16, 3, 4, 0, 0, 7); g.fill(); // white tail patch
+      }
+      return { cv: c, ax: cx2, ay: gy };
     }
     if (type === 'cart') { // ox-drawn supply cart (side view, ox faces left)
       const cx2 = 56;
@@ -1002,7 +1048,7 @@ const Sprites = (() => {
      Humanoids render parametrically — the 12 right-facing dirs are mirrored from
      the 13 left-facing baked poses. Big units quantize to front / side / back. */
   const NDIR = 24;
-  const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1, cart: 1,
+  const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1, cart: 1, deer: 1, boar: 1,
     fishboat: 1, transport: 1, galley: 1, quinquereme: 1, fireship: 1, catamaran: 1 };
   function unit(type, colorIdx, civ, dir, anim, fr) {
     dir = ((dir % NDIR) + NDIR) % NDIR;
@@ -1010,8 +1056,9 @@ const Sprites = (() => {
     const cosA = Math.cos(ang), sinA = Math.sin(ang);
 
     if (BIG_TYPES[type]) {
-      // coarse: front (toward viewer) / back (away) / profile (mirrored for east)
-      let bake = sinA > 0.38 ? 0 : sinA < -0.38 ? 4 : 2;
+      // coarse: front (toward viewer) / back (away) / profile (mirrored for east).
+      // animals only have a profile sprite, so they always use the side view.
+      let bake = (type === 'deer' || type === 'boar') ? 2 : sinA > 0.38 ? 0 : sinA < -0.38 ? 4 : 2;
       const mirror = bake === 2 && cosA > 1e-3;
       const key = `u_${type}_${colorIdx}_${civ}_B${bake}_${mirror ? 1 : 0}_${anim}_${fr}`;
       if (cache.has(key)) return cache.get(key);

@@ -28,6 +28,15 @@ or just double-click `index.html` (everything is dependency-free vanilla JS — 
   lakes** (tinted green — the only water that feeds farms & canals). Every start gets a
   freshwater pond
 - **24-direction unit facing** — units turn smoothly, always facing where they move
+- **Wild animals**: hunt **deer** (fast food) and **wild boar** (lots of food, but it fights
+  back and hurts your settlers) — faster than berries or farming
+- **Weather**: rain clouds drift over ~1/8 of the map and refill the freshwater **lakes**
+  beneath them. Lakes hold a finite reserve that farms slowly drain — over-farm a lake and
+  it dries up until the next rain
+- **AoE controls**: LEFT-click selects (units, buildings, *and* resources — shows what each
+  resource is, its use, and how much is left); RIGHT-click commands. Settlers are titled by
+  their job (Lumberjack, Gold Miner, Hunter…), show what they carry, and have a Drop-Off
+  button. Commanding a group to a mine spreads them across nearby mines automatically
 - Click any building to open its panel: train settlers/units, advance ages, dispatch carts
 - Mouse map navigation: **edge-pan** (push cursor to a screen edge) + arrow/WASD; left-click
   to command, drag to box-select, double-click to select all of a type. Full touch controls

@@ -151,17 +151,30 @@ const UI = (() => {
     if (!sel.length) return;
 
     const first = sel[0];
+    const RES_INFO = {
+      tree:  { name: 'Tree',          res: 'wood',  use: 'buildings, ships, siege' },
+      bush:  { name: 'Berry Bush',    res: 'food',  use: 'feeds settlers & troops' },
+      gold:  { name: 'Gold Mine',     res: 'gold',  use: 'units, tech, age-ups' },
+      stone: { name: 'Stone Quarry',  res: 'stone', use: 'towers & walls' },
+      iron:  { name: 'Iron Deposit',  res: 'iron',  use: 'advanced units & armor' },
+      fish:  { name: 'Fish Shoal',    res: 'food',  use: 'food (fishing boats)' },
+      deer:  { name: 'Deer',          res: 'food',  use: 'fast food — hunt it' },
+      boar:  { name: 'Wild Boar',     res: 'food',  use: 'lots of food — but it fights back!' },
+    };
     /* ---- selection cards ---- */
     if (first.kind === 'unit') {
       const types = {};
       for (const u of sel) types[u.type] = (types[u.type] || 0) + 1;
       for (const t in types) {
         const c = el('div', 'card', selP);
-        el('div', 'nm', c).textContent = `${UNITS[t].name}${types[t] > 1 ? ' ×' + types[t] : ''}`;
+        const one = sel.find(x => x.type === t);
+        const nm = types[t] === 1 ? one.displayName() : UNITS[t].name;
+        el('div', 'nm', c).textContent = `${nm}${types[t] > 1 ? ' ×' + types[t] : ''}`;
         if (types[t] === 1) {
-          const u = sel.find(x => x.type === t);
+          const u = one;
           const hb = el('div', 'hpbar', c); el('div', '', hb).style.width = `${u.hp / u.maxHp * 100}%`;
           let sub = `ATK ${Math.round(u.effAtk(game))} · DEF ${u.effArmor(game)}${u.rank ? ' · ' + ['', 'Trained', 'Veteran', 'Elite'][u.rank] : ''}`;
+          if (u.carry && u.carry.amt > 0) sub = `Carrying ${u.carry.amt} ${u.carry.res} — returning to drop off`;
           if (u.cargo) sub = `⚓ Troops aboard: ${u.cargo.reduce((s, c2) => s + c2.def.pop, 0)}/${u.def.capacity} — tap a shore to land`;
           if (u.def.suicide) sub = '🔥 Rams and burns enemy ships — single use!';
           if (u.type === 'trader') {
@@ -172,6 +185,18 @@ const UI = (() => {
           }
           el('div', 'sub', c).textContent = sub;
         }
+      }
+    } else if (RES_INFO[first.kind]) {
+      // a resource node / animal — show what it is, its use, and how much is left
+      const info = RES_INFO[first.kind];
+      const c = el('div', 'card', selP);
+      el('div', 'nm', c).textContent = info.name;
+      const left = first.amount | 0;
+      el('div', 'sub', c).textContent = first.kind === 'fish'
+        ? `${left} food left · ${info.use}`
+        : `${left} ${info.res} left · ${info.use}`;
+      if (first.kind === 'boar' || first.kind === 'deer') {
+        const hb = el('div', 'hpbar', c); el('div', '', hb).style.width = `${(first.hp / first.maxHp) * 100}%`;
       }
     } else {
       const b = first;
@@ -234,6 +259,15 @@ const UI = (() => {
     /* ---- actions ---- */
     if (first.kind === 'unit' && first.owner === game.humanId) {
       const settlers = sel.filter(u => u.type === 'settler');
+      // manual deposit: drop carried resources at the nearest drop-off now
+      const carriers = sel.filter(u => u.carry && u.carry.amt > 0);
+      if (carriers.length) {
+        actionBtn(actP, {
+          label: 'Drop Off', icon: makeIconCv('wood'), enabled: true,
+          title: 'Carry the gathered resources to the nearest Town Center / Storehouse now',
+          onClick: () => { for (const u of carriers) u.orderDeposit(game); Audio2.sfx('click'); refreshPanels(true); },
+        });
+      }
       if (settlers.length) {
         for (const bt of ['storehouse', 'farm', 'canal', 'wall', 'dock', 'barracks', 'range', 'university', 'grounds', 'tower']) {
           const B = BUILDINGS[bt];

@@ -269,10 +269,10 @@ const World = (() => {
     }
     /* label connected water regions (flood fill) so fish/docks only use
        real seas & lakes, not landlocked puddles */
-    W.waterRegion = new Int32Array(N * N);   // 0 = land, else region id
-    W.regionSizes = [0];
-    const regionSalt = [false];              // does this region touch the map border / count as sea?
-    {
+    function classifyWater() {
+      W.waterRegion = new Int32Array(N * N);   // 0 = land, else region id
+      W.regionSizes = [0];
+      const regionSalt = [false];              // does this region touch the map border / count as sea?
       let rid = 0;
       const stack = [];
       for (let i = 0; i < N * N; i++) {
@@ -295,13 +295,16 @@ const World = (() => {
         // Everything else (interior ponds & lakes) is FRESH water for farming.
         regionSalt[rid] = touchesBorder || size >= 240;
       }
-      // stamp the salt grid
       W.salt.fill(0);
-      for (let i = 0; i < N * N; i++) {
-        const r = W.waterRegion[i];
-        if (r && regionSalt[r]) W.salt[i] = 1;
+      for (let i = 0; i < N * N; i++) { const r = W.waterRegion[i]; if (r && regionSalt[r]) W.salt[i] = 1; }
+      // freshwater lakes hold a finite reserve (drained by farms, refilled by rain)
+      W.lakeWater = new Float32Array(W.regionSizes.length);
+      W.lakeMax = new Float32Array(W.regionSizes.length);
+      for (let r = 1; r < W.regionSizes.length; r++) {
+        if (!regionSalt[r]) { W.lakeMax[r] = W.regionSizes[r] * CFG.LAKE_PER_TILE; W.lakeWater[r] = W.lakeMax[r]; }
       }
     }
+    classifyWater();
     const openWater = (x, y) => W.regionSizes[W.waterRegion[idx(x, y)]] >= 60;
     const isSeaTile = (x, y) => inB(x, y) && W.ter[idx(x, y)] <= TERRAIN.SHALLOW && W.salt[idx(x, y)] === 1;
     const isFreshTile = (x, y) => inB(x, y) && W.ter[idx(x, y)] <= TERRAIN.SHALLOW && W.salt[idx(x, y)] === 0;
@@ -334,6 +337,7 @@ const World = (() => {
         break;
       }
     }
+    classifyWater(); // re-classify so carved ponds get their own fresh region + reserve
 
     // fish shoals — only in the SEA (salt water); gathered by fishing boats
     function addFish(x, y) {
@@ -616,7 +620,23 @@ const World = (() => {
 
   const isSea = (x, y) => inB(x | 0, y | 0) && W.ter[idx(x | 0, y | 0)] <= TERRAIN.SHALLOW && W.salt[idx(x | 0, y | 0)] === 1;
   const isFresh = (x, y) => inB(x | 0, y | 0) && W.ter[idx(x | 0, y | 0)] <= TERRAIN.SHALLOW && W.salt[idx(x | 0, y | 0)] === 0;
+  // a fresh lake tile that still has water to give (dry lakes can't irrigate)
+  const lakeHasWater = (x, y) => { if (!isFresh(x, y)) return false; const r = W.waterRegion[idx(x | 0, y | 0)]; return r > 0 && W.lakeWater[r] > 0; };
+  const drainLake = (x, y, amt) => { const r = isFresh(x, y) ? W.waterRegion[idx(x | 0, y | 0)] : 0; if (r > 0) W.lakeWater[r] = Math.max(0, W.lakeWater[r] - amt); };
+  const lakeFrac = (x, y) => { const r = isFresh(x, y) ? W.waterRegion[idx(x | 0, y | 0)] : 0; return r > 0 && W.lakeMax[r] > 0 ? W.lakeWater[r] / W.lakeMax[r] : 0; };
+  // rain over a circle tops the freshwater regions beneath it back up
+  function rainRefill(cx2, cy2, rad, amt) {
+    const seen = {};
+    const x0 = Math.max(0, (cx2 - rad) | 0), x1 = Math.min(N - 1, (cx2 + rad) | 0);
+    const y0 = Math.max(0, (cy2 - rad) | 0), y1 = Math.min(N - 1, (cy2 + rad) | 0);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      if (dist2(x, y, cx2, cy2) > rad * rad) continue;
+      const r = W.waterRegion[idx(x, y)];
+      if (r > 0 && W.lakeMax[r] > 0 && !seen[r]) { seen[r] = 1; W.lakeWater[r] = Math.min(W.lakeMax[r], W.lakeWater[r] + amt); }
+    }
+  }
 
   return { W, gen, idx, inB, isoX, isoY, objAt, nearestObj, removeObj,
-           drawTerrain, drawFog, recomputeFog, visAt, terAt, explore, isSea, isFresh, N };
+           drawTerrain, drawFog, recomputeFog, visAt, terAt, explore,
+           isSea, isFresh, lakeHasWater, drainLake, lakeFrac, rainRefill, N };
 })();

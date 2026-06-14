@@ -1,8 +1,8 @@
 /* ============ CONQUERORS — units, buildings, combat, capture ============ */
 'use strict';
 
-const GATHER_RATE = { bush: 0.55, farm: 0.42, tree: 0.50, gold: 0.45, stone: 0.42, iron: 0.40, fish: 0.65 };
-const OBJ_RES = { bush: 'food', farm: 'food', tree: 'wood', gold: 'gold', stone: 'stone', iron: 'iron', fish: 'food' };
+const GATHER_RATE = { bush: 0.55, farm: 0.42, tree: 0.50, gold: 0.45, stone: 0.42, iron: 0.40, fish: 0.65, carcass: 0.9 };
+const OBJ_RES = { bush: 'food', farm: 'food', tree: 'wood', gold: 'gold', stone: 'stone', iron: 'iron', fish: 'food', carcass: 'food' };
 let NEXT_ID = 1;
 
 /* ================= UNIT ================= */
@@ -45,6 +45,28 @@ class Unit {
     this.trailT = 0; this.bribedBy = -2; this.route = null;
   }
   cx() { return this.x; } cy() { return this.y; }
+
+  /* job title: 'Settler (Gold Miner)', 'Settler (Lumberjack)', etc. */
+  displayName() {
+    if (this.type === 'settler') {
+      const o = this.order;
+      if (o && o.kind === 'build') return 'Settler (Builder)';
+      if (o && o.kind === 'attack' && o.target && o.target.def && o.target.def.animal) return 'Settler (Hunter)';
+      let node = null;
+      if (o && o.kind === 'gather') node = o.obj;
+      else if ((o && o.kind === 'deposit') || (!o && this.carry)) node = this.workObj;
+      if (node) {
+        const k = node.kind === 'bld' ? 'farm' : node.kind;
+        const title = { tree: 'Lumberjack', gold: 'Gold Miner', stone: 'Quarryman',
+                        iron: 'Iron Miner', bush: 'Forager', farm: 'Farmer',
+                        deer: 'Hunter', boar: 'Hunter' }[k];
+        if (title) return 'Settler (' + title + ')';
+      }
+    }
+    if (this.type === 'fishboat' && (this.order && this.order.kind === 'gather' || this.carry))
+      return 'Fishing Boat';
+    return this.def.name;
+  }
   get def() { return UNITS[this.type]; }
   get civilian() { return !!this.def.civilian; }
 
@@ -202,7 +224,12 @@ class Unit {
       if (this.ensurePath(game, nx, ny)) this.moveAlong(game, dt);
     } else {
       if (this.ensurePath(game, t.cx(), t.cy())) this.moveAlong(game, dt);
-      else if (!this.path) { this.clearOrder(); }
+      else if (!this.path) {
+        // a hunted animal keeps darting — don't abandon the hunt on a transient
+        // path miss; just retry. Other targets give up so units don't freeze.
+        if (t.def && t.def.animal) this.repathT = 0;
+        else this.clearOrder();
+      }
     }
   }
 
@@ -355,8 +382,8 @@ class Unit {
         case 'deposit': {
           if (!this.carry) { this.order = o.resume ? { kind: 'gather', obj: o.resume } : null; if (!this.order) this.state = 'idle'; break; }
           const d = game.findDropoff(this.owner, this.x, this.y, this.def.naval);
-          if (!d) { this.clearOrder(); break; }
-          if (this.distTo(d) < (this.def.naval ? 1.5 : 0.7)) {
+          if (!d) { this.clearOrder(); break; } // no dropoff at all: idle, retried by auto-behavior
+          if (this.distTo(d) < (this.def.naval ? 1.6 : 1.3)) { // forgiving so big TCs always accept
             const pl = game.players[this.owner];
             pl.res[this.carry.res] += this.carry.amt;      // usable immediately
             if (d.store) d.store[this.carry.res] += this.carry.amt; // also held here, awaiting a cart
@@ -367,7 +394,8 @@ class Unit {
             if (!this.order) this.state = 'idle';
           } else {
             if (this.ensurePath(game, d.cx(), d.cy())) this.moveAlong(game, dt);
-            else if (!this.path) this.clearOrder();
+            else { this.repathT = 0; this.depFail = (this.depFail || 0) + 1; // keep trying to reach it
+              if (this.depFail > 30) this.clearOrder(); } // give up after ~13s; auto-behavior retries fresh
           }
           break;
         }
@@ -484,12 +512,16 @@ class Unit {
             if (e && !(this.def.naval && !e.def.naval && this.effRange(game) <= 1.6)) this.orderAttack(e);
           }
         }
-        // idle settler with a remembered resource: go back to work once it's safe
-        if (this.type === 'settler' && !this.order && !this.carry && this.workObj) {
-          const w = this.workObj;
-          const alive = w.kind === 'bld' ? (!w.dead && w.built) : w.alive;
-          if (!alive) this.workObj = null;
-          else if (!game.nearestEnemy(this, CFG.AGGRO)) this.orderGather(w);
+        // an idle settler is never allowed to just stand around:
+        if ((this.type === 'settler' || this.type === 'fishboat') && !this.order) {
+          if (this.carry && this.carry.amt > 0) {       // still holding goods -> deliver them
+            this.depFail = 0; this.orderDeposit(game); if (this.order) this.order.resume = this.workObj;
+          } else if (this.workObj) {                     // empty-handed -> back to the remembered node
+            const w = this.workObj;
+            const alive = w.kind === 'bld' ? (!w.dead && w.built) : w.alive;
+            if (!alive) this.workObj = null;
+            else if (!game.nearestEnemy(this, CFG.AGGRO)) this.orderGather(w);
+          }
         }
         // ruins & traders pickup
         const ru = World.objAt(Math.round(this.x - .5), Math.round(this.y - .5));
@@ -511,6 +543,13 @@ class Unit {
           if (near.owner === game.humanId) { game.message('A trader shares wisdom: +30 Knowledge'); Audio2.sfx('capture'); }
         }
       }
+    }
+
+    // wild animals graze and wander when undisturbed (but freeze once hunted)
+    if (this.def.animal && !this.order && game.time - this.lastHitT > 5 && Math.random() < dt * 0.4) {
+      const nx = clamp(this.x + (Math.random() * 8 - 4), 2, World.N - 3);
+      const ny = clamp(this.y + (Math.random() * 8 - 4), 2, World.N - 3);
+      if (!game.world.blocked[World.idx(nx | 0, ny | 0)]) this.orderMove(nx, ny);
     }
 
     // trader behavior: wander, remember the road, or run a bribed trade route
@@ -569,16 +608,22 @@ class Unit {
 
   takeDamage(game, dmg, from, silent) {
     if (this.dead) return;
-    // merchants are under royal protection inside any kingdom's borders
-    if (this.def.npc && game.inTerritory(this.x, this.y) >= 0) return;
+    // merchants (not animals) are under royal protection inside kingdom borders
+    if (this.type === 'trader' && game.inTerritory(this.x, this.y) >= 0) return;
     this.hp -= dmg;
     this.lastHitT = game.time;
     if (!silent) this.flashUntil = performance.now() + 90; // white impact flash
     if (this.owner === game.humanId || (from && from.owner === game.humanId)) game.combatT = game.time;
-    if (!silent && Math.random() < 0.5) Sim.puff(game, this.x, this.y - 0.6, '#a3322a', 3);
-    // settlers flee, idle military retaliate (ox carts plod on stoically)
+    if (!silent && Math.random() < 0.5) Sim.puff(game, this.x, this.y - 0.6, this.def.animal ? '#7a3a1a' : '#a3322a', 3);
+    // reactions to being hit
     if (from && !this.dead) {
-      if (this.civilian && !this.def.npc && !this.def.cart && (!this.order || this.order.kind !== 'move')) {
+      if (this.def.animal) {
+        if (this.def.retaliate) this.orderAttack(from);                 // boar charges its attacker
+        else if (this.hp + dmg >= this.maxHp - 0.5 && (!this.order || this.order.kind !== 'move')) {
+          const a = Math.atan2(this.y - from.y, this.x - from.x);       // deer startles once, then is run down
+          this.orderMove(clamp(this.x + Math.cos(a) * 2, 2, World.N - 3), clamp(this.y + Math.sin(a) * 2, 2, World.N - 3));
+        }
+      } else if (this.civilian && !this.def.npc && !this.def.cart && (!this.order || this.order.kind !== 'move')) {
         const d = game.findDropoff(this.owner, this.x, this.y);
         if (d && this.type === 'settler' && (!this.order || this.order.kind === 'gather')) {
           const resume = this.workObj;          // remember what we were chopping
@@ -590,6 +635,7 @@ class Unit {
     if (this.hp <= 0) {
       this.dead = true;
       game.popFree(this);
+      if (this.def.animal) Sim.dropCarcass(game, this, from);
       Sim.puff(game, this.x, this.y - 0.4, '#5b1f18', 9);
       if (this.def.cart) {
         // supply cart destroyed: its in-transit goods are lost for good
@@ -1115,6 +1161,22 @@ const Sim = {
     if (wall.owner === game.humanId || t.owner === game.humanId) Audio2.sfx('arrow');
   },
 
+  /* ---- a hunted animal yields meat straight to the hunter's larder ---- */
+  dropCarcass(game, animal, killer) {
+    const owner = killer ? (killer.kind === 'unit' ? killer.owner : -1) : -1;
+    // brief carcass node that fades on its own (visual only — meat is instant)
+    const o = { id: game.world.objects.length, kind: 'carcass', x: animal.x | 0, y: animal.y | 0,
+                amount: animal.def.meat, variant: 0, alive: true, fade: 6 };
+    game.world.objects.push(o);
+    (game.carcasses || (game.carcasses = [])).push(o);
+    this.puff(game, animal.x, animal.y, '#9a3a1a', 10);
+    if (owner >= 0) {
+      const p = game.players[owner];
+      if (p) p.res.food += animal.def.meat;       // fast food — faster than berries/farming
+      if (owner === game.humanId) { game.message(`${animal.def.name} hunted — +${animal.def.meat} food`); Audio2.sfx('capture'); }
+    }
+  },
+
   /* ---- ox cart delivers its batch to the Town Center (resources restored) ---- */
   cartArrive(game, cart, tc) {
     const p = game.players[cart.owner];
@@ -1216,8 +1278,8 @@ const Sim = {
 
   /* ---- irrigation: BFS water flow through canal chains ---- */
   recomputeIrrigation(game) {
-    // only FRESH water irrigates — the salty sea is useless for crops
-    const isWater = (x, y) => World.isFresh(x, y);
+    // only FRESH water with reserve left irrigates — salt sea & dried lakes can't
+    const isWater = (x, y) => World.lakeHasWater(x, y);
     const canals = [], farms = [];
     for (const b of game.buildings) {
       if (b.dead) continue;
@@ -1247,19 +1309,22 @@ const Sim = {
     };
     for (const f of farms) {
       const fx = f.cx(), fy = f.cy();
-      let ok = false;
+      let ok = false, src = null;
       const x0 = Math.max(0, (f.x - R - 1) | 0), x1 = Math.min(World.N - 1, (f.x + f.size + R + 1) | 0);
       const y0 = Math.max(0, (f.y - R - 1) | 0), y1 = Math.min(World.N - 1, (f.y + f.size + R + 1) | 0);
       for (let y = y0; y <= y1 && !ok; y++) for (let x = x0; x <= x1; x++)
-        if (isWater(x, y) && nearRect(x + .5, y + .5, f, R)) { ok = true; break; }
+        if (isWater(x, y) && nearRect(x + .5, y + .5, f, R)) { ok = true; src = [x, y]; break; }
       if (!ok) for (const c of canals)
-        if (c.flowing && nearRect(c.cx(), c.cy(), f, R - 0.5)) { ok = true; break; }
-      if (f.irrigated && !ok && f.built && f.owner === game.humanId) {
-        game.message('A farm lost its water supply!', true);
-        Audio2.say('Our water supply has been cut!', true);
+        if (c.flowing && nearRect(c.cx(), c.cy(), f, R - 0.5)) { ok = true; src = [c.x, c.y]; break; }
+      const wasDry = f.irrigated && !ok;
+      if (wasDry && f.built && f.owner === game.humanId) {
+        game.message('A farm dried up — its lake is empty! Wait for rain.', true);
+        Audio2.say('Our farms have run dry — we need rain.', true);
         game.ping(fx, fy);
       }
       f.irrigated = ok;
+      // a working farm slowly draws down its lake's reserve
+      if (ok && f.built && src) World.drainLake(src[0], src[1], 5);
     }
   },
 

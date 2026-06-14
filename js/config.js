@@ -17,6 +17,9 @@ const CFG = {
   DAY_CYCLE: 300,          // seconds per full day/night cycle
   CART_BATCH: 90,          // storehouse waits to accumulate this, then dispatches a cart
   CART_FLUSH: 8,           // ...or after this many idle seconds, haul the remainder
+  RAIN_EVERY: 150,         // seconds between rain events
+  RAIN_DUR: 45,            // how long a rain cloud lingers
+  LAKE_PER_TILE: 120,      // freshwater reserve per lake tile (depleted by farms)
   TERRITORY: 12,           // kingdom border radius around TCs & owned towns
   SIEGE_R: 10,             // enemy presence radius that blockades a settlement
   SIEGE_MEN: 5,            // enemies needed to enforce a siege
@@ -98,6 +101,13 @@ const UNITS = {
               cost:{}, pop:0, time:0, age:1, tags:['civilian'], civilian:true, npc:true },
   cart:     { name:'Ox Cart',   hp:110, atk:0,  range:1,   speed:1.05, cd:2,   armor:1, los:4,
               cost:{}, pop:0, time:0, age:1, tags:['civilian'], civilian:true, cart:true, big:true },
+  /* ---- wild animals (gaia, huntable for food) ---- */
+  deer:     { name:'Deer',      hp:45,  atk:0,  range:1,   speed:0.8,  cd:2,   armor:0, los:8,
+              cost:{}, pop:0, time:0, age:1, tags:['animal'], civilian:true, npc:true,
+              animal:true, flee:true, meat:160, big:true },
+  boar:     { name:'Wild Boar', hp:160, atk:12, range:1,   speed:1.15, cd:1.3, armor:1, los:6,
+              cost:{}, pop:0, time:0, age:1, tags:['animal'], npc:true,
+              animal:true, retaliate:true, meat:360, big:true },
   /* ---- ships (Phase 2: naval) ---- */
   fishboat: { name:'Fishing Boat', hp:45, atk:0, range:1, speed:1.15, cd:2, armor:0, los:6,
               cost:{wood:40}, pop:1, time:18, age:1, tags:['ship','civilian'], civilian:true,

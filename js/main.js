@@ -199,6 +199,22 @@ function setupMatch(game, civKey, diff) {
     });
   });
 
+  // wild animals: deer herds (fast food) + lone boars (dangerous) on open grass
+  const farFromBases = (x, y) => game.world.starts.every(s => dist(x, y, s.x, s.y) > 9) &&
+                                 game.world.towns.every(t => dist(x, y, t.x, t.y) > 7);
+  const freeGrass = (x, y) => World.inB(x, y) && game.world.ter[World.idx(x, y)] === TERRAIN.GRASS &&
+                              !game.world.blocked[World.idx(x, y)] && !game.world.objGrid[World.idx(x, y)];
+  let herds = 0, boars = 0;
+  for (let tries = 0; tries < 800 && (herds < 7 || boars < 5); tries++) {
+    const x = 6 + (Math.random() * (World.N - 12)) | 0, y = 6 + (Math.random() * (World.N - 12)) | 0;
+    if (!freeGrass(x, y) || !farFromBases(x, y)) continue;
+    if (herds < 7) { // a herd of 3-4 deer
+      const n = 3 + (Math.random() * 2 | 0);
+      for (let i = 0; i < n; i++) Sim.spawnUnit(game, -1, 'deer', x + .5 + (Math.random() * 3 - 1.5), y + .5 + (Math.random() * 3 - 1.5), 'none');
+      herds++;
+    } else { Sim.spawnUnit(game, -1, 'boar', x + .5, y + .5, 'none'); boars++; }
+  }
+
   game.ai = [new AIController(game, 1), new AIController(game, 2)];
 
   // camera on human TC
@@ -257,11 +273,13 @@ function render(game) {
 
   // selection rings (under entities) — dark base + bright ring, AoE-style
   for (const e of game.selected) {
-    if (e.dead) continue;
-    const ix = (World.isoX(e.cx(), e.cy()) - view.left) * z;
-    const iy = (World.isoY(e.cx(), e.cy()) - view.top) * z;
-    const r = e.kind === 'bld' ? e.size * 30 : (e.def.big ? 24 : 13);
-    const yy = iy + (e.kind === 'bld' ? 0 : 1 * z);
+    if (e.dead || e.alive === false) continue;
+    const isRes = e.kind !== 'unit' && e.kind !== 'bld'; // a resource node / animal
+    const ecx = isRes ? e.x + .5 : e.cx(), ecy = isRes ? e.y + .5 : e.cy();
+    const ix = (World.isoX(ecx, ecy) - view.left) * z;
+    const iy = (World.isoY(ecx, ecy) - view.top) * z;
+    const r = isRes ? 15 : e.kind === 'bld' ? e.size * 30 : (e.def.big ? 24 : 13);
+    const yy = iy + (e.kind === 'bld' || isRes ? 0 : 1 * z);
     ctx.strokeStyle = 'rgba(10,20,8,.6)';
     ctx.lineWidth = 3.6 * z;
     ctx.beginPath(); ctx.ellipse(ix, yy, r * z, r * z * .5, 0, 0, 7); ctx.stroke();
@@ -419,6 +437,26 @@ function render(game) {
   if (night > 0.01) { ctx.fillStyle = `rgba(14,22,66,${(night * 0.28).toFixed(3)})`; ctx.fillRect(0, 0, cv.width, cv.height); }
   if (dusk > 0.01) { ctx.fillStyle = `rgba(255,128,46,${(dusk * 0.10).toFixed(3)})`; ctx.fillRect(0, 0, cv.width, cv.height); }
 
+  // rain: a darkened circle of slanting streaks over the cloud's footprint
+  if (game.rain) {
+    const rn = game.rain;
+    const cxp = (World.isoX(rn.x, rn.y) - view.left) * z, cyp = (World.isoY(rn.x, rn.y) - view.top) * z;
+    const rpx = rn.r * 50 * z, rpy = rn.r * 26 * z; // iso-ellipse footprint
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(cxp, cyp, rpx, rpy, 0, 0, 7); ctx.clip();
+    ctx.fillStyle = 'rgba(40,52,74,0.22)'; ctx.fillRect(0, 0, cv.width, cv.height);
+    const t = performance.now() / 1000;
+    ctx.strokeStyle = 'rgba(190,210,235,0.45)'; ctx.lineWidth = 1.2 * z;
+    ctx.beginPath();
+    for (let i = 0; i < 220; i++) {
+      const sx = (i * 53.7 % (rpx * 2)) + cxp - rpx;
+      const sy = ((i * 71.3 + t * 620 * z) % (rpy * 2 + 60 * z)) + cyp - rpy - 30 * z;
+      ctx.moveTo(sx, sy); ctx.lineTo(sx - 3 * z, sy + 11 * z);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   World.drawFog(ctx, { x: game.cam.x, y: game.cam.y, zoom: z }, cv.width, cv.height);
 
   // drag selection box (CSS px -> device px)
@@ -471,6 +509,10 @@ function simStep(game, dt) {
   for (const b of game.buildings) b.update(game, dt);
   Sim.updateProjectiles(game, dt);
   Sim.updateParticles(game, dt);
+  if (game.carcasses && game.carcasses.length) { // fade out hunted carcasses
+    for (const c of game.carcasses) { c.fade -= dt; if (c.fade <= 0 && c.alive) World.removeObj(c); }
+    game.carcasses = game.carcasses.filter(c => c.alive);
+  }
   for (const p of game.players) p.tickResearch(dt, game);
   for (const ai of game.ai) ai.tick(dt);
   maybeSpawnTrader(game, dt);
@@ -500,6 +542,20 @@ function simStep(game, dt) {
     moodT = 0;
     Audio2.setMood(game.time - (game.combatT || -99) < 9 ? 'battle' : 'peace');
   }
+  // weather: a rain cloud drifts over ~1/8 of the map and refills the lakes under it
+  if (game.rainNext === undefined) game.rainNext = 35 + Math.random() * 40;
+  if (!game.rain && game.time > game.rainNext) {
+    game.rain = { x: 6 + Math.random() * (World.N - 12), y: 6 + Math.random() * (World.N - 12),
+                  r: 18, vx: (Math.random() - .5) * 0.6, vy: (Math.random() - .5) * 0.6, until: game.time + CFG.RAIN_DUR };
+    game.rainNext = game.time + CFG.RAIN_EVERY;
+    if (World.visAt(game.rain.x, game.rain.y) >= 1) { game.message('Rain clouds gather…'); }
+  }
+  if (game.rain) {
+    const rn = game.rain;
+    rn.x = clamp(rn.x + rn.vx * dt, 4, World.N - 4); rn.y = clamp(rn.y + rn.vy * dt, 4, World.N - 4);
+    World.rainRefill(rn.x, rn.y, rn.r, CFG.LAKE_PER_TILE * dt * 1.2); // top lakes back up
+    if (game.time > rn.until) game.rain = null;
+  }
   if ((leashT += dt) > 0.8) {
     leashT = 0;
     for (const u of game.units) {
@@ -524,7 +580,7 @@ function simStep(game, dt) {
     game.selected = game.selected.filter(e => !e.dead);
     game.buildings = game.buildings.filter(b => !b.dead);
   }
-  game.selected = game.selected.filter(e => !e.dead);
+  game.selected = game.selected.filter(e => !e.dead && e.alive !== false); // drop dead units & depleted nodes
 }
 
 /* ---------------- entry ---------------- */

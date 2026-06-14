@@ -93,6 +93,27 @@ const Input = (() => {
   /* ---------- commands ---------- */
   function mark(kind, x, y) { game.markers.push({ kind, x, y, t0: game.time }); }
 
+  /* distribute gatherers across same-kind nodes near the clicked one, so a
+     crowded mine/forest overflows to the next nearest node (AoE behavior) */
+  function spreadGather(workers, target) {
+    const kind = target.kind, CAP = 4;
+    const nodes = game.world.objects.filter(o =>
+      o.alive && o.kind === kind && dist2(o.x, o.y, target.x, target.y) < 18 * 18);
+    if (nodes.length <= 1) { for (const w of workers) w.orderGather(target); return; }
+    const counts = new Map();
+    for (const w of workers) {
+      let best = null, bd = 1e9;
+      for (const nd of nodes) {
+        if ((counts.get(nd) || 0) >= CAP) continue;
+        const d = dist2(w.x, w.y, nd.x, nd.y);
+        if (d < bd) { bd = d; best = nd; }
+      }
+      if (!best) best = target;                 // everything full: pile on the target
+      counts.set(best, (counts.get(best) || 0) + 1);
+      w.orderGather(best);
+    }
+  }
+
   function commandAt(px, py) {
     const sel = game.selected.filter(e => !e.dead && e.kind === 'unit' && e.owner === game.humanId);
     const [tx, ty] = screenToTile(px, py);
@@ -166,14 +187,22 @@ const Input = (() => {
       return true;
     }
     const fishers = sel.filter(u => u.type === 'fishboat');
-    const obj = objPick(tx, ty, !!fishers.length);
+    // screen-space pick so clicking a tall sprite (tree canopy) hits the node
+    const obj = pickResource(px, py) || objPick(tx, ty, !!fishers.length);
+    if (obj && (obj.kind === 'deer' || obj.kind === 'boar')) { // hunt the animal
+      const hunters = sel.filter(u => u.type === 'settler' || !u.civilian);
+      for (const u of hunters) u.orderAttack(obj);
+      mark('attack', obj.x + .5, obj.y + .5); Audio2.sfx('click'); return true;
+    }
     if (obj && obj.kind === 'fish' && fishers.length) {
-      for (const f of fishers) f.orderGather(obj);
+      spreadGather(fishers, obj);
       mark('gather', obj.x + .5, obj.y + .5);
       Audio2.sfx('click'); return true;
     }
     if (obj && obj.kind !== 'fish' && settlers.length) {
-      for (const s of settlers) s.orderGather(obj);
+      // command is "gather THIS resource type" — spread workers across nearby
+      // same-kind nodes so a crowded mine overflows to the next nearest one
+      spreadGather(settlers, obj);
       for (const u of sel) if (u.type !== 'settler') u.orderMove(tx, ty);
       mark('gather', obj.x + .5, obj.y + .5);
       Audio2.sfx('click'); return true;
@@ -279,10 +308,31 @@ const Input = (() => {
     UI.refreshPanels(true);
   }
 
+  /* screen-space pick of a resource node / animal under the cursor (for info select) */
+  const SELECTABLE_RES = ['tree', 'gold', 'stone', 'iron', 'bush', 'fish', 'deer', 'boar'];
+  function pickResource(px, py) {
+    const z = game.cam.zoom;
+    let best = null, bd = 1e9;
+    for (const o of game.world.objects) {
+      if (!o.alive || SELECTABLE_RES.indexOf(o.kind) < 0) continue;
+      if (World.visAt(o.x, o.y) === 0) continue;
+      const [sx, sy] = toScreen(o.x + .5, o.y + .5);
+      const tall = o.kind === 'tree' ? 70 : 28, hw = 17 * z;
+      if (px < sx - hw || px > sx + hw || py < sy - tall * z || py > sy + 10 * z) continue;
+      const d = Math.abs(px - sx) + Math.abs(py - (sy - tall * z * 0.4));
+      if (d < bd) { bd = d; best = o; }
+    }
+    return best;
+  }
+
   /* ---------- selection ---------- */
   let lastSelT = 0, lastSelId = -1;
   function selectAt(px, py, additive) {
     const hit = pickAt(px, py);
+    if (!hit) {
+      const r = pickResource(px, py);       // left-clicking a tree/mine shows its info
+      if (r) { game.selected = [r]; Audio2.sfx('click'); UI.refreshPanels(true); return; }
+    }
     if (hit) {
       if (hit.kind === 'unit' && hit.owner === game.humanId) {
         hit.type === 'elephant' ? Audio2.sfx('trumpet') : Audio2.ack('select', !!hit.def.big);
@@ -531,10 +581,10 @@ const Input = (() => {
     if (e.button === 1 && panPointer === e.pointerId) { panPointer = null; return; }
     if (e.button === 0 && dragging) {
       dragging = false;
-      // a real box-select needs a box bigger than the unit hit area — small
-      // drags are just clicks (so a jittery hand never eats a move command)
+      // AoE scheme: LEFT click = select only (units, buildings, or a resource —
+      // shows its info). Commands are RIGHT-click. Big drag = box select.
       const dx = Math.abs(dragNow.x - dragStart.x), dy = Math.abs(dragNow.y - dragStart.y);
-      if (Math.max(dx, dy) < 14) tapAction(e.clientX, e.clientY, e.shiftKey, true);
+      if (Math.max(dx, dy) < 14) selectAt(e.clientX, e.clientY, e.shiftKey);
       else boxSelect(dragStart.x, dragStart.y, dragNow.x, dragNow.y, e.shiftKey);
       dragStart = null;
     }
