@@ -265,8 +265,9 @@ const Sprites = (() => {
      fx: -1 = facing screen-left … 0 = frontal … +1 = screen-right
      fy: +1 = toward the viewer (front) … -1 = away (back).
      unit() drives this from any of 24 directions (right-facing ones are mirrored). */
-  function drawHumanoid(g, type, colorIdx, civ, fx, fy, anim, fr) {
+  function drawHumanoid(g, type, colorIdx, civ, fx, fy, anim, fr, tool) {
     const v = UNIT_VIS[type] || UNIT_VIS.spearman;
+    const weapon = tool || v.weapon;       // settlers swap tools by task
     const tc = teamCols(colorIdx);
     const skin = SKIN[civ] || SKIN.none;
     const tunic = v.tunic === 'team' ? tc.main : v.tunic;
@@ -408,7 +409,35 @@ const Sprites = (() => {
 
     const side = prof; // weapon renderers below use profile styling when true
     g.lineWidth = 2;
-    switch (v.weapon) {
+    switch (weapon) {
+      case 'pick': { // miner's pickaxe — angled twin head
+        const a = side ? (-2.3 + raise * 2.8) : (-1.2 + raise * 2.4);
+        g.save(); g.translate(wx, wy); g.rotate(a);
+        g.strokeStyle = '#6e5638'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(0, 3); g.lineTo(0, -12); g.stroke();
+        g.strokeStyle = '#9aa3ad'; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(-7, -15); g.quadraticCurveTo(0, -11, 7, -15); g.stroke();
+        g.restore(); break; }
+      case 'hammer': { // builder's mallet
+        const a = side ? (-2.1 + raise * 2.6) : (-1.1 + raise * 2.2);
+        g.save(); g.translate(wx, wy); g.rotate(a);
+        g.strokeStyle = '#6e5638'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(0, 3); g.lineTo(0, -11); g.stroke();
+        g.fillStyle = '#8a8e95'; g.fillRect(-4.5, -15, 9, 5); g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1; g.strokeRect(-4.5, -15, 9, 5);
+        g.restore(); break; }
+      case 'knife': { // hunter's skinning knife (point-blank on a boar)
+        const a = side ? (-1.8 + raise * 1.6) : (-1.0 + raise * 1.4);
+        g.save(); g.translate(wx, wy); g.rotate(a);
+        g.fillStyle = '#d7dde4'; g.beginPath(); g.moveTo(-1.2, 0); g.lineTo(1.2, 0); g.lineTo(0.4, -8); g.lineTo(-0.4, -8); g.closePath(); g.fill();
+        g.fillStyle = '#5d4426'; g.fillRect(-1.6, 0, 3.2, 3);
+        g.restore(); break; }
+      case 'forage': { // bare-handed berry/crop picking — reach down to a basket
+        const reach = 6 + raise * 4;
+        g.strokeStyle = skin; g.lineWidth = 2.6; // hand reaching toward the ground
+        g.beginPath(); g.moveTo(wx, wy); g.lineTo(wx + fx * 2, wy + reach); g.stroke();
+        g.fillStyle = '#9c7e54'; g.strokeStyle = '#5d4426'; g.lineWidth = 1; // wicker basket
+        g.beginPath(); g.ellipse(hipX + fx * 5, hipY + 9, 5, 3.2, 0, 0, 7); g.fill(); g.stroke();
+        g.strokeStyle = '#7d6342'; g.beginPath(); g.arc(hipX + fx * 5, hipY + 7, 5, Math.PI, 0); g.stroke();
+        g.fillStyle = '#c92f4c'; for (let i = -1; i <= 1; i++) { g.beginPath(); g.arc(hipX + fx * 5 + i * 2.2, hipY + 7.5, 1.1, 0, 7); g.fill(); }
+        break; }
       case 'spear': {
         g.strokeStyle = '#6e5638'; g.lineWidth = 2.2;
         const ext = anim === 'attack' ? (fr === 1 ? 13 : fr === 0 ? -3 : 4) : 0; // thrust!
@@ -1050,10 +1079,11 @@ const Sprites = (() => {
   const NDIR = 24;
   const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1, cart: 1, deer: 1, boar: 1,
     fishboat: 1, transport: 1, galley: 1, quinquereme: 1, fireship: 1, catamaran: 1 };
-  function unit(type, colorIdx, civ, dir, anim, fr) {
+  function unit(type, colorIdx, civ, dir, anim, fr, tool) {
     dir = ((dir % NDIR) + NDIR) % NDIR;
     const ang = dir / NDIR * Math.PI * 2;          // screen-space facing angle
     const cosA = Math.cos(ang), sinA = Math.sin(ang);
+    tool = tool || '';
 
     if (BIG_TYPES[type]) {
       // coarse: front (toward viewer) / back (away) / profile (mirrored for east).
@@ -1080,11 +1110,11 @@ const Sprites = (() => {
     // humanoid: bake the left-facing half, mirror for right-facing dirs
     let bakeDir = dir, mirror = false;
     if (cosA > 1e-3) { mirror = true; bakeDir = (12 - dir + NDIR) % NDIR; }
-    const key = `u_${type}_${colorIdx}_${civ}_D${bakeDir}_${mirror ? 1 : 0}_${anim}_${fr}`;
+    const key = `u_${type}_${colorIdx}_${civ}_D${bakeDir}_${mirror ? 1 : 0}_${anim}_${fr}_${tool}`;
     if (cache.has(key)) return cache.get(key);
     let s;
     if (mirror) {
-      const L = unit(type, colorIdx, civ, bakeDir, anim, fr);
+      const L = unit(type, colorIdx, civ, bakeDir, anim, fr, tool);
       const c = mk(L.cv.width, L.cv.height), g = g2(c);
       g.translate(L.cv.width, 0); g.scale(-1, 1); g.drawImage(L.cv, 0, 0);
       s = { cv: c, ax: L.cv.width / (L.k || 1) - L.ax, ay: L.ay, k: L.k };
@@ -1092,7 +1122,7 @@ const Sprites = (() => {
       const a2 = bakeDir / NDIR * Math.PI * 2;
       const c = mk(96, 112), g = g2(c);
       g.scale(2, 2); // supersample
-      drawHumanoid(g, type, colorIdx, civ, Math.cos(a2), Math.sin(a2), anim, fr);
+      drawHumanoid(g, type, colorIdx, civ, Math.cos(a2), Math.sin(a2), anim, fr, tool);
       s = { cv: outlined(c, 1.5), ax: 24, ay: 52, k: 2 };
     }
     cache.set(key, s); return s;

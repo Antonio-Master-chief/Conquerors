@@ -46,6 +46,25 @@ class Unit {
   }
   cx() { return this.x; } cy() { return this.y; }
 
+  /* which tool the settler is using, so the sprite matches the task */
+  tool() {
+    if (this.type !== 'settler') return null;
+    const o = this.order;
+    if (o && o.kind === 'build') return 'hammer';
+    if (o && o.kind === 'attack' && o.target && o.target.def && o.target.def.animal)
+      return this.huntMelee ? 'knife' : 'bow';
+    let node = null;
+    if (o && o.kind === 'gather') node = o.obj;
+    else if ((o && o.kind === 'deposit') || (!o && this.carry)) node = this.workObj;
+    if (node) {
+      const k = node.kind === 'bld' ? 'farm' : node.kind;
+      if (k === 'tree') return 'axe';
+      if (k === 'gold' || k === 'stone' || k === 'iron') return 'pick';
+      if (k === 'bush' || k === 'farm' || k === 'carcass') return 'forage';
+    }
+    return null; // idle / marching: bare hands
+  }
+
   /* job title: 'Settler (Gold Miner)', 'Settler (Lumberjack)', etc. */
   displayName() {
     if (this.type === 'settler') {
@@ -202,7 +221,9 @@ class Unit {
   tryAttack(game, dt) {
     const t = this.order.target;
     if (!t || t.dead) { this.clearOrder(); return; }
-    let range = Math.max(this.effRange(game), this.def.naval ? 1.6 : 1.0);
+    // settlers hunt animals with a bow (so they can shoot fleeing deer)
+    const hunting = this.type === 'settler' && t.def && t.def.animal;
+    let range = hunting ? 4 : Math.max(this.effRange(game), this.def.naval ? 1.6 : 1.0);
     if (range > 1.2 && World.terAt(this.x, this.y) === TERRAIN.HILL) range += 0.6; // shooting downhill
     const d = this.distTo(t);
     const minR = this.def.minRange || 0;
@@ -210,11 +231,14 @@ class Unit {
       if (this.def.suicide) { Sim.fireshipExplode(game, this, t); return; } // fire ship!
       this.path = null;
       this.setDir((t.cx() - this.x) || .01, (t.cy() - this.y) || 0);
+      // a hunting settler shoots from afar (bow) but switches to a knife point-blank
+      const shoot = range > 1.2 && (hunting ? d > 1.5 : true);
+      this.huntMelee = hunting && !shoot; // tells the sprite to draw a knife, not a bow
       if (this.atkCd <= 0) {
         this.atkCd = this.def.cd;
         this.anim = 'attack'; this.animT = 0;
         if (this.def.burst) { this.burstLeft = this.def.burst; this.burstT = 0; }
-        else if (range > 1.2) Sim.fireProjectile(game, this, t);
+        else if (shoot) Sim.fireProjectile(game, this, t);
         else Sim.meleeHit(game, this, t);
       }
     } else if (d < minR) {
@@ -654,7 +678,7 @@ class Unit {
 
   drawSprite(g, view) {
     const civ = this.civKey || 'none';
-    const s = Sprites.unit(this.type, this.owner < 0 ? -1 : this.owner, civ, this.dir, this.anim, this.frame);
+    const s = Sprites.unit(this.type, this.owner < 0 ? -1 : this.owner, civ, this.dir, this.anim, this.frame, this.tool());
     const ix = (World.isoX(this.x, this.y) - view.left) * view.z;
     const iy = (World.isoY(this.x, this.y) - view.top) * view.z;
     const sc = view.z * (this.def.big ? 0.95 : 0.78);

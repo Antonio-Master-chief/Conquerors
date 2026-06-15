@@ -133,8 +133,15 @@ const Input = (() => {
     const settlers = sel.filter(u => u.type === 'settler');
 
     const big = sel.some(u => u.def.big);
+    // hunt wild animals — settlers and soldiers alike (NOT a merchant)
+    if (target && target.kind === 'unit' && target.def.animal) {
+      for (const u of sel) u.orderAttack(target);
+      mark('attack', target.cx(), target.cy());
+      Audio2.ack('attack', big);
+      return true;
+    }
     // merchants can be hunted in the wilderness — never inside kingdom borders
-    if (target && target.kind === 'unit' && target.def.npc) {
+    if (target && target.kind === 'unit' && target.type === 'trader') {
       if (game.inTerritory(target.x, target.y) >= 0) {
         UI.message('Merchants are protected inside kingdom borders', true);
         return true;
@@ -332,6 +339,9 @@ const Input = (() => {
     if (!hit) {
       const r = pickResource(px, py);       // left-clicking a tree/mine shows its info
       if (r) { game.selected = [r]; Audio2.sfx('click'); UI.refreshPanels(true); return; }
+      // left-clicking a freshwater lake shows its water level
+      const [ltx, lty] = screenToTile(px, py);
+      if (World.isFresh(ltx, lty)) { game.selected = [{ kind: 'lake', x: ltx | 0, y: lty | 0 }]; Audio2.sfx('click'); UI.refreshPanels(true); return; }
     }
     if (hit) {
       if (hit.kind === 'unit' && hit.owner === game.humanId) {
