@@ -116,13 +116,14 @@ canvas#game { position:fixed; inset:0; display:block; }
   width:100%; height:100%; padding:max(18px, env(safe-area-inset-top)) 14px 14px; overflow-y:auto;
 }
 h1.gametitle {
-  margin-top:3vh; font-size:clamp(40px, 9vw, 84px); letter-spacing:.14em; font-weight:900;
-  background:linear-gradient(180deg, #ffe9b0 0%, #d4a647 45%, #8a6420 70%, #ffe9b0 100%);
+  font-family:'Cinzel Decorative','Cinzel',Georgia,serif;
+  margin-top:3vh; font-size:clamp(46px, 10vw, 96px); letter-spacing:.08em; font-weight:900; line-height:1;
+  background:linear-gradient(180deg, #fff1c4 0%, #e6b54c 42%, #9a6a1e 72%, #f5d98c 100%);
   -webkit-background-clip:text; background-clip:text; color:transparent;
-  text-shadow:0 0 40px rgba(212,166,71,.25);
-  filter:drop-shadow(0 4px 3px rgba(0,0,0,.8));
+  text-shadow:0 0 46px rgba(214,78,38,.35);
+  filter:drop-shadow(0 3px 2px rgba(0,0,0,.9)) drop-shadow(0 0 16px rgba(150,28,18,.55));
 }
-.subtitle { color:#a8946d; letter-spacing:.45em; font-size:clamp(10px,2vw,14px); margin-top:-4px; text-transform:uppercase; }
+.subtitle { font-family:'Cinzel',Georgia,serif; color:#c98a4a; letter-spacing:.38em; font-size:clamp(10px,2vw,14px); margin-top:2px; text-transform:uppercase; font-weight:600; }
 .civrow { display:flex; gap:14px; margin-top:4vh; flex-wrap:wrap; justify-content:center; }
 .civcard {
   width:min(240px, 86vw); background:linear-gradient(180deg, rgba(40,28,16,.92), rgba(22,15,9,.96));
@@ -131,7 +132,7 @@ h1.gametitle {
 }
 .civcard:hover { transform:translateY(-4px); }
 .civcard.sel { border-color:#ffd34d; box-shadow:0 0 26px rgba(255,211,77,.3); transform:translateY(-4px); }
-.civcard h3 { color:#ffe9b0; font-size:20px; letter-spacing:.06em; margin-bottom:2px; }
+.civcard h3 { font-family:'Cinzel',Georgia,serif; color:#ffe9b0; font-size:21px; letter-spacing:.05em; margin-bottom:2px; }
 .civcard .tag { color:#c4543f; font-size:11px; letter-spacing:.18em; text-transform:uppercase; }
 .civcard canvas { width:96px; height:96px; margin:8px auto; display:block; }
 .civcard ul { list-style:none; text-align:left; font-size:11.5px; color:#cdbb96; line-height:1.55; }
@@ -139,22 +140,26 @@ h1.gametitle {
 .optrow { display:flex; gap:10px; margin-top:3vh; align-items:center; flex-wrap:wrap; justify-content:center; }
 .optrow label { font-size:12px; letter-spacing:.15em; color:#a8946d; text-transform:uppercase; }
 .diffbtn, .optbtn {
+  font-family:'Cinzel',Georgia,serif;
   padding:8px 16px; background:#241a0e; color:#cdbb96; border:1px solid #5a4426; border-radius:7px;
   cursor:pointer; font-size:13px; font-weight:600; transition:background .12s, border-color .12s, transform .08s;
 }
-.optbtn:hover { border-color:#b8924a; transform:translateY(-1px); }
-.diffbtn.sel, .optbtn.sel { background:#6b5121; color:#ffe9b0; border-color:#b8924a; box-shadow:0 0 12px rgba(201,163,79,.35); }
-.optrow label { min-width:84px; text-align:right; }
-/* war-themed sword cursor on the title screen */
+.optbtn:hover { border-color:#c46a3a; transform:translateY(-1px); }
+.diffbtn.sel, .optbtn.sel { background:linear-gradient(180deg,#8a2418,#591009); color:#ffe7c8; border-color:#caa34f; box-shadow:0 0 14px rgba(184,44,26,.5); }
+.optrow label { font-family:'Cinzel',Georgia,serif; min-width:84px; text-align:right; }
+/* war-themed longsword cursor on the title screen */
 #title, #title #startBtn, #title .civcard, #title .optbtn {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'%3E%3Cpath d='M4 26 L9 21' stroke='%238a6420' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M7 23 L23 7' stroke='%23cfd6dd' stroke-width='3.6'/%3E%3Cpath d='M21 4 L27 9 L23 8 Z' fill='%23eef'/%3E%3Cpath d='M18 6 L24 12' stroke='%238a6420' stroke-width='3'/%3E%3C/svg%3E") 24 6, pointer;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32'%3E%3Cpath d='M5 5 L8 6 L24 22 L22 24 L6 8 Z' fill='%23dfe6ee' stroke='%23778' stroke-width='0.6'/%3E%3Cpath d='M6.5 6.5 L21 21' stroke='%23ffffff' stroke-width='0.8' opacity='0.6'/%3E%3Cpath d='M19 25 L25 19 L28 22 L22 28 Z' fill='%23c9a23e' stroke='%238a6420' stroke-width='0.6'/%3E%3Cpath d='M24 24 L28.5 28.5' stroke='%235d4426' stroke-width='2.6' stroke-linecap='round'/%3E%3Ccircle cx='28.7' cy='28.7' r='1.9' fill='%23c9a23e'/%3E%3C/svg%3E") 5 5, pointer;
 }
 #startBtn {
-  margin:3.5vh 0 20px; padding:15px 64px; font-size:20px; font-weight:800; letter-spacing:.2em;
-  background:linear-gradient(180deg,#9a7228,#5d4314); color:#fff3d6; border:2px solid #c9a34f;
+  font-family:'Cinzel',Georgia,serif;
+  margin:3.5vh 0 20px; padding:15px 64px; font-size:21px; font-weight:700; letter-spacing:.22em;
+  background:linear-gradient(180deg,#a82c1e,#6e1410); color:#ffe9c4; border:2px solid #e8b552;
   border-radius:10px; cursor:pointer; text-transform:uppercase;
-  box-shadow:0 0 34px rgba(201,163,79,.35), inset 0 1px 0 rgba(255,255,255,.25);
+  box-shadow:0 0 38px rgba(184,40,24,.55), inset 0 1px 0 rgba(255,225,180,.3);
+  transition:transform .1s, box-shadow .2s;
 }
+#startBtn:hover { box-shadow:0 0 52px rgba(214,60,36,.7), inset 0 1px 0 rgba(255,225,180,.4); }
 #startBtn:active { transform:scale(.97); }
 #startBtn.dis { opacity:.45; pointer-events:none; }
 .soundhint { color:#6e5c3e; font-size:11px; margin-top:-8px; margin-bottom:12px; }

@@ -781,7 +781,11 @@ class Unit {
     // (but 'work' stays running so its swing loops continuously)
     if (this.anim !== prevAnim && this.anim !== 'work') this.animT = 0;
     // animation frames
-    if (this.anim === 'walk') this.frame = ((this.animT / 0.14) | 0) % 4;
+    if (this.anim === 'walk') {
+      // animals cycle their legs in step with how fast they move (deer skitter, sheep amble)
+      const cad = this.def.animal ? Math.max(0.07, 0.16 / Math.max(0.4, this.def.speed)) : 0.14;
+      this.frame = ((this.animT / cad) | 0) % 4;
+    }
     else if (this.anim === 'attack') this.frame = Math.min(2, (this.animT / 0.18) | 0);
     else if (this.anim === 'work') this.frame = ((this.animT / 0.2) | 0) % 3; // looping swing
     else this.frame = 0;

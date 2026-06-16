@@ -152,9 +152,10 @@ const Audio2 = (() => {
       if (bar % 4 === 3) { warDrum(t + B * 3, 0.9); tom(t + B * 3.25, 220, 0.4); }
       if (bar % 8 === 4) hornSwell(t, chord[0] * 2);
     } else {
-      // peace: soft drone, harp arpeggios, occasional flute phrase, gentle pulse
+      // peace: soft drone + harp, but with a low marching war-drum heartbeat under it
       droneChord(t, B * 4 + 0.1, [chord[0]]);
       if (bar % 2 === 1) choirPad(t, B * 4, chord[0]);
+      warDrum(t, 0.34); warDrum(t + B * 2, 0.24);           // martial pulse
       tom(t + B * 1, 110, 0.10); tom(t + B * 3, 95, 0.10);
       const root = chord[0] * 4;
       const seq = [0, 2, 4, 5, 3, 1];

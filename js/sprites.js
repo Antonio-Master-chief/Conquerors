@@ -587,10 +587,10 @@ const Sprites = (() => {
 
   /* ---- wild animals: side-view quadrupeds with a galloping gait (face left) ---- */
   const ANIMALS = {
-    deer:  { body: '#a07a4e', belly: '#caa676', dark: '#6e5028', leg: 2.4, bodyW: 14, bodyH: 7, headR: 4.2, neck: 13, tall: 1.6, legLen: 14, antlers: true, tail: 'flag' },
-    boar:  { body: '#52412f', belly: '#3a2c1e', dark: '#2a2016', leg: 3.2, bodyW: 17, bodyH: 9, headR: 6, neck: 7, tall: 0.2, legLen: 7, tusks: true, bristle: true, snout: 1, tail: 'curl' },
-    wolf:  { body: '#7a756e', belly: '#9a958c', dark: '#4e4a44', leg: 2.6, bodyW: 15, bodyH: 6.5, headR: 4.6, neck: 9, tall: 0.8, legLen: 11, ears: 'point', fangs: true, tail: 'bush' },
-    sheep: { body: '#e6e0d4', belly: '#f3eee4', dark: '#3a342c', leg: 2.6, bodyW: 13, bodyH: 8.5, headR: 4, neck: 5, tall: 0.5, legLen: 7, wool: true, tail: 'stub' },
+    deer:  { body: '#a07a4e', belly: '#caa676', dark: '#6e5028', leg: 2.4, bodyW: 14, bodyH: 7, headR: 4.2, neck: 13, tall: 1.6, legLen: 14, stride: 5.6, lift: 4.6, bob: 3.0, antlers: true, tail: 'flag' },
+    boar:  { body: '#52412f', belly: '#3a2c1e', dark: '#2a2016', leg: 3.2, bodyW: 17, bodyH: 9, headR: 6, neck: 7, tall: 0.2, legLen: 7, stride: 3.6, lift: 1.6, bob: 0.6, tusks: true, bristle: true, snout: 1, tail: 'curl' },
+    wolf:  { body: '#7a756e', belly: '#9a958c', dark: '#4e4a44', leg: 2.6, bodyW: 15, bodyH: 6.5, headR: 4.6, neck: 9, tall: 0.8, legLen: 11, stride: 5.0, lift: 3.0, bob: 1.4, ears: 'point', fangs: true, tail: 'bush' },
+    sheep: { body: '#e6e0d4', belly: '#f3eee4', dark: '#3a342c', leg: 2.6, bodyW: 13, bodyH: 8.5, headR: 4, neck: 5, tall: 0.5, legLen: 7, stride: 2.6, lift: 1.5, bob: 0.6, wool: true, tail: 'stub' },
   };
   function drawAnimal(g, type, anim, fr) {
     const A = ANIMALS[type] || ANIMALS.deer;
@@ -599,7 +599,8 @@ const Sprites = (() => {
     const lunge = anim === 'attack' ? (fr === 1 ? 5 : fr === 0 ? -1 : 2) : 0; // head thrust
     const moving = anim === 'walk';
     const legLen = A.legLen || 11;
-    const hipY = gy - legLen + Math.abs(gallop) * 1.5;     // shoulder/hip line (bobs while moving)
+    const STR = A.stride || 4.5, LFT = A.lift || 3.2, BOB = A.bob != null ? A.bob : 1.5; // per-species gait
+    const hipY = gy - legLen + Math.abs(gallop) * BOB;     // shoulder/hip line (bobs while moving)
     const by = hipY - A.bodyH * 0.35;                      // body center sits just above the hips
     g.fillStyle = 'rgba(0,0,0,.28)'; g.beginPath(); g.ellipse(cx2, gy + 1, A.bodyW + 1, 3.6, 0, 0, 7); g.fill();
     // ---- legs: a readable stepping gait — diagonal pairs swing forward & lift in turn ----
@@ -607,8 +608,8 @@ const Sprites = (() => {
     const legs = [[-A.bodyW * .60, 0.0], [-A.bodyW * .38, 0.5], [A.bodyW * .38, 0.0], [A.bodyW * .60, 0.5]];
     for (const [ox, off] of legs) {
       const cyc = moving ? (fr / 4 + off) * Math.PI * 2 : 0;
-      const swing = moving ? Math.sin(cyc) * 4.5 : ox * 0.12;       // fore-aft step (idle: slight splay)
-      const lift  = moving ? Math.max(0, Math.sin(cyc)) * 3.2 : 0;  // foot lifts as it swings forward
+      const swing = moving ? Math.sin(cyc) * STR : ox * 0.12;        // fore-aft step (idle: slight splay)
+      const lift  = moving ? Math.max(0, Math.sin(cyc)) * LFT : 0;   // foot lifts as it swings forward
       const footX = cx2 + ox + swing, footY = gy + 1 - lift;
       g.strokeStyle = ox < 0 ? A.body : A.dark;                     // front legs lighter, hind darker for depth
       g.beginPath(); g.moveTo(cx2 + ox * 0.6, hipY); g.lineTo(footX, footY); g.stroke();

@@ -82,7 +82,7 @@ const Title = (() => {
     if (saved) { const sh = root.querySelector('.soundhint'); if (sh) sh.textContent = '⚔ Battlefield ready — press TO WAR ⚔'; }
 
     // music on first interaction (browser autoplay rules)
-    const wake = () => { Audio2.startMusic(1.0); Audio2.setIntensity(0.85); root.removeEventListener('pointerdown', wake); };
+    const wake = () => { Audio2.setMood('battle'); Audio2.startMusic(1.0); Audio2.setIntensity(0.9); root.removeEventListener('pointerdown', wake); };
     root.addEventListener('pointerdown', wake);
 
     document.getElementById('startBtn').onclick = () => {

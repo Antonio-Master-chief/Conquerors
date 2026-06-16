@@ -340,7 +340,7 @@ const Input = (() => {
   }
 
   /* screen-space pick of a resource node / animal under the cursor (for info select) */
-  const SELECTABLE_RES = ['tree', 'gold', 'stone', 'iron', 'bush', 'fish', 'deer', 'boar'];
+  const SELECTABLE_RES = ['tree', 'gold', 'stone', 'iron', 'bush', 'fish', 'carcass'];
   function pickResource(px, py) {
     const z = game.cam.zoom;
     let best = null, bd = 1e9;

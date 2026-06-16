@@ -192,8 +192,8 @@ class AIController {
       else if (p.age >= 2 && !has('range') && p.canAfford(BUILDINGS.range.cost)) this.tryBuild('range', tc, builderFree);
       else if (p.age >= 2 && !has('university') && p.canAfford(BUILDINGS.university.cost)) this.tryBuild('university', tc, builderFree);
       else if (p.age >= 2 && this.cfg.techy && !has('grounds') && p.canAfford(BUILDINGS.grounds.cost)) this.tryBuild('grounds', tc, builderFree);
-      else if (p.age >= 2 && blds.filter(b => b.type === 'tower').length < 2 && p.res.stone >= 110 && this.defendPos)
-        this.tryBuild('tower', tc, builderFree);
+      else if (p.age >= 2 && blds.filter(b => b.type === 'tower').length < (p.age >= 3 ? 3 : 2) && p.res.stone >= 100)
+        this.tryBuild('tower', tc, builderFree);   // fortify the base proactively as it ages
       else if (!has('dock') && p.res.wood > 220 && p.canAfford(BUILDINGS.dock.cost))
         this.tryBuildDock(tc, builderFree);
     }
@@ -331,8 +331,10 @@ class AIController {
     }
     const army = armyAll.filter(u => !guards.has(u.id)); // field army only
 
-    // wave size can never exceed what population allows
-    const effWave = Math.max(4, Math.min(this.cfg.wave, p.popCap - settlerCount - 2 - guards.size));
+    // wave size grows over the match (the AI escalates its assaults) but never
+    // exceeds what population allows
+    const waveGrowth = Math.floor(g.time / 110);   // +1 attacker roughly every 2 minutes
+    const effWave = Math.max(4, Math.min(this.cfg.wave + waveGrowth, p.popCap - settlerCount - 2 - guards.size));
 
     // defense first
     if (g.time < this.defendUntil && this.defendPos) {
@@ -369,10 +371,12 @@ class AIController {
       return;
     }
 
-    // pick target: towns when we need pop/age, else enemy base
+    // pick target: towns when we need pop/age, else go for an enemy base. the
+    // longer the match runs, the more the AI turns its waves on the human player.
     const needTowns = (p.age < 4 && p.towns < (AGES[p.age].towns || 0)) || (p.popCap - p.pop < 5);
+    const townChance = Math.max(0.15, 0.5 - g.time / 700);   // eases off town-racing over time
     let target = null;
-    if (needTowns || Math.random() < 0.45) {
+    if (needTowns || Math.random() < townChance) {
       let bd = 1e9;
       for (const b of g.buildings) {
         if (b.dead || b.type !== 'town' || b.owner === this.pid) continue;
@@ -387,8 +391,10 @@ class AIController {
       let bd = 1e9;
       for (const b of g.buildings) {
         if (b.dead || b.owner === this.pid || b.owner === -1 || b.type === 'town' || b.type === 'farm') continue;
+        if (!this.reachable(tc, b)) continue;
         const d = dist2(tc.cx(), tc.cy(), b.cx(), b.cy());
-        if (d < bd) { bd = d; target = b; }
+        const bias = b.owner === g.humanId ? 0 : 1200;   // hunt the human's settlements first
+        if (d + bias < bd) { bd = d + bias; target = b; }
       }
     }
     if (target) {
