@@ -1,8 +1,14 @@
 /* ============ CONQUERORS — config & data ============ */
 'use strict';
 
+/* pre-game options chosen on the title screen, persisted across the fresh reload
+   that applies them (map size must be known before the world arrays allocate). */
+const BOOT = (() => { try { return JSON.parse(localStorage.getItem('conq_boot') || 'null'); } catch (e) { return null; } })();
+const MAP_SIZES = { small: 96, medium: 144, large: 192, huge: 240 };  // all divisible by CHUNK(12)
+window.GAME_OPTS = { res: (BOOT && BOOT.res) || 1, animals: (BOOT && BOOT.animals) || 1 };
+
 const CFG = {
-  MAP: 96,                 // map is MAP x MAP tiles
+  MAP: (BOOT && MAP_SIZES[BOOT.map]) || 96,    // map is MAP x MAP tiles (title-selectable)
   TILE_W: 64, TILE_H: 32,  // iso tile screen size at zoom 1
   CHUNK: 12,               // tiles per terrain cache chunk
   START_POP: 18,
@@ -19,7 +25,9 @@ const CFG = {
   CART_FLUSH: 8,           // ...or after this many idle seconds, haul the remainder
   RAIN_EVERY: 150,         // seconds between rain events
   RAIN_DUR: 45,            // how long a rain cloud lingers
-  LAKE_PER_TILE: 120,      // freshwater reserve per lake tile (depleted by farms)
+  LAKE_PER_TILE: 90,       // freshwater reserve per lake tile (depleted by active farming)
+  WATER_PER_FOOD: 14,      // lake water drawn per unit of food a farm yields
+  MEAT_CURE_RATE: 12,      // food/sec a hauled carcass cures into at the dropoff
   TERRITORY: 12,           // kingdom border radius around TCs & owned towns
   SIEGE_R: 10,             // enemy presence radius that blockades a settlement
   SIEGE_MEN: 5,            // enemies needed to enforce a siege
@@ -72,7 +80,8 @@ const CIVS = {
    speed tiles/sec. bonusVs: extra dmg multiplier vs tags. */
 const UNITS = {
   settler:  { name:'Settler',   hp:35,  atk:3,  range:1,   speed:0.95, cd:1.5, armor:0, los:5,
-              cost:{food:50}, pop:1, time:18, age:1, tags:['civilian'], civilian:true },
+              cost:{food:50}, pop:1, time:18, age:1, tags:['civilian'], civilian:true,
+              bonusVs:{ animal:5 } },   // hunters hit game hard (but stay weak vs real troops)
   scout:    { name:'Scout',     hp:48,  atk:4,  range:1,   speed:1.75, cd:1.5, armor:0, los:9,
               cost:{food:70},  pop:1, time:16, age:1, tags:['cavalry'] },
   spearman: { name:'Spearman',  hp:58,  atk:7,  range:1,   speed:0.95, cd:1.4, armor:0, los:6,
@@ -105,9 +114,15 @@ const UNITS = {
   deer:     { name:'Deer',      hp:45,  atk:0,  range:1,   speed:0.8,  cd:2,   armor:0, los:8,
               cost:{}, pop:0, time:0, age:1, tags:['animal'], civilian:true, npc:true,
               animal:true, flee:true, meat:160, big:true },
-  boar:     { name:'Wild Boar', hp:160, atk:12, range:1,   speed:1.15, cd:1.3, armor:1, los:6,
+  boar:     { name:'Wild Boar', hp:120, atk:7,  range:1,   speed:1.15, cd:1.4, armor:1, los:6,
               cost:{}, pop:0, time:0, age:1, tags:['animal'], npc:true,
               animal:true, retaliate:true, meat:360, big:true },
+  wolf:     { name:'Wolf',      hp:70,  atk:9,  range:1,   speed:1.3,  cd:1.4, armor:0, los:8,
+              cost:{}, pop:0, time:0, age:1, tags:['animal'], npc:true,
+              animal:true, retaliate:true, aggressive:true, meat:80, big:true },
+  sheep:    { name:'Sheep',     hp:30,  atk:0,  range:1,   speed:0.65, cd:2,   armor:0, los:5,
+              cost:{}, pop:0, time:0, age:1, tags:['animal'], civilian:true, npc:true,
+              animal:true, meat:130, big:true },
   /* ---- ships (Phase 2: naval) ---- */
   fishboat: { name:'Fishing Boat', hp:45, atk:0, range:1, speed:1.15, cd:2, armor:0, los:6,
               cost:{wood:40}, pop:1, time:18, age:1, tags:['ship','civilian'], civilian:true,

@@ -117,8 +117,10 @@ const World = (() => {
     /* objects */
     W.objects = []; W.objGrid.fill(0); W.sightBlock.fill(0);
     const free = (x, y) => inB(x, y) && !W.blocked[idx(x, y)] && !W.objGrid[idx(x, y)] && W.ter[idx(x, y)] >= TERRAIN.SAND;
+    const resMult = (window.GAME_OPTS && window.GAME_OPTS.res) || 1;   // Low/Normal/High resources
     function addObj(kind, x, y, amount) {
       if (!free(x, y)) return false;
+      amount = Math.max(1, Math.round(amount * resMult));
       const o = { id: W.objects.length, kind, x, y, amount, variant: (x * 7 + y * 13) % 4, alive: true };
       W.objects.push(o);
       W.objGrid[idx(x, y)] = o.id + 1;
@@ -303,6 +305,11 @@ const World = (() => {
       for (let r = 1; r < W.regionSizes.length; r++) {
         if (!regionSalt[r]) { W.lakeMax[r] = W.regionSizes[r] * CFG.LAKE_PER_TILE; W.lakeWater[r] = W.lakeMax[r]; }
       }
+      // map each fresh lake to the chunks it touches, so a drained bed can re-bake
+      W.regionEmpty = new Uint8Array(W.regionSizes.length);
+      W.regionChunks = []; for (let r = 0; r < W.regionSizes.length; r++) W.regionChunks[r] = new Set();
+      for (let i = 0; i < N * N; i++) { const r = W.waterRegion[i];
+        if (r && !regionSalt[r]) { const x = i % N, y = (i / N) | 0; W.regionChunks[r].add(((y / CH) | 0) * NCH + ((x / CH) | 0)); } }
     }
     classifyWater();
     const openWater = (x, y) => W.regionSizes[W.waterRegion[idx(x, y)]] >= 60;
@@ -439,11 +446,25 @@ const World = (() => {
     cv.width = CH * 64; cv.height = CH * 32 + 16;
     const g = cv.getContext('2d');
     for (let y = y0; y < y0 + CH; y++) for (let x = x0; x < x0 + CH; x++) {
-      const t = W.ter[idx(x, y)];
-      g.drawImage(Sprites.tile(t, (x * 31 + y * 17 + ((x * x + y) >> 2)) % 6), isoX(x, y) - 32 - ox, isoY(x, y) - oy);
+      const i = idx(x, y), t = W.ter[i];
+      const fresh = t <= TERRAIN.SHALLOW && W.salt[i] === 0;
+      const dried = fresh && W.lakeWater && W.lakeWater[W.waterRegion[i]] <= 0;
+      const tx2 = isoX(x, y) - ox, ty2 = isoY(x, y) - oy;
+      if (dried) {
+        // an emptied lakebed: cracked brown mud, no water
+        g.drawImage(Sprites.tile(TERRAIN.SAND, (x * 31 + y * 17) % 6), tx2 - 32, ty2);
+        const mud = g.createLinearGradient(tx2, ty2, tx2, ty2 + 32);
+        mud.addColorStop(0, 'rgba(96,76,48,.78)'); mud.addColorStop(1, 'rgba(70,54,33,.82)');
+        g.fillStyle = mud; g.beginPath();
+        g.moveTo(tx2, ty2); g.lineTo(tx2 + 32, ty2 + 16); g.lineTo(tx2, ty2 + 32); g.lineTo(tx2 - 32, ty2 + 16); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(45,33,18,.55)'; g.lineWidth = 1; // dried cracks
+        for (let k = 0; k < 3; k++) { const a = (x * 7 + y * 13 + k * 5) % 6;
+          g.beginPath(); g.moveTo(tx2 - 14 + a * 5, ty2 + 8 + k * 6); g.lineTo(tx2 - 4 + a * 4, ty2 + 14 + k * 5); g.stroke(); }
+        continue;
+      }
+      g.drawImage(Sprites.tile(t, (x * 31 + y * 17 + ((x * x + y) >> 2)) % 6), tx2 - 32, ty2);
       // freshwater lakes get a green-teal wash so they read differently from the sea
-      if (t <= TERRAIN.SHALLOW && W.salt[idx(x, y)] === 0) {
-        const tx2 = isoX(x, y) - ox, ty2 = isoY(x, y) - oy;
+      if (fresh) {
         g.fillStyle = t === TERRAIN.DEEP ? 'rgba(60,150,110,.32)' : 'rgba(90,180,140,.30)';
         g.beginPath();
         g.moveTo(tx2, ty2); g.lineTo(tx2 + 32, ty2 + 16); g.lineTo(tx2, ty2 + 32); g.lineTo(tx2 - 32, ty2 + 16);
@@ -473,6 +494,7 @@ const World = (() => {
     const land = (xx, yy) => inB(xx, yy) && W.ter[idx(xx, yy)] >= TERRAIN.SAND;
     for (let y = y0; y < y0 + CH; y++) for (let x = x0; x < x0 + CH; x++) {
       if (W.ter[idx(x, y)] !== TERRAIN.SHALLOW) continue;
+      if (W.salt[idx(x, y)] === 0 && W.lakeWater && W.lakeWater[W.waterRegion[idx(x, y)]] <= 0) continue; // dried bed: no foam
       const tx = isoX(x, y) - ox, ty = isoY(x, y) - oy; // diamond top corner
       const edges = [];
       if (land(x + 1, y)) edges.push([[tx + 32, ty + 16], [tx, ty + 32]]); // SE
@@ -636,7 +658,22 @@ const World = (() => {
     }
   }
 
+  // when a lake empties (or rain refills it), re-bake its chunks so the bed
+  // switches between water and cracked-mud drought.
+  function refreshLakeChunks() {
+    if (!W.regionEmpty) return;
+    for (let r = 1; r < W.lakeWater.length; r++) {
+      if (W.lakeMax[r] <= 0) continue;                 // sea / not a fresh lake
+      const empty = W.lakeWater[r] <= 0 ? 1 : 0;
+      if (empty !== W.regionEmpty[r]) {
+        W.regionEmpty[r] = empty;
+        for (const ci of W.regionChunks[r]) W.chunks[ci] = null;
+      }
+    }
+  }
+
   return { W, gen, idx, inB, isoX, isoY, objAt, nearestObj, removeObj,
            drawTerrain, drawFog, recomputeFog, visAt, terAt, explore,
-           isSea, isFresh, lakeHasWater, drainLake, lakeFrac, rainRefill, N };
+           isSea, isFresh, lakeHasWater, drainLake, lakeFrac, rainRefill, refreshLakeChunks, N };
 })();
+try { window.World = World; } catch (e) {}   // expose for hosts that don't share script-scope bindings

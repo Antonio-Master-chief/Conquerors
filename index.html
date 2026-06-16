@@ -6,8 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0d0a07">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>CONQUERORS</title>
-<link rel="stylesheet" href="css/style.css">
+<script>document.write('<link rel="stylesheet" href="css/style.css?v=' + Date.now() + '">');</script>
 </head>
 <body>
   <!-- Game canvas -->
@@ -27,17 +30,18 @@
   <!-- Title screen (built by title.js) -->
   <div id="title"></div>
 
-  <script src="js/config.js"></script>
-  <script src="js/sprites.js"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/path.js"></script>
-  <script src="js/map.js"></script>
-  <script src="js/players.js"></script>
-  <script src="js/entities.js"></script>
-  <script src="js/ai.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/input.js"></script>
-  <script src="js/title.js"></script>
-  <script src="js/main.js"></script>
+  <!-- Bulletproof cache-busting: a fresh version token every load means the
+       browser can NEVER serve stale game code. document.write executes these
+       strictly in order during parse (reliable, unlike dynamic async=false). -->
+  <script>
+  (function () {
+    var V = Date.now();
+    var files = ['config', 'sprites', 'audio', 'path', 'map', 'players',
+                 'entities', 'ai', 'ui', 'input', 'title', 'main'];
+    for (var i = 0; i < files.length; i++) {
+      document.write('<script src="js/' + files[i] + '.js?v=' + V + '"><\/script>');
+    }
+  })();
+  </script>
 </body>
 </html>

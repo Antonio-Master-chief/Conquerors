@@ -204,15 +204,23 @@ function setupMatch(game, civKey, diff) {
                                  game.world.towns.every(t => dist(x, y, t.x, t.y) > 7);
   const freeGrass = (x, y) => World.inB(x, y) && game.world.ter[World.idx(x, y)] === TERRAIN.GRASS &&
                               !game.world.blocked[World.idx(x, y)] && !game.world.objGrid[World.idx(x, y)];
-  let herds = 0, boars = 0;
-  for (let tries = 0; tries < 800 && (herds < 7 || boars < 5); tries++) {
+  const am = (window.GAME_OPTS && window.GAME_OPTS.animals) || 1; // Few/Normal/Many wildlife
+  const want = { deer: Math.max(1, Math.round(6 * am)), sheep: Math.max(1, Math.round(4 * am)),
+                 boar: Math.max(1, Math.round(4 * am)), wolf: Math.max(1, Math.round(3 * am)) };
+  const have = { deer: 0, sheep: 0, boar: 0, wolf: 0 };
+  for (let tries = 0; tries < 1600 && Object.keys(want).some(k => have[k] < want[k]); tries++) {
     const x = 6 + (Math.random() * (World.N - 12)) | 0, y = 6 + (Math.random() * (World.N - 12)) | 0;
     if (!freeGrass(x, y) || !farFromBases(x, y)) continue;
-    if (herds < 7) { // a herd of 3-4 deer
-      const n = 3 + (Math.random() * 2 | 0);
-      for (let i = 0; i < n; i++) Sim.spawnUnit(game, -1, 'deer', x + .5 + (Math.random() * 3 - 1.5), y + .5 + (Math.random() * 3 - 1.5), 'none');
-      herds++;
-    } else { Sim.spawnUnit(game, -1, 'boar', x + .5, y + .5, 'none'); boars++; }
+    let kind = null;
+    if (have.deer < want.deer) kind = 'deer';
+    else if (have.sheep < want.sheep) kind = 'sheep';
+    else if (have.boar < want.boar) kind = 'boar';
+    else if (have.wolf < want.wolf) kind = 'wolf';
+    if (!kind) break;
+    const n = kind === 'deer' ? 3 + (Math.random() * 2 | 0) : kind === 'sheep' ? 3 : kind === 'wolf' ? 2 : 1;
+    for (let i = 0; i < n; i++)
+      Sim.spawnUnit(game, -1, kind, x + .5 + (Math.random() * 3 - 1.5), y + .5 + (Math.random() * 3 - 1.5), 'none');
+    have[kind]++;
   }
 
   game.ai = [new AIController(game, 1), new AIController(game, 2)];
@@ -359,7 +367,7 @@ function render(game) {
   const syMin = view.top - margin, syMax = view.top + cv.height / z + margin;
   const draws = [];
   for (const o of game.world.objects) {
-    if (!o.alive) continue;
+    if (!o.alive || o.carried) continue;   // carried kills are drawn on the carriers' pole
     const v = World.visAt(o.x, o.y);
     if (v === 0) continue;
     const ix = World.isoX(o.x + .5, o.y + .5), iy = World.isoY(o.x + .5, o.y + .5);
@@ -394,13 +402,33 @@ function render(game) {
       ctx.globalAlpha = 1;
     } else if (d.bld) {
       const b = d.bld;
-      const pos = b.drawSprite(ctx, view);
+      const pos = b.drawSprite(ctx, view, game);
       drawHpBar(ctx, game, b, pos.ix, pos.iy - (b.size * 26 + 26) * z, z, b.size * 40);
     } else {
       const u = d.unit;
       const pos = u.drawSprite(ctx, view);
       drawHpBar(ctx, game, u, pos.ix, pos.iy - (u.def.big ? 58 : 42) * z, z, 26);
     }
+  }
+
+  // hauled kills: a pole on the carriers' shoulders with the carcass slung beneath
+  if (game.carcasses) for (const c of game.carcasses) {
+    if (!c.team || c.team.length < 2) continue;
+    const a = c.team[0], b = c.team[1];
+    if (!a || !b || a.dead || b.dead) continue;
+    const ax = (World.isoX(a.x, a.y) - view.left) * z, ay = (World.isoY(a.x, a.y) - view.top) * z;
+    const bx = (World.isoX(b.x, b.y) - view.left) * z, by = (World.isoY(b.x, b.y) - view.top) * z;
+    const sh = 22 * z;
+    const x1 = ax, y1 = ay - sh, x2 = bx, y2 = by - sh, mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    ctx.strokeStyle = '#7d5a2e'; ctx.lineWidth = 2.4 * z; ctx.lineCap = 'round';   // pole
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(40,28,18,.85)'; ctx.lineWidth = 1.3 * z;               // rope
+    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx, my + 5 * z); ctx.stroke();
+    ctx.fillStyle = '#7a3a1a'; ctx.strokeStyle = 'rgba(20,12,6,.5)'; ctx.lineWidth = 1;  // carcass
+    ctx.beginPath(); ctx.ellipse(mx, my + 10 * z, 9 * z, 5 * z, 0, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#5b2310';                                                     // dangling legs
+    ctx.strokeStyle = '#5b2310'; ctx.lineWidth = 1.6 * z;
+    for (const lx of [-5, -2, 2, 5]) { ctx.beginPath(); ctx.moveTo(mx + lx * z, my + 13 * z); ctx.lineTo(mx + lx * z, my + 17 * z); ctx.stroke(); }
   }
 
   // projectiles
@@ -509,8 +537,8 @@ function simStep(game, dt) {
   for (const b of game.buildings) b.update(game, dt);
   Sim.updateProjectiles(game, dt);
   Sim.updateParticles(game, dt);
-  if (game.carcasses && game.carcasses.length) { // fade out hunted carcasses
-    for (const c of game.carcasses) { c.fade -= dt; if (c.fade <= 0 && c.alive) World.removeObj(c); }
+  if (game.carcasses && game.carcasses.length) { // fade out hunted carcasses (not ones being hauled)
+    for (const c of game.carcasses) { if (c.team) continue; c.fade -= dt; if (c.fade <= 0 && c.alive) World.removeObj(c); }
     game.carcasses = game.carcasses.filter(c => c.alive);
   }
   for (const p of game.players) p.tickResearch(dt, game);
@@ -529,7 +557,7 @@ function simStep(game, dt) {
       if (Math.random() < 0.4 && World.visAt(ps.x, ps.y) === 2) Sim.puff(game, ps.x, ps.y, '#5fae3f', 2);
     }
   }
-  if ((irrT += dt) > 2) { irrT = 0; Sim.recomputeIrrigation(game); }
+  if ((irrT += dt) > 2) { irrT = 0; Sim.recomputeIrrigation(game); World.refreshLakeChunks(); }
   if ((smokeT += dt) > 0.5) { // chimney smoke from visible settlements
     smokeT = 0;
     for (const b of game.buildings) {
@@ -598,4 +626,4 @@ window.startGame = function (civKey, diff) {
   requestAnimationFrame(loop);
 };
 
-Title.build();
+Title.build();   // the title pre-selects any options carried across a map-size reload

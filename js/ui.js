@@ -174,9 +174,12 @@ const UI = (() => {
           const u = one;
           const hb = el('div', 'hpbar', c); el('div', '', hb).style.width = `${u.hp / u.maxHp * 100}%`;
           let sub = `ATK ${Math.round(u.effAtk(game))} · DEF ${u.effArmor(game)}${u.rank ? ' · ' + ['', 'Trained', 'Veteran', 'Elite'][u.rank] : ''}`;
-          if (u.def.animal) sub = u.def.retaliate
-            ? `🐗 ${u.def.meat} food when hunted — dangerous, fights back!`
-            : `🦌 ${u.def.meat} food when hunted — fast meat, right-click to hunt`;
+          if (u.def.animal) {
+            const icon = { deer: '🦌', boar: '🐗', wolf: '🐺', sheep: '🐑' }[u.type] || '🦌';
+            sub = u.def.aggressive ? `${icon} Predator — hunts your settlers! ${u.def.meat} food if killed`
+                : u.def.retaliate ? `${icon} ${u.def.meat} food — dangerous, fights back when hunted`
+                : `${icon} ${u.def.meat} food — easy meat, right-click to hunt`;
+          }
           if (u.carry && u.carry.amt > 0) sub = `Carrying ${u.carry.amt} ${u.carry.res} — returning to drop off`;
           if (u.cargo) sub = `⚓ Troops aboard: ${u.cargo.reduce((s, c2) => s + c2.def.pop, 0)}/${u.def.capacity} — tap a shore to land`;
           if (u.def.suicide) sub = '🔥 Rams and burns enemy ships — single use!';

@@ -1,7 +1,7 @@
 /* ============ CONQUERORS — units, buildings, combat, capture ============ */
 'use strict';
 
-const GATHER_RATE = { bush: 0.55, farm: 0.42, tree: 0.50, gold: 0.45, stone: 0.42, iron: 0.40, fish: 0.65, carcass: 0.9 };
+const GATHER_RATE = { bush: 0.55, farm: 0.42, tree: 0.50, gold: 0.45, stone: 0.42, iron: 0.40, fish: 0.65, carcass: 28 };
 const OBJ_RES = { bush: 'food', farm: 'food', tree: 'wood', gold: 'gold', stone: 'stone', iron: 'iron', fish: 'food', carcass: 'food' };
 let NEXT_ID = 1;
 
@@ -35,6 +35,7 @@ class Unit {
     this.buildQueue = [];          // queued construction sites
     this.flashUntil = 0;           // hit flash timestamp (ms)
     this.workObj = null;           // remembered gather target (resume after deposit/flee)
+    this.gatherKind = null;        // resource kind being harvested (seek next node when one runs dry)
     this.hungerT = -99;            // siege starvation
     this.poisonT = -99;            // poisoned water
     this.starveT = -99;            // prolonged siege: hp decay
@@ -60,7 +61,9 @@ class Unit {
       const k = node.kind === 'bld' ? 'farm' : node.kind;
       if (k === 'tree') return 'axe';
       if (k === 'gold' || k === 'stone' || k === 'iron') return 'pick';
-      if (k === 'bush' || k === 'farm' || k === 'carcass') return 'forage';
+      if (k === 'farm') return 'hoe';                       // tilling a crop field
+      if (k === 'carcass') return 'knife';                  // butchering a kill
+      if (k === 'bush') return 'forage';                    // hand-picking berries
     }
     return null; // idle / marching: bare hands
   }
@@ -123,8 +126,8 @@ class Unit {
   /* ---- orders (repathT reset = commands respond INSTANTLY) ---- */
   clearOrder() { this.order = null; this.path = null; this.state = 'idle'; }
   resetQueue() { if (this.buildQueue) this.buildQueue.length = 0; }
-  orderMove(x, y) { this.resetQueue(); this.workObj = null; this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; }
-  orderAttack(t) { this.resetQueue(); this.workObj = null; this.order = { kind: 'attack', target: t }; this.path = null; this.repathT = 0; this.state = 'attack'; }
+  orderMove(x, y) { this.resetQueue(); this.workObj = null; this.gatherKind = null; this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; }
+  orderAttack(t) { this.resetQueue(); this.workObj = null; this.gatherKind = null; this.order = { kind: 'attack', target: t }; this.path = null; this.repathT = 0; this.state = 'attack'; }
   orderGarrison(b) { // ranged units man the walls
     if (!this.def.tags.includes('ranged') || this.def.naval) return;
     this.order = { kind: 'garrison', target: b }; this.path = null; this.repathT = 0; this.state = 'move';
@@ -135,6 +138,9 @@ class Unit {
     if (!canGather) return this.orderMove(obj.x + .5, obj.y + .5);
     this.order = { kind: 'gather', obj }; this.path = null; this.repathT = 0; this.state = 'gather';
     this.workObj = obj; // remember it so we resume after depositing / fleeing
+    // remember WHAT we're harvesting (tree/bush/gold/…) so we can seek the next
+    // node of the same kind when this one runs dry — survives order recreation.
+    if (obj.kind && obj.kind !== 'bld') this.gatherKind = obj.kind;
   }
   orderBoard(t) {
     if (this.def.naval || this.def.npc) return;
@@ -150,7 +156,7 @@ class Unit {
   }
   orderBuild(b) {
     if (this.type !== 'settler') return;
-    this.workObj = null;
+    this.workObj = null; this.gatherKind = null;
     this.order = { kind: 'build', target: b }; this.path = null; this.repathT = 0; this.state = 'build';
   }
   orderBuildQueued(b) { // queue construction like AoE villagers
@@ -159,6 +165,74 @@ class Unit {
     else this.orderBuild(b);
   }
   orderDeposit(game) { this.order = { kind: 'deposit', resume: this.order && this.order.kind === 'gather' ? this.order.obj : null }; this.path = null; }
+
+  /* nearest harvestable node of `kind` (≠ exclude) that has a free approach tile and
+     isn't already crowded — used to redistribute workers off a contested tree/mine */
+  findReachableNode(game, kind, exclude) {
+    // how many of my settlers are already assigned to each node (true occupancy)
+    const occ = new Map();
+    for (const u of game.units) {
+      if (u === this || u.dead || u.type !== 'settler' || u.owner !== this.owner) continue;
+      const t = (u.order && u.order.kind === 'gather') ? u.order.obj : null;
+      if (t) occ.set(t, (occ.get(t) || 0) + 1);
+    }
+    let best = null, bd = 1e9;
+    for (const o of game.world.objects) {
+      if (!o.alive || o.kind !== kind || o === exclude) continue;
+      const d = dist2(this.x, this.y, o.x, o.y);
+      if (d > 30 * 30 || d >= bd) continue;
+      if ((occ.get(o) || 0) >= 2) continue;               // already has its 2 workers
+      let open = false;                                    // a walkable neighbour = reachable
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = o.x + dx, y = o.y + dy;
+        if (World.inB(x, y) && !game.world.blocked[World.idx(x, y)]) { open = true; break; }
+      }
+      if (open) { bd = d; best = o; }
+    }
+    return best;
+  }
+
+  /* ---- hunting: butcher a kill, then two settlers haul it home on a pole ---- */
+  butcherCarcass(game, carc, dt) {
+    if (carc.team) { this.clearOrder(); return; }   // already hoisted by a crew
+    this.anim = 'work'; this.huntMelee = true;       // bend over the kill with a knife
+    const crew = [];
+    for (const u of game.queryUnits(carc.x + .5, carc.y + .5, 1.7)) {
+      if (u.type === 'settler' && u.owner === this.owner && !u.dead &&
+          u.order && u.order.kind === 'gather' && u.order.obj === carc &&
+          dist(u.x, u.y, carc.x + .5, carc.y + .5) < 1.6) crew.push(u);
+    }
+    if (crew.length >= 2) {
+      this.loneWaitT = 0;
+      carc.butcherT = (carc.butcherT || 0) + dt;     // both add dt → ready in ~1.5s of teamwork
+      if (carc.butcherT > 3) {
+        const a = crew[0], b = crew[1];
+        carc.team = [a, b]; carc.dest = game.findDropoff(a.owner, carc.x, carc.y); carc.carried = true;
+        a.order = { kind: 'haulkill', carc, role: 'front' }; a.state = 'haul'; a.path = null; a.huntMelee = false;
+        b.order = { kind: 'haulkill', carc, role: 'back' };  b.state = 'haul'; b.path = null; b.huntMelee = false;
+        if (a.owner === game.humanId) Audio2.sfx('click');
+      }
+    } else {                                          // a lone settler can't lift a kill
+      carc.butcherT = 0;
+      this.loneWaitT = (this.loneWaitT || 0) + dt;
+      if (this.loneWaitT > 12) {
+        this.loneWaitT = 0;
+        if (this.owner === game.humanId && game.time - (game.killMsgT || -99) > 15) {
+          game.killMsgT = game.time; game.message('A kill needs 2 settlers to carry it home.', true);
+        }
+        this.workObj = null; this.gatherKind = null;   // stop looping on a kill we can't lift alone
+        this.clearOrder();
+      }
+    }
+  }
+
+  deliverKill(game, carc, d) {
+    const pl = game.players[this.owner];
+    if (pl) pl.meatCuring = (pl.meatCuring || 0) + (carc.amount || 0);
+    if (this.owner === game.humanId) { game.message(`Kill hauled in — ${carc.amount} food curing…`); Audio2.sfx('capture'); }
+    for (const u of (carc.team || [])) if (u && !u.dead) { u.order = null; u.state = 'idle'; u.path = null; }
+    carc.team = null; carc.carried = false; carc.alive = false; World.removeObj(carc);
+  }
 
   /* ---- pathing ---- */
   ensurePath(game, tx, ty) {
@@ -354,33 +428,54 @@ class Unit {
           const isFarm = obj && obj.kind === 'bld';   // farm building vs world resource node
           const gone = !obj || (isFarm ? (obj.dead || !obj.built) : !obj.alive);
           if (gone) {
-            // find another nearby node of same resource
-            const nk = o.lastKind;
-            const nxt = nk ? World.nearestObj(nk, this.x, this.y, 12) : null;
-            if (nxt) { o.obj = nxt; break; }
+            // node ran dry: roam to the next node of the same resource and keep
+            // working (villagers never just stop while the resource still exists).
+            const nk = o.lastKind || this.gatherKind;
+            const nxt = nk ? World.nearestObj(nk, this.x, this.y, 60) : null;
+            if (nxt) { o.obj = nxt; o.lastKind = nk; this.workObj = nxt; break; }
             this.clearOrder(); break;
           }
           if (!isFarm) o.lastKind = obj.kind;
-          const cap = this.def.carry || CFG.CARRY;
+          const carcass = !isFarm && obj.kind === 'carcass';
+          const cap = carcass ? 200 : (this.def.carry || CFG.CARRY);   // haul a whole carcass at once
           if (this.carry && this.carry.amt >= cap) { this.orderDeposit(game); this.order.resume = obj; break; }
-          const ox = isFarm ? obj.cx() : obj.x + .5;
-          const oy = isFarm ? obj.cy() : obj.y + .5;
-          const adj = isFarm ? this.distTo(obj) < 0.7
-                    : dist(this.x, this.y, ox, oy) < (this.def.naval ? 1.7 : 1.45);
+          let ox, oy, adj;
+          if (isFarm) {
+            // up to 4 farmers work one field from its four edges — no clumping
+            const half = obj.size / 2 + 0.45, slot = this.id % 4;
+            const so = [[0, -half], [half, 0], [0, half], [-half, 0]][slot];
+            ox = obj.cx() + so[0]; oy = obj.cy() + so[1];
+            adj = dist(this.x, this.y, ox, oy) < 0.55;
+          } else {
+            ox = obj.x + .5; oy = obj.y + .5;
+            adj = dist(this.x, this.y, ox, oy) < (this.def.naval ? 1.7 : 1.45);
+          }
           if (adj) {
-            this.path = null;
-            this.setDir(ox - this.x || .01, oy - this.y);
+            this.path = null; this.gStuckT = 0;
+            this.setDir((isFarm ? obj.cx() : ox) - this.x || .01, (isFarm ? obj.cy() : oy) - this.y);
+            if (carcass) { this.butcherCarcass(game, obj, dt); break; }   // 2 settlers: butcher → pole-carry
             if (isFarm && !obj.irrigated) {
-              // no water supply: crops won't grow
+              // no water supply: crops won't grow. wait briefly for rain, then go
+              // find other work rather than idle forever on a dead field.
               this.anim = 'idle';
+              this.dryWaitT = (this.dryWaitT || 0) + dt;
               if (this.owner === game.humanId && game.time - (game.dryMsgT || -99) > 12) {
                 game.dryMsgT = game.time;
                 game.message('A farm has no water! Build it near water or connect a Canal.', true);
                 Audio2.say('Our farms need water, build canals from a lake.');
               }
+              if (this.dryWaitT > 6) {
+                this.dryWaitT = 0;
+                const alt = game.buildings.find(b => !b.dead && b.type === 'farm' && b.built && b.irrigated && b.owner === this.owner && b !== obj);
+                if (alt) { this.orderGather(alt); break; }
+                const bush = World.nearestObj('bush', this.x, this.y, 50);
+                if (bush) { this.orderGather(bush); break; }
+                this.clearOrder();                 // nothing else to do — release the farmer
+              }
               break;
             }
-            this.anim = 'work'; // looping chop/mine swing
+            this.dryWaitT = 0;
+            this.anim = 'work'; // hoe / chop / mine / butcher — the tool picks the look
             const gk = isFarm ? 'farm' : obj.kind;
             const pl = game.players[this.owner];
             const rate = GATHER_RATE[gk] * pl.bonus.gather *
@@ -391,15 +486,55 @@ class Unit {
               const res = OBJ_RES[gk];
               if (!this.carry || this.carry.res !== res) this.carry = { res, amt: 0 };
               this.carry.amt += take;
-              if (!isFarm) {
+              if (carcass) this.carry.cure = true;        // banked over time at the dropoff, not instantly
+              if (isFarm) {
+                // a worked field drinks from its lake — more farmers => faster drain
+                if (obj.waterSrc) World.drainLake(obj.waterSrc[0], obj.waterSrc[1], take * (CFG.WATER_PER_FOOD || 18));
+              } else {
                 obj.amount -= take;
                 if (Math.random() < .3 && this.owner === game.humanId) Audio2.sfx('chop');
                 if (obj.amount <= 0) { World.removeObj(obj); }
               }
             }
           } else {
+            const px = this.x, py = this.y;
             if (this.ensurePath(game, ox, oy)) this.moveAlong(game, dt);
-            else if (!this.path) this.clearOrder();
+            const moved = (this.x - px) ** 2 + (this.y - py) ** 2 > 0.0004;
+            if (moved) { this.gStuckT = 0; }             // still advancing toward the node — fine
+            else {
+              // not advancing: the node's spots are taken / blocked by the forest.
+              this.gStuckT = (this.gStuckT || 0) + dt;
+              if (this.gStuckT > 2) {
+                this.gStuckT = 0;
+                const alt = isFarm ? null : this.findReachableNode(game, obj.kind, obj);
+                if (alt) { o.obj = alt; o.lastKind = obj.kind; this.workObj = alt; this.path = null; this.repathT = 0; }
+                else this.clearOrder();   // nothing reachable — release (auto-behaviour retries)
+              }
+            }
+          }
+          break;
+        }
+        case 'haulkill': {   // two settlers carry a kill slung on a pole to the dropoff
+          const carc = o.carc;
+          if (!carc || !carc.team || carc.team.indexOf(this) < 0) { this.clearOrder(); break; }
+          if (o.role === 'front') {
+            this.anim = 'walk';
+            let d = carc.dest;
+            if (!d || d.dead) d = carc.dest = game.findDropoff(this.owner, this.x, this.y);
+            if (!d) { this.deliverKill(game, carc, null); break; }
+            if (this.distTo(d) < 1.5) { this.deliverKill(game, carc, d); break; }
+            const px = this.x, py = this.y;
+            if (this.ensurePath(game, d.cx(), d.cy())) this.moveAlong(game, dt);
+            else if (!this.path) { this.deliverKill(game, carc, d); break; }  // unreachable: deliver anyway
+            const mx = this.x - px, my = this.y - py, ml = Math.hypot(mx, my);
+            if (ml > 0.002) { carc.dirX = mx / ml; carc.dirY = my / ml; }      // remember heading for the pole
+            carc.x = this.x | 0; carc.y = this.y | 0;
+          } else {
+            const front = carc.team[0];
+            if (!front || front.dead) { this.clearOrder(); break; }
+            const dx = carc.dirX != null ? carc.dirX : -1, dy = carc.dirY != null ? carc.dirY : 0;
+            this.x = front.x - dx * 1.15; this.y = front.y - dy * 1.15;        // trail behind, pole taut
+            this.dir = front.dir; this.anim = 'walk';
           }
           break;
         }
@@ -409,8 +544,13 @@ class Unit {
           if (!d) { this.clearOrder(); break; } // no dropoff at all: idle, retried by auto-behavior
           if (this.distTo(d) < (this.def.naval ? 1.6 : 1.3)) { // forgiving so big TCs always accept
             const pl = game.players[this.owner];
-            pl.res[this.carry.res] += this.carry.amt;      // usable immediately
-            if (d.store) d.store[this.carry.res] += this.carry.amt; // also held here, awaiting a cart
+            if (this.carry.cure) {                          // a carcass: cures into food over ~30s
+              pl.meatCuring = (pl.meatCuring || 0) + this.carry.amt;
+              if (this.owner === game.humanId) { game.message(`Carcass dropped off — ${this.carry.amt} food curing…`); Audio2.sfx('click'); }
+            } else {
+              pl.res[this.carry.res] += this.carry.amt;      // usable immediately
+              if (d.store) d.store[this.carry.res] += this.carry.amt; // also held here, awaiting a cart
+            }
             this.carry = null;
             const rs = o.resume;
             const ok = rs && (rs.kind === 'bld' ? (!rs.dead && rs.built) : rs.alive);
@@ -540,11 +680,18 @@ class Unit {
         if ((this.type === 'settler' || this.type === 'fishboat') && !this.order) {
           if (this.carry && this.carry.amt > 0) {       // still holding goods -> deliver them
             this.depFail = 0; this.orderDeposit(game); if (this.order) this.order.resume = this.workObj;
-          } else if (this.workObj) {                     // empty-handed -> back to the remembered node
+          } else if (this.workObj || this.gatherKind) {  // empty-handed -> resume working
             const w = this.workObj;
-            const alive = w.kind === 'bld' ? (!w.dead && w.built) : w.alive;
-            if (!alive) this.workObj = null;
-            else if (!game.nearestEnemy(this, CFG.AGGRO)) this.orderGather(w);
+            const alive = w && (w.kind === 'bld' ? (!w.dead && w.built) : w.alive);
+            const threat = game.nearestEnemy(this, CFG.AGGRO);
+            if (alive) { if (!threat) this.orderGather(w); }
+            else {
+              // remembered node is gone — seek the nearest of the same resource so
+              // the settler keeps working until told to do something else.
+              const nxt = this.gatherKind ? World.nearestObj(this.gatherKind, this.x, this.y, 80) : null;
+              if (nxt && !threat) this.orderGather(nxt);
+              else this.workObj = null;
+            }
           }
         }
         // ruins & traders pickup
@@ -569,6 +716,16 @@ class Unit {
       }
     }
 
+    // predators (wolves) hunt people on sight
+    if (this.def.aggressive && this.scanT <= 0.001 && (!this.order || this.order.kind === 'move')) {
+      let prey = null, bd = (this.los || 8) ** 2;
+      for (const u of game.queryUnits(this.x, this.y, this.los || 8)) {
+        if (u.dead || u.owner < 0 || u.def.animal || u.inShip || u.inWall) continue;
+        const d2 = dist2(this.x, this.y, u.x, u.y);
+        if (d2 < bd) { bd = d2; prey = u; }
+      }
+      if (prey) this.orderAttack(prey);
+    }
     // wild animals graze and wander when undisturbed (but freeze once hunted)
     if (this.def.animal && !this.order && game.time - this.lastHitT > 5 && Math.random() < dt * 0.4) {
       const nx = clamp(this.x + (Math.random() * 8 - 4), 2, World.N - 3);
@@ -642,17 +799,19 @@ class Unit {
     // reactions to being hit
     if (from && !this.dead) {
       if (this.def.animal) {
-        if (this.def.retaliate) this.orderAttack(from);                 // boar charges its attacker
-        else if (this.hp + dmg >= this.maxHp - 0.5 && (!this.order || this.order.kind !== 'move')) {
-          const a = Math.atan2(this.y - from.y, this.x - from.x);       // deer startles once, then is run down
-          this.orderMove(clamp(this.x + Math.cos(a) * 2, 2, World.N - 3), clamp(this.y + Math.sin(a) * 2, 2, World.N - 3));
+        if (this.def.retaliate) this.orderAttack(from);                 // boar/wolf charge their attacker
+        else {
+          // deer & sheep bolt away from whatever struck them — every hit, so the
+          // hunter has to chase them down (bow + speed make it winnable).
+          const a = Math.atan2(this.y - from.y, this.x - from.x);
+          this.orderMove(clamp(this.x + Math.cos(a) * 3.2, 2, World.N - 3), clamp(this.y + Math.sin(a) * 3.2, 2, World.N - 3));
         }
       } else if (this.civilian && !this.def.npc && !this.def.cart && (!this.order || this.order.kind !== 'move')) {
         const d = game.findDropoff(this.owner, this.x, this.y);
         if (d && this.type === 'settler' && (!this.order || this.order.kind === 'gather')) {
-          const resume = this.workObj;          // remember what we were chopping
+          const resume = this.workObj, rk = this.gatherKind;  // remember what we were chopping
           this.orderMove(d.cx(), d.cy());        // flee to safety (clears workObj)
-          this.workObj = resume;                 // ...but keep the memory to resume later
+          this.workObj = resume; this.gatherKind = rk;        // ...but keep the memory to resume later
         }
       } else if (!this.civilian && !this.order) this.orderAttack(from);
     }
@@ -912,7 +1071,7 @@ class Building {
     }
   }
 
-  drawSprite(g, view) {
+  drawSprite(g, view, game) {
     const style = this.type === 'town' ? 'none' : (this.civKey || 'none');
     let flag = '';
     if (this.built) {
@@ -920,7 +1079,8 @@ class Building {
       if (this.type === 'canal' && !this.flowing) flag = 'dry';
       if (this.type === 'wall') flag = String(this.wallMask);
     }
-    const s = Sprites.building(this.type, style, this.owner < 0 ? -1 : this.owner, this.built, flag);
+    const age = (game && this.owner >= 0 && game.players[this.owner]) ? game.players[this.owner].age : 1;
+    const s = Sprites.building(this.type, style, this.owner < 0 ? -1 : this.owner, this.built, flag, age);
     const ix = (World.isoX(this.cx(), this.cy()) - view.left) * view.z;
     const iy = (World.isoY(this.cx(), this.cy()) - view.top) * view.z;
     const bk = s.k || 1;
@@ -1185,19 +1345,27 @@ const Sim = {
     if (wall.owner === game.humanId || t.owner === game.humanId) Audio2.sfx('arrow');
   },
 
-  /* ---- a hunted animal yields meat straight to the hunter's larder ---- */
+  /* ---- a hunted animal drops a carcass the hunters must haul home ---- */
   dropCarcass(game, animal, killer) {
     const owner = killer ? (killer.kind === 'unit' ? killer.owner : -1) : -1;
-    // brief carcass node that fades on its own (visual only — meat is instant)
+    // a real meat node: settlers carry it to a dropoff where it cures into food
     const o = { id: game.world.objects.length, kind: 'carcass', x: animal.x | 0, y: animal.y | 0,
-                amount: animal.def.meat, variant: 0, alive: true, fade: 6 };
+                amount: animal.def.meat, variant: 0, alive: true, fade: 80 }; // rots if left ~80s
     game.world.objects.push(o);
     (game.carcasses || (game.carcasses = [])).push(o);
     this.puff(game, animal.x, animal.y, '#9a3a1a', 10);
     if (owner >= 0) {
-      const p = game.players[owner];
-      if (p) p.res.food += animal.def.meat;       // fast food — faster than berries/farming
-      if (owner === game.humanId) { game.message(`${animal.def.name} hunted — +${animal.def.meat} food`); Audio2.sfx('capture'); }
+      // up to 2 settlers butcher & haul one carcass — start with the killer, then nearby idle hands
+      const haulers = [];
+      if (killer.type === 'settler' && !killer.dead) haulers.push(killer);
+      for (const u of game.queryUnits(animal.x, animal.y, 7)) {
+        if (haulers.length >= 2) break;
+        if (u.type === 'settler' && u.owner === owner && !u.dead && !haulers.includes(u) &&
+            (!u.order || u.order.kind === 'move' || (u.order.kind === 'attack' && u.order.target === animal)))
+          haulers.push(u);
+      }
+      for (const u of haulers) u.orderGather(o);
+      if (owner === game.humanId) { game.message(`${animal.def.name} down — hauling ${animal.def.meat} food home (cures on drop-off)`); Audio2.sfx('capture'); }
     }
   },
 
@@ -1310,19 +1478,19 @@ const Sim = {
       if (b.type === 'canal' && b.built) canals.push(b);
       else if (b.type === 'farm') farms.push(b);
     }
-    // seed: canals touching natural water
+    // seed: canals touching natural water (remember WHICH lake tile feeds them)
     const queue = [];
     for (const c of canals) {
-      c.flowing = false;
+      c.flowing = false; c.srcTile = null;
       for (let dy = -1; dy <= 1 && !c.flowing; dy++) for (let dx = -1; dx <= 1; dx++)
-        if (isWater(c.x + dx, c.y + dy)) { c.flowing = true; queue.push(c); break; }
+        if (isWater(c.x + dx, c.y + dy)) { c.flowing = true; c.srcTile = [c.x + dx, c.y + dy]; queue.push(c); break; }
     }
-    // spread through adjacent canals
+    // spread flow (and the source lake) through adjacent canals
     while (queue.length) {
       const c = queue.pop();
       for (const o of canals) {
         if (o.flowing || Math.abs(o.x - c.x) > 1 || Math.abs(o.y - c.y) > 1) continue;
-        o.flowing = true; queue.push(o);
+        o.flowing = true; o.srcTile = c.srcTile; queue.push(o);
       }
     }
     // farms: direct water OR a flowing canal within IRRIGATION range of the farm's edge
@@ -1339,7 +1507,7 @@ const Sim = {
       for (let y = y0; y <= y1 && !ok; y++) for (let x = x0; x <= x1; x++)
         if (isWater(x, y) && nearRect(x + .5, y + .5, f, R)) { ok = true; src = [x, y]; break; }
       if (!ok) for (const c of canals)
-        if (c.flowing && nearRect(c.cx(), c.cy(), f, R - 0.5)) { ok = true; src = [c.x, c.y]; break; }
+        if (c.flowing && nearRect(c.cx(), c.cy(), f, R - 0.5)) { ok = true; src = c.srcTile || [c.x, c.y]; break; }
       const wasDry = f.irrigated && !ok;
       if (wasDry && f.built && f.owner === game.humanId) {
         game.message('A farm dried up — its lake is empty! Wait for rain.', true);
@@ -1347,8 +1515,7 @@ const Sim = {
         game.ping(fx, fy);
       }
       f.irrigated = ok;
-      // a working farm slowly draws down its lake's reserve
-      if (ok && f.built && src) World.drainLake(src[0], src[1], 5);
+      f.waterSrc = ok ? src : null;   // farmers drain THIS lake tile as they harvest (see gather)
     }
   },
 

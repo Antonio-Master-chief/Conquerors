@@ -10,6 +10,7 @@ class Player {
     this.difficulty = difficulty || 'normal';
     this.res = { food: 200, wood: 200, gold: 100, stone: 0, iron: 0, knowledge: 0 };
     this.age = 1;
+    this.meatCuring = 0;               // hauled carcass meat trickling into food
     this.popCap = CFG.START_POP;
     this.pop = 0;
     this.towns = 0;                   // captured neutral towns
@@ -74,6 +75,12 @@ class Player {
     if (this.civ && this.civ.knowTrickle && game.playerHasBuilding(this.id, 'university')) {
       this.knowFrac += this.civ.knowTrickle * dt;
       if (this.knowFrac >= 1) { this.res.knowledge += this.knowFrac | 0; this.knowFrac %= 1; }
+    }
+    // hauled carcass meat cures into food fast (~CFG.MEAT_CURE_RATE per second)
+    if (this.meatCuring > 0) {
+      const give = Math.min(this.meatCuring, CFG.MEAT_CURE_RATE * dt);
+      this.res.food += give; this.meatCuring -= give;
+      if (this.meatCuring < 0.01) this.meatCuring = 0;
     }
     if (!this.researching) return;
     this.researching.t += dt;

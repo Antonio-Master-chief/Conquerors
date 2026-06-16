@@ -128,18 +128,37 @@ const Sprites = (() => {
       cache.set(key, { cv: c, ax: 24, ay: 35 }); return cache.get(key);
     }
     if (kind === 'gold' || kind === 'stone' || kind === 'iron') {
-      c = mk(60, 44); g = g2(c); shadow(g, 30, 38, 19, 6);
-      const cols = kind === 'gold' ? ['#8d8678', '#6b6557'] : kind === 'stone' ? ['#9a948a', '#736e64'] : ['#6e5a50', '#4e3f38'];
-      for (const [x, y, r] of [[22, 28, 12], [38, 30, 10], [30, 22, 9]]) {
-        const gr = g.createLinearGradient(x - r, y - r, x + r, y + r);
-        gr.addColorStop(0, cols[0]); gr.addColorStop(1, cols[1]);
-        g.fillStyle = gr; g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 1;
+      c = mk(60, 44); g = g2(c); shadow(g, 30, 39, 20, 6);
+      const P = kind === 'gold' ? { rl: '#8a8068', rd: '#5d553f', vein: '#ffd24a', glow: 'rgba(255,210,80,.45)', nug: '#ffe07a', glint: '#fff7d6' }
+              : kind === 'iron' ? { rl: '#726a60', rd: '#433d35', vein: '#c2603a', glow: 'rgba(180,90,50,.4)', nug: '#9a5236', glint: '#d98b63' }
+              :                    { rl: '#a39c90', rd: '#6f6a60', vein: null, glow: null, nug: '#c2bcae', glint: '#e8e2d4' };
+      // ---- clustered rocky ore deposit: overlapping faceted boulders ----
+      for (const [x, y, r] of [[21, 28, 12], [39, 30, 10], [30, 20, 11], [30, 34, 7]]) {
+        const gr = g.createLinearGradient(x, y - r, x, y + r);
+        gr.addColorStop(0, P.rl); gr.addColorStop(1, P.rd);
+        g.fillStyle = gr; g.strokeStyle = 'rgba(15,12,8,.5)'; g.lineWidth = 1.1;
         g.beginPath();
-        g.moveTo(x - r, y + r * .5); g.lineTo(x - r * .5, y - r); g.lineTo(x + r * .6, y - r * .8); g.lineTo(x + r, y + r * .4); g.closePath();
-        g.fill(); g.stroke();
+        g.moveTo(x - r, y + r * .4); g.lineTo(x - r * .6, y - r * .8); g.lineTo(x + r * .5, y - r);
+        g.lineTo(x + r, y + r * .2); g.lineTo(x + r * .4, y + r * .7); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = 'rgba(255,255,255,.10)'; // top facet highlight
+        g.beginPath(); g.moveTo(x - r * .6, y - r * .8); g.lineTo(x + r * .5, y - r); g.lineTo(x + r * .1, y - r * .2); g.closePath(); g.fill();
       }
-      if (kind === 'gold') for (let i = 0; i < 8; i++) { g.fillStyle = '#ffd34d'; g.fillRect(14 + rnd() * 30, 16 + rnd() * 18, 2.5, 2.5); }
-      if (kind === 'iron') for (let i = 0; i < 7; i++) { g.fillStyle = '#b3543b'; g.fillRect(14 + rnd() * 30, 16 + rnd() * 18, 3, 1.6); }
+      // ---- ore veins + glinting nuggets ----
+      if (P.vein) {
+        const rv = RNG(kind === 'gold' ? 7 : 9); g.lineCap = 'round';
+        for (let i = 0; i < 5; i++) { const x0 = 16 + rv() * 30, y0 = 18 + rv() * 16, x1 = x0 + 6 - rv() * 12, y1 = y0 + 5 + rv() * 4;
+          g.strokeStyle = P.glow; g.lineWidth = 3.4; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+          g.strokeStyle = P.vein; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+        for (let i = 0; i < 8; i++) { const x = 15 + rv() * 30, y = 17 + rv() * 18;
+          g.fillStyle = P.nug; g.beginPath(); g.arc(x, y, 1.8, 0, 7); g.fill();
+          g.fillStyle = P.glint; g.fillRect(x - 1.2, y - 1.4, 1.3, 1.3); }
+      } else { // stone: pale chips
+        const rv = RNG(5); for (let i = 0; i < 6; i++) { g.fillStyle = P.glint; g.fillRect(16 + rv() * 28, 20 + rv() * 14, 2, 2); }
+      }
+      // a loose ore chunk at the foot of the deposit
+      g.fillStyle = P.rd; g.strokeStyle = 'rgba(15,12,8,.5)'; g.lineWidth = 1;
+      g.beginPath(); g.ellipse(45, 38, 4, 2.6, .3, 0, 7); g.fill(); g.stroke();
+      if (P.vein) { g.fillStyle = P.vein; g.beginPath(); g.arc(45, 37.4, 1.2, 0, 7); g.fill(); }
       cache.set(key, { cv: c, ax: 30, ay: 38 }); return cache.get(key);
     }
     if (kind === 'fish') {
@@ -438,6 +457,14 @@ const Sprites = (() => {
         g.strokeStyle = '#7d6342'; g.beginPath(); g.arc(hipX + fx * 5, hipY + 7, 5, Math.PI, 0); g.stroke();
         g.fillStyle = '#c92f4c'; for (let i = -1; i <= 1; i++) { g.beginPath(); g.arc(hipX + fx * 5 + i * 2.2, hipY + 7.5, 1.1, 0, 7); g.fill(); }
         break; }
+      case 'hoe': { // farmer tilling — long handle swung down into the soil in front
+        const a = side ? (-2.5 + raise * 1.7) : (-1.8 + raise * 1.5); // down-chop arc
+        g.save(); g.translate(wx, wy); g.rotate(a);
+        g.strokeStyle = '#7d5a2e'; g.lineWidth = 2.2; // wooden handle
+        g.beginPath(); g.moveTo(0, 2); g.lineTo(0, -17); g.stroke();
+        g.fillStyle = '#8a8f98'; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = .8; // iron head, bent forward
+        g.beginPath(); g.moveTo(-1.4, -17); g.lineTo(6, -16); g.lineTo(6, -13); g.lineTo(-1.4, -13.5); g.closePath(); g.fill(); g.stroke();
+        g.restore(); break; }
       case 'spear': {
         g.strokeStyle = '#6e5638'; g.lineWidth = 2.2;
         const ext = anim === 'attack' ? (fr === 1 ? 13 : fr === 0 ? -3 : 4) : 0; // thrust!
@@ -558,6 +585,82 @@ const Sprites = (() => {
     }
   }
 
+  /* ---- wild animals: side-view quadrupeds with a galloping gait (face left) ---- */
+  const ANIMALS = {
+    deer:  { body: '#a07a4e', belly: '#caa676', dark: '#6e5028', leg: 2.4, bodyW: 14, bodyH: 7, headR: 4.2, neck: 13, tall: 1.6, legLen: 14, antlers: true, tail: 'flag' },
+    boar:  { body: '#52412f', belly: '#3a2c1e', dark: '#2a2016', leg: 3.2, bodyW: 17, bodyH: 9, headR: 6, neck: 7, tall: 0.2, legLen: 7, tusks: true, bristle: true, snout: 1, tail: 'curl' },
+    wolf:  { body: '#7a756e', belly: '#9a958c', dark: '#4e4a44', leg: 2.6, bodyW: 15, bodyH: 6.5, headR: 4.6, neck: 9, tall: 0.8, legLen: 11, ears: 'point', fangs: true, tail: 'bush' },
+    sheep: { body: '#e6e0d4', belly: '#f3eee4', dark: '#3a342c', leg: 2.6, bodyW: 13, bodyH: 8.5, headR: 4, neck: 5, tall: 0.5, legLen: 7, wool: true, tail: 'stub' },
+  };
+  function drawAnimal(g, type, anim, fr) {
+    const A = ANIMALS[type] || ANIMALS.deer;
+    const cx2 = 48, gy = 60;
+    const gallop = anim === 'walk' ? Math.sin(fr / 4 * Math.PI * 2) : 0;   // body bob + leg cycle
+    const lunge = anim === 'attack' ? (fr === 1 ? 5 : fr === 0 ? -1 : 2) : 0; // head thrust
+    const moving = anim === 'walk';
+    const legLen = A.legLen || 11;
+    const hipY = gy - legLen + Math.abs(gallop) * 1.5;     // shoulder/hip line (bobs while moving)
+    const by = hipY - A.bodyH * 0.35;                      // body center sits just above the hips
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.beginPath(); g.ellipse(cx2, gy + 1, A.bodyW + 1, 3.6, 0, 0, 7); g.fill();
+    // ---- legs: a readable stepping gait — diagonal pairs swing forward & lift in turn ----
+    g.lineWidth = A.leg; g.lineCap = 'round';
+    const legs = [[-A.bodyW * .60, 0.0], [-A.bodyW * .38, 0.5], [A.bodyW * .38, 0.0], [A.bodyW * .60, 0.5]];
+    for (const [ox, off] of legs) {
+      const cyc = moving ? (fr / 4 + off) * Math.PI * 2 : 0;
+      const swing = moving ? Math.sin(cyc) * 4.5 : ox * 0.12;       // fore-aft step (idle: slight splay)
+      const lift  = moving ? Math.max(0, Math.sin(cyc)) * 3.2 : 0;  // foot lifts as it swings forward
+      const footX = cx2 + ox + swing, footY = gy + 1 - lift;
+      g.strokeStyle = ox < 0 ? A.body : A.dark;                     // front legs lighter, hind darker for depth
+      g.beginPath(); g.moveTo(cx2 + ox * 0.6, hipY); g.lineTo(footX, footY); g.stroke();
+      g.fillStyle = A.dark; g.beginPath(); g.ellipse(footX, footY, 1.6, 1.2, 0, 0, 7); g.fill(); // hoof/paw
+    }
+    // ---- body ----
+    const grd = g.createLinearGradient(0, by - A.bodyH, 0, by + A.bodyH);
+    grd.addColorStop(0, A.body); grd.addColorStop(1, A.belly);
+    g.fillStyle = grd; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1.1;
+    g.beginPath(); g.ellipse(cx2, by, A.bodyW, A.bodyH, 0, 0, 7); g.fill(); g.stroke();
+    if (A.wool) { // fluffy sheep wool: scalloped top
+      g.fillStyle = '#f3eee4';
+      for (let i = -4; i <= 4; i++) { g.beginPath(); g.arc(cx2 + i * 3.2, by - A.bodyH * .5, 3, 0, 7); g.fill(); }
+    }
+    if (A.bristle) { g.strokeStyle = '#1d160e'; g.lineWidth = 1.4; // boar back bristles
+      for (let i = -4; i <= 3; i++) { const bx = cx2 + i * 4; g.beginPath(); g.moveTo(bx, by - A.bodyH + 1); g.lineTo(bx + 1, by - A.bodyH - 4); g.stroke(); } }
+    // ---- tail ----
+    g.strokeStyle = A.dark; g.lineWidth = 2;
+    const tx = cx2 + A.bodyW - 1, ty2 = by - 2;
+    if (A.tail === 'flag') { g.fillStyle = '#e9e2d2'; g.beginPath(); g.ellipse(tx + 2, ty2, 2.4, 4, .3, 0, 7); g.fill(); }
+    else if (A.tail === 'curl') { g.beginPath(); g.arc(tx + 2, ty2, 2.6, Math.PI * .4, Math.PI * 2); g.stroke(); }
+    else if (A.tail === 'bush') { g.lineWidth = 4; g.beginPath(); g.moveTo(tx, ty2); g.quadraticCurveTo(tx + 7, ty2 + 1, tx + 8, ty2 + 7); g.stroke(); }
+    else { g.fillStyle = A.belly; g.beginPath(); g.arc(tx + 1, ty2, 2, 0, 7); g.fill(); }
+    // ---- neck + head (left, lunges on attack) ----
+    const hx = cx2 - A.bodyW - A.neck * .4 - lunge, hy = by - A.tall * 6 + (A.snout ? 4 : 0) + lunge * .3;
+    g.strokeStyle = A.body; g.lineWidth = A.bodyH * 1.1; g.lineCap = 'round'; // neck as a thick stroke
+    g.beginPath(); g.moveTo(cx2 - A.bodyW * .7, by - 2); g.lineTo(hx + A.headR * .6, hy + 1); g.stroke();
+    const hg = g.createLinearGradient(hx - A.headR, hy, hx + A.headR, hy);
+    hg.addColorStop(0, A.belly); hg.addColorStop(1, A.body);
+    g.fillStyle = hg; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1;
+    g.beginPath(); g.ellipse(hx, hy, A.headR, A.headR * .8, -.2, 0, 7); g.fill(); g.stroke(); // head
+    if (A.snout) { g.fillStyle = A.dark; g.beginPath(); g.ellipse(hx - A.headR + 1, hy + 1, 2.6, 2, 0, 0, 7); g.fill(); } // boar snout
+    else { g.fillStyle = A.body; g.beginPath(); g.ellipse(hx - A.headR + 1, hy, 2.4, 1.8, 0, 0, 7); g.fill(); } // muzzle
+    g.fillStyle = '#15110b'; g.beginPath(); g.arc(hx + .5, hy - 1, 1.1, 0, 7); g.fill(); // eye
+    // ears
+    if (A.ears === 'point') { g.fillStyle = A.body; // wolf ears
+      g.beginPath(); g.moveTo(hx, hy - A.headR); g.lineTo(hx - 2, hy - A.headR - 4); g.lineTo(hx + 2, hy - A.headR - 1); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(hx + 3, hy - A.headR + 1); g.lineTo(hx + 2, hy - A.headR - 3); g.lineTo(hx + 5, hy - A.headR); g.closePath(); g.fill(); }
+    else if (!A.wool) { g.fillStyle = A.dark; g.beginPath(); g.ellipse(hx + 2, hy - A.headR + 1, 1.6, 2.6, .4, 0, 7); g.fill(); } // soft ear
+    if (A.wool) { g.fillStyle = A.dark; g.beginPath(); g.ellipse(hx, hy, A.headR * .9, A.headR * .8, -.2, 0, 7); g.fill(); // sheep black face
+      g.fillStyle = '#15110b'; g.beginPath(); g.arc(hx + 1, hy - 1, 1, 0, 7); g.fill(); }
+    if (A.antlers) { g.strokeStyle = '#8a6e44'; g.lineWidth = 1.4; // deer antlers
+      for (const s of [-1, 1]) { const bx = hx + s * 1.5, byy = hy - A.headR;
+        g.beginPath(); g.moveTo(bx, byy); g.lineTo(bx + s * 2, byy - 6);
+        g.moveTo(bx + s * 1.2, byy - 3); g.lineTo(bx + s * 4, byy - 4);
+        g.moveTo(bx + s * 2, byy - 6); g.lineTo(bx + s * 4.5, byy - 8); g.stroke(); } }
+    if (A.tusks) { g.strokeStyle = '#ece4d2'; g.lineWidth = 1.6; // boar tusks
+      g.beginPath(); g.moveTo(hx - A.headR + 1, hy + 2); g.quadraticCurveTo(hx - A.headR - 3, hy - 1, hx - A.headR - 1, hy - 3); g.stroke(); }
+    if (A.fangs && anim === 'attack') { g.fillStyle = '#fff'; // wolf bared fangs when lunging
+      g.beginPath(); g.moveTo(hx - A.headR, hy + 1); g.lineTo(hx - A.headR - 1, hy + 4); g.lineTo(hx - A.headR + 1.5, hy + 1.5); g.closePath(); g.fill(); }
+  }
+
   function drawBig(type, colorIdx, civ, anim, fr) {
     const w = type === 'elephant' ? 100 : 92, h = type === 'elephant' ? 84 : 72;
     const c = mk(w, h), g = g2(c);
@@ -569,39 +672,9 @@ const Sprites = (() => {
       drawRiderTorso(g, 46, 36, colorIdx, civ, 'none', 0);
       return { cv: c, ax: 46, ay: 66 };
     }
-    if (type === 'deer' || type === 'boar') {
-      // side-view quadruped (faces left), tan deer w/ antlers or dark tusked boar
-      const cx2 = 48, gy = 60, boar = type === 'boar';
-      const body = boar ? '#4a3b2c' : '#9a7b50', bodyD = boar ? '#33281c' : '#6e5638';
-      g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(cx2, gy + 2, boar ? 16 : 14, 4, 0, 0, 7); g.fill();
-      g.lineWidth = boar ? 3 : 2.4; // legs
-      for (const [ox, ph] of [[-9, 0], [-5, Math.PI], [7, Math.PI], [11, 0]]) {
-        const a = Math.sin(ph + swing * Math.PI) * 0.5;
-        g.strokeStyle = ox < 0 ? bodyD : body;
-        g.beginPath(); g.moveTo(cx2 + ox, gy - 13); g.lineTo(cx2 + ox + Math.sin(a) * 6, gy + 2); g.stroke();
-      }
-      const gr = g.createLinearGradient(0, gy - 26, 0, gy - 8);
-      gr.addColorStop(0, body); gr.addColorStop(1, bodyD);
-      g.fillStyle = gr; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1.2;
-      g.beginPath(); g.ellipse(cx2, gy - 14, boar ? 17 : 14, boar ? 9 : 8, 0, 0, 7); g.fill(); g.stroke(); // body
-      if (boar) { g.fillStyle = '#2a2018'; for (let i=0;i<5;i++) g.fillRect(cx2-12+i*5, gy-24, 1.6, 5); } // bristles
-      // neck + head (left)
-      g.fillStyle = body;
-      g.beginPath(); g.moveTo(cx2 - 11, gy - 18); g.quadraticCurveTo(cx2 - 20, gy - 22, cx2 - 22, gy - (boar ? 16 : 24));
-      g.lineTo(cx2 - 16, gy - (boar ? 14 : 22)); g.quadraticCurveTo(cx2 - 11, gy - 16, cx2 - 7, gy - 16); g.closePath(); g.fill(); g.stroke();
-      g.beginPath(); g.ellipse(cx2 - 22, gy - (boar ? 15 : 24), boar ? 6 : 4.5, boar ? 4 : 3.4, -.3, 0, 7); g.fill(); g.stroke(); // head
-      g.fillStyle = '#1d1812'; g.beginPath(); g.arc(cx2 - 23, gy - (boar ? 16 : 25), 1.1, 0, 7); g.fill();
-      if (boar) { // tusks + snout
-        g.strokeStyle = '#e8e0ce'; g.lineWidth = 1.6;
-        g.beginPath(); g.moveTo(cx2 - 26, gy - 13); g.quadraticCurveTo(cx2 - 29, gy - 16, cx2 - 27, gy - 17); g.stroke();
-      } else { // antlers
-        g.strokeStyle = '#8a6e44'; g.lineWidth = 1.6;
-        for (const sx2 of [-1.5, 1.5]) { g.beginPath();
-          g.moveTo(cx2 - 22 + sx2, gy - 27); g.lineTo(cx2 - 22 + sx2 * 2, gy - 33);
-          g.moveTo(cx2 - 22 + sx2 * 1.6, gy - 30); g.lineTo(cx2 - 22 + sx2 * 3.4, gy - 31); g.stroke(); }
-        g.fillStyle = '#cdb98c'; g.beginPath(); g.ellipse(cx2 + 13, gy - 16, 3, 4, 0, 0, 7); g.fill(); // white tail patch
-      }
-      return { cv: c, ax: cx2, ay: gy };
+    if (type === 'deer' || type === 'boar' || type === 'wolf' || type === 'sheep') {
+      drawAnimal(g, type, anim, fr);
+      return { cv: c, ax: 48, ay: 60 };
     }
     if (type === 'cart') { // ox-drawn supply cart (side view, ox faces left)
       const cx2 = 56;
@@ -1077,8 +1150,10 @@ const Sprites = (() => {
      Humanoids render parametrically — the 12 right-facing dirs are mirrored from
      the 13 left-facing baked poses. Big units quantize to front / side / back. */
   const NDIR = 24;
-  const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1, cart: 1, deer: 1, boar: 1,
+  const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1, cart: 1,
+    deer: 1, boar: 1, wolf: 1, sheep: 1,
     fishboat: 1, transport: 1, galley: 1, quinquereme: 1, fireship: 1, catamaran: 1 };
+  const ANIMAL_TYPES = { deer: 1, boar: 1, wolf: 1, sheep: 1 };
   function unit(type, colorIdx, civ, dir, anim, fr, tool) {
     dir = ((dir % NDIR) + NDIR) % NDIR;
     const ang = dir / NDIR * Math.PI * 2;          // screen-space facing angle
@@ -1088,7 +1163,7 @@ const Sprites = (() => {
     if (BIG_TYPES[type]) {
       // coarse: front (toward viewer) / back (away) / profile (mirrored for east).
       // animals only have a profile sprite, so they always use the side view.
-      let bake = (type === 'deer' || type === 'boar') ? 2 : sinA > 0.38 ? 0 : sinA < -0.38 ? 4 : 2;
+      let bake = ANIMAL_TYPES[type] ? 2 : sinA > 0.38 ? 0 : sinA < -0.38 ? 4 : 2;
       const mirror = bake === 2 && cosA > 1e-3;
       const key = `u_${type}_${colorIdx}_${civ}_B${bake}_${mirror ? 1 : 0}_${anim}_${fr}`;
       if (cache.has(key)) return cache.get(key);
@@ -1193,9 +1268,57 @@ const Sprites = (() => {
     }
   }
 
-  function building(type, style, colorIdx, built, variant) {
+  /* ---- per-age dressing: makes a building's age readable at a glance ----
+     age 1 = bare;  2 = stone footing;  3 = + corner buttresses & pennants;
+     4 = + gilded roofline, apex finial & lit braziers (imperial). Anchored to
+     the isometric footprint diamond so it frames any hall/tower/depot. */
+  function ageDress(g, cx, cy, hw, hh, wallH, age, colorIdx) {
+    if (age <= 1) return;
+    const tc = teamCols(colorIdx);
+    const topY = cy - wallH;
+    // ---- age 2+: reinforced stone footing along the two front base edges ----
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    g.strokeStyle = '#d8d0bd'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(cx - hw, cy); g.lineTo(cx, cy + hh); g.lineTo(cx + hw, cy); g.stroke();
+    g.strokeStyle = 'rgba(70,60,44,.5)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(cx - hw, cy); g.lineTo(cx, cy + hh); g.lineTo(cx + hw, cy); g.stroke();
+    g.fillStyle = 'rgba(70,60,44,.45)';              // course joints
+    for (let i = 1; i < 5; i++) { const t = i / 5;
+      g.fillRect(cx - hw + hw * t - 0.5, cy + hh * t - 1, 1, 2);
+      g.fillRect(cx + hw - hw * t - 0.5, cy + hh * t - 1, 1, 2); }
+    if (age < 3) return;
+    // ---- age 3+: stone corner buttresses topped with team pennants ----
+    for (const sgn of [-1, 1]) {
+      const bx = cx + sgn * hw;
+      g.fillStyle = sgn < 0 ? '#c2bba8' : '#a89f8a'; g.strokeStyle = 'rgba(20,12,6,.45)'; g.lineWidth = 1;
+      g.fillRect(bx - 3, topY, 6, cy - topY); g.strokeRect(bx - 3, topY, 6, cy - topY);
+      g.strokeStyle = '#3a2a16'; g.lineWidth = 1.4;
+      g.beginPath(); g.moveTo(bx, topY); g.lineTo(bx, topY - 13); g.stroke();
+      g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(bx, topY - 13); g.lineTo(bx + sgn * 9, topY - 10); g.lineTo(bx, topY - 7); g.closePath(); g.fill(); g.stroke();
+    }
+    if (age < 4) return;
+    // ---- age 4: imperial gilding — eaves trim, apex finial, lit braziers ----
+    g.strokeStyle = '#f0d35e'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(cx - hw, topY); g.lineTo(cx, topY + hh); g.lineTo(cx + hw, topY); g.stroke();
+    g.fillStyle = '#3a2a16'; g.fillRect(cx - 1, topY - hh - 18, 2, 14);   // finial pole
+    g.fillStyle = '#f0d35e'; g.strokeStyle = '#8a6420'; g.lineWidth = 1;
+    g.beginPath(); g.arc(cx, topY - hh - 20, 3.2, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = '#fff7d8'; g.beginPath(); g.arc(cx - 1, topY - hh - 21, 1, 0, 7); g.fill();
+    for (const sgn of [-1, 1]) {                                          // flanking braziers
+      const bx = cx + sgn * (hw - 2), by = cy + 1;
+      g.fillStyle = '#3f3a33'; g.fillRect(bx - 2.5, by - 6, 5, 6);
+      const fg = g.createRadialGradient(bx, by - 8, 0.5, bx, by - 8, 5.5);
+      fg.addColorStop(0, '#ffe27a'); fg.addColorStop(.5, '#ff8a2e'); fg.addColorStop(1, 'rgba(180,60,30,0)');
+      g.fillStyle = fg; g.beginPath();
+      g.moveTo(bx - 3, by - 6); g.quadraticCurveTo(bx, by - 17, bx + 3, by - 6); g.closePath(); g.fill();
+    }
+  }
+
+  function building(type, style, colorIdx, built, variant, age) {
     variant = variant || '';
-    const key = `b_${type}_${style}_${colorIdx}_${built ? 1 : 0}_${variant}`;
+    age = age || 1;
+    const key = `b_${type}_${style}_${colorIdx}_${built ? 1 : 0}_${variant}_a${age}`;
     if (cache.has(key)) return cache.get(key);
     const B = BUILDINGS[type], s = B.size;
     const W = s * 64 + 24, H = s * 32 + 86;
@@ -1224,43 +1347,66 @@ const Sprites = (() => {
 
     if (type === 'farm') {
       const dry = variant === 'dry';
+      const hw = s * 32, hh = s * 16;
       g.save();
-      g.beginPath(); g.moveTo(cx, cy - s * 16); g.lineTo(cx + s * 32, cy); g.lineTo(cx, cy + s * 16); g.lineTo(cx - s * 32, cy); g.closePath(); g.clip();
-      g.fillStyle = dry ? '#8d7752' : '#7d663f'; g.fill();
-      g.strokeStyle = dry ? '#a08a5e' : '#5d8a3c'; g.lineWidth = 3;
-      for (let i = -3; i <= 3; i++) {
-        g.beginPath(); g.moveTo(cx + i * 9 - s * 14, cy - s * 16 + 6 + i * 4.5);
-        g.lineTo(cx + i * 9 + s * 14, cy + 6 + i * 4.5 + s * 7); g.stroke();
-      }
-      if (dry) { // cracked earth
-        g.strokeStyle = 'rgba(70,55,35,.8)'; g.lineWidth = 1;
-        const rc = RNG(11);
-        for (let i = 0; i < 8; i++) {
-          const x0 = cx - s * 18 + rc() * s * 36, y0 = cy - 8 + rc() * 16;
-          g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + 6 - rc() * 12, y0 + 3 + rc() * 4); g.stroke();
+      g.beginPath(); g.moveTo(cx, cy - hh); g.lineTo(cx + hw, cy); g.lineTo(cx, cy + hh); g.lineTo(cx - hw, cy); g.closePath(); g.clip();
+      // rich tilled soil base
+      const soil = g.createLinearGradient(0, cy - hh, 0, cy + hh);
+      if (dry) { soil.addColorStop(0, '#a48d62'); soil.addColorStop(1, '#8a7350'); }
+      else { soil.addColorStop(0, '#7a6038'); soil.addColorStop(1, '#5e4a2b'); }
+      g.fillStyle = soil; g.fill();
+      // furrows running along the field, each lined with a crop row
+      const R = 11;
+      for (let r = 0; r <= R; r++) {
+        const t = r / R;
+        const Sx = cx - hw + t * hw, Sy = cy + t * hh;          // on the left→bottom edge
+        const Ex = cx + t * hw, Ey = cy - hh + t * hh;          // on the top→right edge
+        g.strokeStyle = dry ? '#b69c6a' : '#54421f'; g.lineWidth = 2.4;  // ploughed ridge
+        g.beginPath(); g.moveTo(Sx, Sy); g.lineTo(Ex, Ey); g.stroke();
+        if (dry || r >= R) continue;
+        // dense crop tufts sitting on the ridge
+        const n = 10;
+        for (let u = 1; u < n; u++) {
+          const f = u / n, px = Sx + (Ex - Sx) * f + hw / (R * 2), py = Sy + (Ey - Sy) * f + hh / (R * 2);
+          const ripe = (r + u) % 3 === 0;
+          g.strokeStyle = ripe ? '#c9b256' : '#6f9e39'; g.lineWidth = 1.3; // leafy crop (some ripe & golden)
+          g.beginPath();
+          g.moveTo(px, py); g.lineTo(px - 1.6, py - 4.4);
+          g.moveTo(px, py); g.lineTo(px + 1.6, py - 4.4);
+          g.moveTo(px, py); g.lineTo(px, py - 5.2); g.stroke();
+          if (ripe) { g.fillStyle = '#e6c860'; g.beginPath(); g.arc(px, py - 5.4, 1, 0, 7); g.fill(); } // grain head
         }
       }
+      if (dry) { // cracked, parched earth
+        g.strokeStyle = 'rgba(80,62,38,.8)'; g.lineWidth = 1; const rc = RNG(11);
+        for (let i = 0; i < 9; i++) { const x0 = cx - s * 18 + rc() * s * 36, y0 = cy - 8 + rc() * 16;
+          g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + 6 - rc() * 12, y0 + 3 + rc() * 4); g.stroke(); }
+      }
       g.restore();
-      if (!dry) {
-        g.fillStyle = '#e7cf8e';
-        const rr = RNG(7); for (let i = 0; i < 10; i++) g.fillRect(cx - s * 20 + rr() * s * 40, cy - 8 + rr() * 14, 1.6, 4);
-        g.fillStyle = '#9fc25a';
-        const rg = RNG(13); for (let i = 0; i < 8; i++) g.fillRect(cx - s * 18 + rg() * s * 36, cy - 6 + rg() * 12, 2, 3);
-      } else { // red droplet warning
+      // low wooden fence around the field rim — reads as a managed plot
+      const corners = [[cx, cy - hh], [cx + hw, cy], [cx, cy + hh], [cx - hw, cy]];
+      g.strokeStyle = '#6e5331'; g.lineWidth = 1.6; g.fillStyle = '#7d5f38';
+      for (let e = 0; e < 4; e++) {
+        const a = corners[e], b = corners[(e + 1) % 4];
+        g.strokeStyle = '#5d4626'; g.lineWidth = 1.4; // top rail
+        g.beginPath(); g.moveTo(a[0], a[1] - 4); g.lineTo(b[0], b[1] - 4); g.stroke();
+        for (let p = 0; p <= 4; p++) { const px = a[0] + (b[0] - a[0]) * p / 4, py = a[1] + (b[1] - a[1]) * p / 4;
+          g.strokeStyle = '#6e5331'; g.lineWidth = 1.8; g.beginPath(); g.moveTo(px, py); g.lineTo(px, py - 6); g.stroke(); }
+      }
+      if (dry) { // red water-warning droplet
         g.fillStyle = '#d04a35'; g.beginPath();
         g.moveTo(cx, cy - 26); g.quadraticCurveTo(cx + 7, cy - 16, cx, cy - 11);
         g.quadraticCurveTo(cx - 7, cy - 16, cx, cy - 26); g.closePath(); g.fill();
-        g.strokeStyle = '#fff'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(cx - 8, cy - 10); g.lineTo(cx + 8, cy - 26); g.stroke();
+        g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - 8, cy - 10); g.lineTo(cx + 8, cy - 26); g.stroke();
       }
-      // scarecrow on the corner — farms read instantly
-      const scx = cx - s * 22, scy = cy - s * 4;
+      // scarecrow on a corner — farms read instantly
+      const scx = cx - s * 18, scy = cy - s * 2;
       g.strokeStyle = '#6e5638'; g.lineWidth = 2.2;
       g.beginPath(); g.moveTo(scx, scy); g.lineTo(scx, scy - 17); g.stroke();
       g.beginPath(); g.moveTo(scx - 7, scy - 12); g.lineTo(scx + 7, scy - 12); g.stroke();
-      g.fillStyle = '#9a7b54'; g.fillRect(scx - 4, scy - 12, 8, 6); // ragged tunic
+      g.fillStyle = '#9a7b54'; g.fillRect(scx - 4, scy - 12, 8, 6);
       g.fillStyle = '#cdb279'; g.beginPath(); g.arc(scx, scy - 18.5, 3.4, 0, 7); g.fill();
-      g.fillStyle = '#8a6a48'; g.beginPath(); g.ellipse(scx, scy - 21, 5, 1.6, 0, 0, 7); g.fill(); // hat
+      g.fillStyle = '#8a6a48'; g.beginPath(); g.ellipse(scx, scy - 21, 5, 1.6, 0, 0, 7); g.fill();
       const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 
@@ -1374,6 +1520,7 @@ const Sprites = (() => {
       g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
       g.beginPath(); g.moveTo(cx - hw - 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6); g.lineTo(cx + hw + 3, cy - wallH2); g.stroke();
       flag(g, cx + hw - 6, cy - wallH2 - 2, colorIdx);
+      ageDress(g, cx, cy, hw, hh, wallH2, age, colorIdx);
       const out = { cv: c, ax: cx, ay: cy, k: 2 };
       cache.set(key, out); return out;
     }
@@ -1419,6 +1566,7 @@ const Sprites = (() => {
       g.strokeStyle = '#b8a784'; g.lineWidth = 1.6;
       g.beginPath(); g.arc(cx - s * 10, deckY + s * 4, 3, 0, 7); g.stroke();
       flag(g, cx + s * 26, deckY - s * 8, colorIdx);
+      ageDress(g, cx, deckY, s * 28, s * 14, 18, age, colorIdx);
       const out = { cv: c, ax: cx, ay: cy, k: 2 };
       cache.set(key, out); return out;
     }
@@ -1502,6 +1650,7 @@ const Sprites = (() => {
       g.fillStyle = '#ffc14d'; g.beginPath();
       g.moveTo(cx - 1.2, cy - wallH - 8.5); g.quadraticCurveTo(cx, cy - wallH - 13, cx + 1.2, cy - wallH - 8.5); g.closePath(); g.fill();
       flag(g, cx, cy - wallH - 16, colorIdx);
+      ageDress(g, cx, cy, 15, 6, wallH, age, colorIdx);
       const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 
@@ -1702,6 +1851,7 @@ const Sprites = (() => {
     }
     flag(g, cx + s * 28, cy - wallH - 2, colorIdx);
     if (type === 'tc' || type === 'town') flag(g, cx - s * 28, cy - wallH - 2, colorIdx);
+    ageDress(g, cx, cy, s * 32, s * 16, wallH, age, colorIdx);
 
     const out = { cv: c, ax: cx, ay: cy, k: 2 };
     cache.set(key, out); return out;
@@ -1756,6 +1906,31 @@ const Sprites = (() => {
         g.fillRect(-1.5, -10, 3, 13); g.fillStyle = '#8a6420'; g.fillRect(-4, 2.4, 8, 2.4);
         g.fillStyle = '#5d4426'; g.beginPath(); g.arc(0, 6, 1.8, 0, 7); g.fill(); g.restore();
         g.strokeStyle = 'rgba(20,12,6,.7)'; break;
+      case 'pick': g.strokeStyle = '#6e5638'; g.lineWidth = 2.6;        // miner's pick
+        g.beginPath(); g.moveTo(13, 23); g.lineTo(13, 8); g.stroke();
+        g.strokeStyle = '#9aa2ad'; g.lineWidth = 3; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(5, 10); g.quadraticCurveTo(13, 5, 21, 10); g.stroke(); break;
+      case 'bow': g.strokeStyle = '#7d5a2e'; g.lineWidth = 2.4;          // hunter's bow + arrow
+        g.beginPath(); g.arc(8, 13, 8, -1.9, 1.9); g.stroke();
+        g.strokeStyle = '#cdbb96'; g.lineWidth = 1; g.beginPath(); g.moveTo(5.3, 6.4); g.lineTo(5.3, 19.6); g.stroke();
+        g.strokeStyle = '#8a6420'; g.lineWidth = 1.8; g.beginPath(); g.moveTo(6, 13); g.lineTo(23, 13); g.stroke();
+        g.fillStyle = '#cfd6dd'; g.beginPath(); g.moveTo(24, 13); g.lineTo(19, 10); g.lineTo(19, 16); g.closePath(); g.fill(); break;
+      case 'hoe': g.strokeStyle = '#7d5a2e'; g.lineWidth = 2.4; g.lineCap = 'round';  // farmer's hoe
+        g.beginPath(); g.moveTo(7, 21); g.lineTo(18, 6); g.stroke();
+        g.fillStyle = '#8a8f98'; g.strokeStyle = 'rgba(20,12,6,.6)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(18, 5); g.lineTo(24, 9); g.lineTo(21, 12); g.lineTo(15, 9); g.closePath(); g.fill(); g.stroke(); break;
+      case 'berry': g.fillStyle = '#4e8a3a';                            // berry bush cluster
+        g.beginPath(); g.ellipse(13, 6, 7, 3, 0, 0, 7); g.fill();
+        g.fillStyle = '#d23b58'; g.strokeStyle = 'rgba(80,12,20,.6)'; g.lineWidth = 1;
+        for (const [x, y] of [[9, 12], [15, 12], [12, 17], [18, 16], [13, 21]]) { g.beginPath(); g.arc(x, y, 2.8, 0, 7); g.fill(); g.stroke(); } break;
+      case 'net': g.strokeStyle = '#e8e0ce'; g.lineWidth = 1.2;          // fishing net
+        g.beginPath(); g.arc(13, 14, 9, 0, 7); g.stroke();
+        g.save(); g.beginPath(); g.arc(13, 14, 9, 0, 7); g.clip();
+        for (let i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(13 + i * 4, 4); g.lineTo(13 + i * 4, 24); g.moveTo(4, 14 + i * 4); g.lineTo(22, 14 + i * 4); g.stroke(); }
+        g.restore(); break;
+      case 'knife': g.fillStyle = '#d7dde4'; g.strokeStyle = 'rgba(20,12,6,.6)'; g.lineWidth = 1;  // skinning knife
+        g.beginPath(); g.moveTo(6, 21); g.lineTo(17, 7); g.lineTo(19.5, 9); g.lineTo(8.5, 23); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = '#5d4426'; g.fillRect(4.5, 19.5, 5, 4.5); break;
       case 'stop': g.fillStyle = '#c4543f'; g.beginPath(); g.roundRect(6, 6, 14, 14, 3); g.fill(); g.stroke(); break;
       case 'poison': g.fillStyle = '#5fae3f'; g.beginPath();
         g.moveTo(13, 4); g.quadraticCurveTo(20, 13, 13, 21); g.quadraticCurveTo(6, 13, 13, 4); g.closePath(); g.fill(); g.stroke();

@@ -61,7 +61,12 @@ const Input = (() => {
     let best = null, bestScore = 1e9;
     for (const u of game.units) {
       if (u.dead || u.inShip || u.inWall || u.def.cart) continue; // carts auto-route, not selectable
-      if (u.owner !== game.humanId && World.visAt(u.x, u.y) !== 2) continue;
+      if (u.owner !== game.humanId) {
+        const v = World.visAt(u.x, u.y);
+        // wild animals stay clickable once discovered (they wander past the vision
+        // edge); other foreign units must be in current sight.
+        if (u.def.animal ? v < 1 : v !== 2) continue;
+      }
       const [sx, sy] = toScreen(u.x, u.y);
       const hw = (u.def.big ? 30 : 19) * z;          // half-width of the body box (matches sprite)
       const top = (u.def.big ? 58 : 44) * z;         // sprite height above the feet
@@ -96,7 +101,9 @@ const Input = (() => {
   /* distribute gatherers across same-kind nodes near the clicked one, so a
      crowded mine/forest overflows to the next nearest node (AoE behavior) */
   function spreadGather(workers, target) {
-    const kind = target.kind, CAP = 4;
+    // a single resource node only has room for ~2 workers around it, so spread
+    // the crew across neighbouring nodes instead of piling everyone on one tree.
+    const kind = target.kind, CAP = 2;
     const nodes = game.world.objects.filter(o =>
       o.alive && o.kind === kind && dist2(o.x, o.y, target.x, target.y) < 18 * 18);
     if (nodes.length <= 1) { for (const w of workers) w.orderGather(target); return; }
@@ -213,6 +220,23 @@ const Input = (() => {
       for (const u of sel) if (u.type !== 'settler') u.orderMove(tx, ty);
       mark('gather', obj.x + .5, obj.y + .5);
       Audio2.sfx('click'); return true;
+    }
+    // near-miss safety net: right-clicking close to a wild animal hunts it.
+    // (animals wander, so the cursor can land just off the moving sprite, or the
+    // pick may have grabbed an overlapping friendly unit instead.)
+    {
+      let beast = null, bdv = 1.8 * 1.8;
+      for (const u of game.units) {
+        if (u.dead || u.owner >= 0 || !u.def.animal || u.inShip) continue;
+        if (World.visAt(u.x, u.y) < 1) continue;
+        const d = dist2(u.x, u.y, tx, ty);
+        if (d < bdv) { bdv = d; beast = u; }
+      }
+      if (beast) {
+        const hunters = sel.filter(u => u.type === 'settler' || !u.civilian);
+        for (const u of (hunters.length ? hunters : sel)) u.orderAttack(beast);
+        mark('attack', beast.cx(), beast.cy()); Audio2.ack('attack', big); return true;
+      }
     }
     // loaded transports tapped onto land: beach landing
     const loaded = sel.filter(u => u.cargo && u.cargo.length);
@@ -550,21 +574,31 @@ const Input = (() => {
     const sel = game.selected.filter(s => !s.dead && s.kind === 'unit' && s.owner === game.humanId);
     if (!sel.length) { setCursor('default'); return; }
     const settlers = sel.some(u => u.type === 'settler');
+    const fishers = sel.some(u => u.type === 'fishboat');
     const military = sel.some(u => !u.civilian);
     const hit = pickAt(px, py);
+    // wild animal under the cursor → hunt (bow)
+    if (hit && hit.kind === 'unit' && hit.def.animal && (settlers || military)) { setCursor(cursorFor('bow')); return; }
+    // hostile unit / building → attack (sword)
     if (hit && game.hostile(game.humanId, hit.owner) && hit.owner >= -1 &&
         !(hit.kind === 'unit' && hit.def.npc && game.inTerritory(hit.x, hit.y) >= 0)) {
       if (military || hit.kind === 'bld') { setCursor(cursorFor('sword2')); return; }
     }
-    if (hit && hit.kind === 'bld' && hit.owner === game.humanId && !hit.built && settlers) {
-      setCursor(cursorFor('hammer')); return;
+    // own building jobs (settlers): build a frame / work a farm
+    if (hit && hit.kind === 'bld' && hit.owner === game.humanId && settlers) {
+      if (!hit.built) { setCursor(cursorFor('hammer')); return; }
+      if (hit.def.farm) { setCursor(cursorFor('hoe')); return; }
     }
-    if (settlers) {
+    // resource nodes get a task-specific cursor
+    if (settlers || fishers) {
       const [tx, ty] = screenToTile(px, py);
-      const o = objPick(tx, ty, false);
-      if (o && o.kind !== 'fish' && !o.doodad) { setCursor(cursorFor('axe2')); return; }
-      if (hit && hit.kind === 'bld' && hit.owner === game.humanId && hit.def.farm && hit.built) {
-        setCursor(cursorFor('axe2')); return;
+      const o = pickResource(px, py) || objPick(tx, ty, fishers);
+      if (o && !o.doodad) {
+        if (o.kind === 'tree') { setCursor(cursorFor('axe2')); return; }            // chop
+        if (o.kind === 'gold' || o.kind === 'stone' || o.kind === 'iron') { setCursor(cursorFor('pick')); return; } // mine
+        if (o.kind === 'bush') { setCursor(cursorFor('berry')); return; }            // forage
+        if (o.kind === 'carcass') { setCursor(cursorFor('knife')); return; }         // butcher meat
+        if (o.kind === 'fish' && fishers) { setCursor(cursorFor('net')); return; }   // fish
       }
     }
     setCursor('default');

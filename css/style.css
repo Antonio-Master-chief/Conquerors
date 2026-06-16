@@ -138,11 +138,17 @@ h1.gametitle {
 .civcard ul li::before { content:"⚔ "; color:#957437; }
 .optrow { display:flex; gap:10px; margin-top:3vh; align-items:center; flex-wrap:wrap; justify-content:center; }
 .optrow label { font-size:12px; letter-spacing:.15em; color:#a8946d; text-transform:uppercase; }
-.diffbtn {
-  padding:8px 18px; background:#241a0e; color:#cdbb96; border:1px solid #5a4426; border-radius:7px;
-  cursor:pointer; font-size:13px; font-weight:600;
+.diffbtn, .optbtn {
+  padding:8px 16px; background:#241a0e; color:#cdbb96; border:1px solid #5a4426; border-radius:7px;
+  cursor:pointer; font-size:13px; font-weight:600; transition:background .12s, border-color .12s, transform .08s;
 }
-.diffbtn.sel { background:#6b5121; color:#ffe9b0; border-color:#b8924a; }
+.optbtn:hover { border-color:#b8924a; transform:translateY(-1px); }
+.diffbtn.sel, .optbtn.sel { background:#6b5121; color:#ffe9b0; border-color:#b8924a; box-shadow:0 0 12px rgba(201,163,79,.35); }
+.optrow label { min-width:84px; text-align:right; }
+/* war-themed sword cursor on the title screen */
+#title, #title #startBtn, #title .civcard, #title .optbtn {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'%3E%3Cpath d='M4 26 L9 21' stroke='%238a6420' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M7 23 L23 7' stroke='%23cfd6dd' stroke-width='3.6'/%3E%3Cpath d='M21 4 L27 9 L23 8 Z' fill='%23eef'/%3E%3Cpath d='M18 6 L24 12' stroke='%238a6420' stroke-width='3'/%3E%3C/svg%3E") 24 6, pointer;
+}
 #startBtn {
   margin:3.5vh 0 20px; padding:15px 64px; font-size:20px; font-weight:800; letter-spacing:.2em;
   background:linear-gradient(180deg,#9a7228,#5d4314); color:#fff3d6; border:2px solid #c9a34f;
