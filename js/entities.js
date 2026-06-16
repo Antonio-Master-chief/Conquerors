@@ -975,6 +975,22 @@ class Building {
       if (e) { this.atkCd = this.def.cd; Sim.fireProjectile(game, this, e); }
     }
 
+    // manned wall: garrisoned archers loose arrows from the parapet at 2x attack
+    if (this.built && this.def.wall && this.garrison && this.garrison.length) {
+      this.wallCd = (this.wallCd || 0) - dt;
+      if (this.wallCd <= 0) {
+        const e = game.nearestEnemy(this, 5.5);
+        if (e) {
+          this.wallCd = 1.5;
+          const pl = game.players[this.owner];
+          for (const u of this.garrison) {
+            const base = pl ? pl.statAtk(u.def) : u.def.atk;
+            Sim.fireProjectile(game, this, e, base * 2);
+          }
+        }
+      }
+    }
+
     // storehouse: dispatch an ox cart to haul a batch home to the Town Center
     if (this.built && this.store) {
       const total = this.store.food + this.store.wood + this.store.gold + this.store.stone + this.store.iron;
@@ -1081,7 +1097,7 @@ class Building {
     if (this.built) {
       if (this.type === 'farm' && !this.irrigated) flag = 'dry';
       if (this.type === 'canal' && !this.flowing) flag = 'dry';
-      if (this.type === 'wall') flag = String(this.wallMask);
+      if (this.type === 'wall') flag = String(this.wallMask) + (this.gate ? 'g' : '');
     }
     const age = (game && this.owner >= 0 && game.players[this.owner]) ? game.players[this.owner].age : 1;
     const s = Sprites.building(this.type, style, this.owner < 0 ? -1 : this.owner, this.built, flag, age);
@@ -1247,13 +1263,13 @@ const Sim = {
     return Math.max(1, atk * mult - armor);
   },
 
-  fireProjectile(game, src, t) {
+  fireProjectile(game, src, t, dmgOverride) {
     const p = game.players[src.owner];
     const burn = p && p.bonus.greekFire && (src.type === 'catapult' || src.type === 'tower');
     game.projectiles.push({
       x: src.cx(), y: src.cy() - (src.kind === 'bld' ? 1.2 : 0.5),
       target: t, speed: src.type === 'catapult' ? 7 : 13,
-      src, t0: game.time, dmg: this.calcDamage(game, src, t),
+      src, t0: game.time, dmg: dmgOverride != null ? dmgOverride : this.calcDamage(game, src, t),
       splash: src.def.splash || 0, burn,
       stone: src.type === 'catapult',
     });
@@ -1489,12 +1505,24 @@ const Sim = {
       for (let dy = -1; dy <= 1 && !c.flowing; dy++) for (let dx = -1; dx <= 1; dx++)
         if (isWater(c.x + dx, c.y + dy)) { c.flowing = true; c.srcTile = [c.x + dx, c.y + dy]; queue.push(c); break; }
     }
-    // spread flow (and the source lake) through adjacent canals
+    // walls a canal feeds become culvert gates — water passes under them into a walled town
+    const walls = [];
+    for (const b of game.buildings) if (!b.dead && b.type === 'wall' && b.built) { b.gate = false; walls.push(b); }
+    const wallAt = (x, y) => walls.find(w => w.x === x && w.y === y);
+    const canalAt = (x, y) => canals.find(c => c.x === x && c.y === y);
+    // spread flow through adjacent canals (and through any single wall a canal feeds)
     while (queue.length) {
       const c = queue.pop();
       for (const o of canals) {
         if (o.flowing || Math.abs(o.x - c.x) > 1 || Math.abs(o.y - c.y) > 1) continue;
         o.flowing = true; o.srcTile = c.srcTile; queue.push(o);
+      }
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const w = wallAt(c.x + dx, c.y + dy);
+        if (!w || w.owner !== c.owner) continue;
+        w.gate = true; w.flowing = true; w.srcTile = c.srcTile;        // this wall is now a water gate
+        const far = canalAt(c.x + dx * 2, c.y + dy * 2);
+        if (far && !far.flowing) { far.flowing = true; far.srcTile = c.srcTile; queue.push(far); }
       }
     }
     // farms: direct water OR a flowing canal within IRRIGATION range of the farm's edge
@@ -1510,7 +1538,7 @@ const Sim = {
       const y0 = Math.max(0, (f.y - R - 1) | 0), y1 = Math.min(World.N - 1, (f.y + f.size + R + 1) | 0);
       for (let y = y0; y <= y1 && !ok; y++) for (let x = x0; x <= x1; x++)
         if (isWater(x, y) && nearRect(x + .5, y + .5, f, R)) { ok = true; src = [x, y]; break; }
-      if (!ok) for (const c of canals)
+      if (!ok) for (const c of canals.concat(walls.filter(w => w.gate)))
         if (c.flowing && nearRect(c.cx(), c.cy(), f, R - 0.5)) { ok = true; src = c.srcTile || [c.x, c.y]; break; }
       const wasDry = f.irrigated && !ok;
       if (wasDry && f.built && f.owner === game.humanId) {

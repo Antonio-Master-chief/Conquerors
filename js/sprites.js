@@ -273,6 +273,8 @@ const Sprites = (() => {
     settler:  { tunic: '#9a7b54', helmet: 'straw', weapon: 'axe',     shield: 'none'  },
     spearman: { tunic: 'team',    helmet: 'cap',   weapon: 'spear',   shield: 'round' },
     archer:   { tunic: '#5d6e46', helmet: 'hood',  weapon: 'bow',     shield: 'none'  },
+    crossbow: { tunic: '#6a5a3a', helmet: 'metal', weapon: 'crossbow',shield: 'none'  },
+    longbow:  { tunic: '#3f6b3a', helmet: 'hood',  weapon: 'bow',     shield: 'none'  },
     sword:    { tunic: 'team',    helmet: 'metal', weapon: 'sword',   shield: 'kite'  },
     legionary:{ tunic: 'team',    helmet: 'galea', weapon: 'sword',   shield: 'scutum'},
     centurion:{ tunic: 'team',    helmet: 'crest', weapon: 'sword',   shield: 'scutum', cape: '#a32626' },
@@ -299,12 +301,14 @@ const Sprites = (() => {
     const dl = Math.hypot(dnx, dny) || 1; dnx /= dl; dny /= dl;
 
     // pose params ('work' = gather/build, swings like a softer attack)
-    let swing = 0, lunge = 0, raise = 0;
+    let swing = 0, lunge = 0, raise = 0, atkStep = 0;
     if (anim === 'walk') swing = Math.sin(fr / 4 * Math.PI * 2) * 0.7;
     if (anim === 'attack' || anim === 'work') {
       const amp = anim === 'work' ? 0.7 : 1;
-      lunge = (fr === 1 ? 3.5 : fr === 0 ? -1.5 : 0.5) * amp;
-      raise = (fr === 0 ? 1 : fr === 1 ? -0.6 : 0.2) * amp;
+      // wind up (fr0) → drive through (fr1) → recover (fr2): bigger, snappier than before
+      lunge = (fr === 1 ? 5.2 : fr === 0 ? -2.6 : 1) * amp;
+      raise = (fr === 0 ? 1.35 : fr === 1 ? -0.95 : 0.3) * amp;
+      if (anim === 'attack') atkStep = (fr === 1 ? 4 : fr === 0 ? -1.5 : 1.5); // lead foot drives forward on the blow
     }
     const GY = 52, hipY = 36;
     const hipX = 24 + dnx * lunge;         // attack lunge leans toward the facing
@@ -325,8 +329,9 @@ const Sprites = (() => {
       const stepX = dnx * Math.sin(a) * 9, stepY = dny * Math.sin(a) * 4.5;
       const stanceX = -dny * s * 3.4 * (1 - sideAmt * 0.55);
       const stanceY = dnx * s * 1.4;
-      const fx2 = hipX + stanceX + stepX;
-      const fy2 = GY - 1.2 + stanceY + stepY;
+      const stepF = (atkStep && s > 0) ? atkStep : 0;   // lead foot lunges forward on the swing
+      const fx2 = hipX + stanceX + stepX + dnx * stepF;
+      const fy2 = GY - 1.2 + stanceY + stepY + dny * stepF;
       g.strokeStyle = s < 0 ? '#332a1e' : '#46392a';
       g.lineWidth = 3.6;
       g.beginPath(); g.moveTo(hipX + stanceX * 0.4, hipY); g.lineTo(fx2, fy2); g.stroke();
@@ -1486,6 +1491,16 @@ const Sprites = (() => {
       g.moveTo(cx, cy - EL - 7); g.lineTo(cx + 7.5, cy - EL - 3); g.lineTo(cx, cy - EL + 1); g.lineTo(cx - 7.5, cy - EL - 3);
       g.closePath(); g.fill(); g.stroke();
       for (const [vx2, vy2] of segs) if (vy2 > 0) slab(vx2, vy2);
+      if (variant.includes('g')) {   // water gate: an arched culvert with water running through the wall
+        g.fillStyle = '#1d140a'; g.beginPath();
+        g.moveTo(cx - 5, cy + 2); g.lineTo(cx - 5, cy - 7); g.arc(cx, cy - 7, 5, Math.PI, 0); g.lineTo(cx + 5, cy + 2); g.closePath(); g.fill();
+        const gw = g.createLinearGradient(cx, cy - 6, cx, cy + 2);
+        gw.addColorStop(0, '#4fa3d8'); gw.addColorStop(1, '#2b6491');
+        g.fillStyle = gw; g.fillRect(cx - 4, cy - 5, 8, 6.5);
+        g.strokeStyle = 'rgba(210,240,255,.6)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(cx - 3, cy - 1); g.lineTo(cx + 3, cy - 1); g.moveTo(cx - 2, cy - 3.5); g.lineTo(cx + 2, cy - 3.5); g.stroke();
+        g.fillStyle = '#cfae6a'; g.fillRect(cx - 6, cy - 9, 12, 1.8); // stone lintel over the arch
+      }
       const out = { cv: c, ax: cx, ay: cy, k: 2 };
       cache.set(key, out); return out;
     }
