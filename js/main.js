@@ -104,7 +104,7 @@ function makeGame(civKey, diff) {
         grid[World.idx(x, y)] = 0;
         if (!b.def.canal && !b.def.naval) this.world.sightBlock[World.idx(x, y)] = 0;
       }
-      if (b.type === 'wall' || b.type === 'gate') Sim.refreshWallMasks(this);
+      if (b.type === 'wall' || b.type === 'gate' || b.type === 'keep') Sim.refreshWallMasks(this);
     },
     freeSpotNear(b, naval) {
       const grid = naval ? this.world.navBlocked : this.world.blocked;
@@ -321,6 +321,19 @@ function render(game) {
     ctx.strokeStyle = e.owner === game.humanId ? 'rgba(150,255,130,.95)' : 'rgba(255,255,255,.7)';
     ctx.lineWidth = 1.8 * z;
     ctx.beginPath(); ctx.ellipse(ix, yy, r * z, r * z * .5, 0, 0, 7); ctx.stroke();
+    // attack range ring for a selected defensive building (AoE-style — exact iso projection)
+    if (e.kind === 'bld' && e.def.range && e.def.atk) {
+      const R = e.def.range;
+      ctx.strokeStyle = 'rgba(255,196,96,.55)'; ctx.lineWidth = 1.5 * z;
+      ctx.setLineDash([6 * z, 5 * z]);
+      ctx.beginPath();
+      for (let a = 0; a <= 28; a++) {
+        const th = a / 28 * Math.PI * 2, wx = ecx + Math.cos(th) * R, wy = ecy + Math.sin(th) * R;
+        const px = (World.isoX(wx, wy) - view.left) * z, py = (World.isoY(wx, wy) - view.top) * z;
+        a === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.stroke(); ctx.setLineDash([]);
+    }
     // rally flag for selected production buildings
     if (e.kind === 'bld' && e.owner === game.humanId && e.rally) {
       const rx = (World.isoX(e.rally.x, e.rally.y) - view.left) * z;

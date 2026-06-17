@@ -286,7 +286,7 @@ const UI = (() => {
         });
       }
       if (settlers.length) {
-        for (const bt of ['storehouse', 'farm', 'canal', 'wall', 'gate', 'dock', 'barracks', 'range', 'university', 'grounds', 'tower']) {
+        for (const bt of ['storehouse', 'farm', 'canal', 'wall', 'gate', 'dock', 'barracks', 'range', 'university', 'grounds', 'tower', 'keep']) {
           const B = BUILDINGS[bt];
           const lockAge = B.age > p.age;
           actionBtn(actP, {

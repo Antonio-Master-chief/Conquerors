@@ -980,10 +980,48 @@ class Building {
       }
     }
 
-    // tower attack
+    // tower / keep: loose arrows at range
     if (this.built && this.def.atk && (this.atkCd -= dt) <= 0) {
-      const e = game.nearestEnemy(this, this.def.range);
-      if (e) { this.atkCd = this.def.cd; Sim.fireProjectile(game, this, e); }
+      let e;
+      if (this.def.wallTower) {
+        // a wall tower fires only forward, out over the wall (set its facing once)
+        if (this.facing === undefined) {
+          let tc = null, bd = 1e9;
+          for (const b of game.buildings)
+            if (!b.dead && (b.type === 'tc' || b.type === 'town') && b.owner === this.owner) {
+              const d = dist(this.cx(), this.cy(), b.cx(), b.cy()); if (d < bd) { bd = d; tc = b; }
+            }
+          this.facing = tc ? Math.atan2(this.cy() - tc.cy(), this.cx() - tc.cx()) : 0; // outward from home
+        }
+        let best = null, bestD = 1e9;
+        for (const u of game.queryUnits(this.cx(), this.cy(), this.def.range)) {
+          if (u.dead || u.owner < 0 || u.civilian || !game.hostile(this.owner, u.owner)) continue;
+          const ang = Math.atan2(u.cy() - this.cy(), u.cx() - this.cx());
+          if (Math.abs(((ang - this.facing + Math.PI) % (Math.PI * 2)) - Math.PI) > 1.75) continue; // ±100° arc
+          const d = dist(this.cx(), this.cy(), u.cx(), u.cy()); if (d < bestD) { bestD = d; best = u; }
+        }
+        e = best;
+      } else e = game.nearestEnemy(this, this.def.range);
+      if (e) {
+        this.atkCd = this.def.cd;
+        let dmg = this.def.atk;
+        if (this.def.wallTower && this.garrison) {
+          const n = this.garrison.length;
+          dmg *= (1 + 0.1 * n) * (n > 0 ? 2 : 1); // garrisoned archers boost & double the volley
+        }
+        Sim.fireProjectile(game, this, e, dmg);
+      }
+    }
+
+    // scalding oil: poured on any enemy at the tower's foot — shrugs off armour, lethal to light troops
+    if (this.built && this.def.oilDmg) {
+      this.oilCd = (this.oilCd || 0) - dt;
+      if (this.oilCd <= 0) {
+        const foes = [];
+        for (const u of game.queryUnits(this.cx(), this.cy(), this.def.oilRange))
+          if (!u.dead && u.owner >= 0 && !u.def.naval && game.hostile(this.owner, u.owner)) foes.push(u);
+        if (foes.length) { this.oilCd = 2.4; Sim.pourOil(game, this, foes); }
+      }
     }
 
     // manned wall: garrisoned archers loose arrows from the parapet at 2x attack
@@ -1190,8 +1228,8 @@ const Sim = {
       for (let y = by - 1; y <= by + B.size; y++) for (let x = bx - 1; x <= bx + B.size; x++)
         if (World.inB(x, y) && game.world.ter[World.idx(x, y)] >= TERRAIN.SAND) touchesLand = true;
       if (!touchesLand) return false;
-    } else if (B.gateBld) {
-      // a gate drops into a gap in your wall — or supplants one of your own wall segments
+    } else if (B.gateBld || B.wallTower) {
+      // a gate / wall tower drops into a gap in your wall — or supplants a wall segment
       const i = World.idx(bx, by);
       if (game.world.objGrid[i] || game.world.ter[i] < TERRAIN.SAND) return false;
       if (game.world.blocked[i] && !game.buildings.some(b => !b.dead && b.type === 'wall' && b.x === bx && b.y === by))
@@ -1206,17 +1244,21 @@ const Sim = {
     for (const u of game.queryUnits(bx + B.size / 2, by + B.size / 2, B.size + 1)) {
       if (!u.dead && u.x >= bx - .2 && u.x <= bx + B.size + .2 && u.y >= by - .2 && u.y <= by + B.size + .2) return false;
     }
-    // not overlapping existing buildings (farms don't block the grid)
+    // not overlapping existing buildings (farms don't block the grid) — but a gate or
+    // wall tower is allowed to sit on, and supplant, one of your own wall segments
     for (const b of game.buildings) {
       if (b.dead) continue;
-      if (bx < b.x + b.size && bx + B.size > b.x && by < b.y + b.size && by + B.size > b.y) return false;
+      if (bx < b.x + b.size && bx + B.size > b.x && by < b.y + b.size && by + B.size > b.y) {
+        if ((B.gateBld || B.wallTower) && b.type === 'wall' && b.x === bx && b.y === by) continue;
+        return false;
+      }
     }
     return true;
   },
 
   placeBuilding(game, owner, type, bx, by, built) {
     const p = game.players[owner];
-    if (BUILDINGS[type].gateBld) { // a gate supplants the wall segment it's built across
+    if (BUILDINGS[type].gateBld || BUILDINGS[type].wallTower) { // gate/keep supplants the wall it's built across
       const w = game.buildings.find(bb => !bb.dead && bb.type === 'wall' && bb.x === bx && bb.y === by);
       if (w) { w.dead = true; game.unblockBuilding(w); }
     }
@@ -1240,7 +1282,7 @@ const Sim = {
     for (const o of game.world.objects)
       if (o.doodad && o.alive && o.x >= bx - 1 && o.x < bx + B.size && o.y >= by - 1 && o.y < by + B.size)
         o.alive = false;
-    if (type === 'wall' || type === 'gate') Sim.refreshWallMasks(game);
+    if (type === 'wall' || type === 'gate' || type === 'keep') Sim.refreshWallMasks(game);
     return b;
   },
 
@@ -1269,6 +1311,28 @@ const Sim = {
           o.takeDamage(game, dmg * 0.5, src);
       }
     }
+  },
+
+  /* boiling oil tipped from a tower's murder-holes: ignores armour outright, and
+     the less armour a victim wears the worse it scalds (carnage among raw levies) */
+  pourOil(game, b, foes) {
+    const base = b.def.oilDmg;
+    for (const u of foes) {
+      const armour = (u.def.armor || 0);
+      const dmg = base * (1 + Math.max(0, 3 - armour) * 0.5); // light troops boil; heavy armour fares better
+      u.takeDamage(game, dmg, b);
+    }
+    // a sheet of fire & smoke cascading down the wall
+    if (World.visAt(b.cx(), b.cy()) === 2) {
+      for (let i = 0; i < 16; i++) game.particles.push({
+        x: b.cx() + (Math.random() - .5) * 1.4, y: b.cy() + (Math.random() - .5) * 1.4,
+        vx: (Math.random() - .5) * 1.5, vy: Math.random() * 1.2, grav: 3,
+        z: 20 + Math.random() * 10, vz: -4 - Math.random() * 4,
+        life: .4 + Math.random() * .3, max: .7,
+        color: i % 3 ? (i % 2 ? '#ff8a2a' : '#ffd34d') : 'rgba(40,30,24,.7)', size: 2.6 + Math.random() * 2,
+      });
+    }
+    if (b.owner === game.humanId || foes.some(u => u.owner === game.humanId)) Audio2.sfx('boom');
   },
 
   calcDamage(game, src, t) {
@@ -1378,7 +1442,7 @@ const Sim = {
   refreshWallMasks(game) {
     const walls = new Map();
     for (const b of game.buildings)
-      if (!b.dead && (b.type === 'wall' || b.type === 'gate')) walls.set(b.y * World.N + b.x, b);
+      if (!b.dead && (b.type === 'wall' || b.type === 'gate' || b.type === 'keep')) walls.set(b.y * World.N + b.x, b);
     for (const b of walls.values()) {
       b.wallMask = (walls.has(b.y * World.N + b.x + 1) ? 1 : 0) |
                    (walls.has(b.y * World.N + b.x - 1) ? 2 : 0) |

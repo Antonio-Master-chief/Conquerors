@@ -1703,6 +1703,42 @@ const Sprites = (() => {
       const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 
+    if (type === 'keep') {
+      // a great wall tower: tall, broad-shouldered, machicolated, bristling with archers
+      const KH = 66, BW = 19; // tower height & half-width
+      g.fillStyle = 'rgba(0,0,0,.26)'; g.beginPath(); g.ellipse(cx, cy, 26, 11, 0, 0, 7); g.fill();
+      const gr = g.createLinearGradient(cx - BW, 0, cx + BW, 0);
+      gr.addColorStop(0, p.wallL); gr.addColorStop(.55, p.top); gr.addColorStop(1, p.wallR);
+      g.fillStyle = gr; g.beginPath();
+      g.moveTo(cx - BW, cy - 2); g.lineTo(cx - BW + 3, cy - KH); g.lineTo(cx + BW - 3, cy - KH); g.lineTo(cx + BW, cy - 2);
+      g.ellipse(cx, cy - 2, BW, 8, 0, 0, Math.PI); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1.2; g.stroke();
+      // stone courses
+      g.strokeStyle = 'rgba(20,12,6,.16)'; g.lineWidth = 1;
+      for (let i = 1; i <= 5; i++) { const yy = cy - 2 - (KH - 6) * i / 6, ww = BW - 3 * i / 6;
+        g.beginPath(); g.moveTo(cx - ww, yy); g.lineTo(cx + ww, yy); g.stroke(); }
+      // machicolated overhang + battlements
+      g.fillStyle = p.wallR; g.fillRect(cx - BW - 2, cy - KH - 4, (BW + 2) * 2, 6);
+      g.fillStyle = p.top; g.beginPath(); g.ellipse(cx, cy - KH - 4, BW + 2, 6, 0, 0, 7); g.fill();
+      g.strokeStyle = 'rgba(20,12,6,.5)'; g.stroke();
+      g.fillStyle = p.wallR;
+      for (let i = -2; i <= 2; i++) g.fillRect(cx + i * 8 - 3, cy - KH - 13, 6, 9); // merlons
+      // arrow slits up the shaft + a great door
+      g.fillStyle = '#201509';
+      for (const yy of [KH - 14, KH - 28, KH - 42]) { g.fillRect(cx - 9, cy - yy, 2.6, 9); g.fillRect(cx + 6.4, cy - yy, 2.6, 9); g.fillRect(cx - 1.3, cy - yy - 4, 2.6, 9); }
+      g.beginPath(); g.moveTo(cx - 6, cy + 1); g.lineTo(cx - 6, cy - 11); g.arc(cx, cy - 11, 6, Math.PI, 0); g.lineTo(cx + 6, cy + 1); g.closePath(); g.fill();
+      // twin oil cauldrons steaming on the parapet
+      for (const sx2 of [-10, 10]) {
+        g.fillStyle = '#33291f'; g.beginPath(); g.ellipse(cx + sx2, cy - KH - 10, 3.4, 2.2, 0, 0, 7); g.fill();
+        g.fillStyle = '#ff8a2a'; g.beginPath(); g.arc(cx + sx2, cy - KH - 11, 1.6, 0, 7); g.fill();
+        g.strokeStyle = 'rgba(150,150,150,.5)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(cx + sx2, cy - KH - 13); g.quadraticCurveTo(cx + sx2 + 2, cy - KH - 18, cx + sx2, cy - KH - 22); g.stroke();
+      }
+      flag(g, cx, cy - KH - 20, colorIdx);
+      ageDress(g, cx, cy, BW, 8, KH, age, colorIdx);
+      const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
+    }
+
     isoBox(g, cx, cy, s, wallH, p.top, p.wallL, p.wallR);
 
     // door
