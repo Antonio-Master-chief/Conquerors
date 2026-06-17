@@ -1446,7 +1446,7 @@ const Sprites = (() => {
       const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 
-    if (type === 'wall') {
+    if (type === 'wall' || type === 'gate') {
       // auto-connecting stone wall. variant = neighbor mask:
       // bit1: x+1 (screen SE), bit2: x-1 (NW), bit4: y+1 (SW), bit8: y-1 (NE)
       const mask = parseInt(variant, 10) || 0;
@@ -1500,7 +1500,31 @@ const Sprites = (() => {
       g.moveTo(cx, cy - EL - 7); g.lineTo(cx + 7.5, cy - EL - 3); g.lineTo(cx, cy - EL + 1); g.lineTo(cx - 7.5, cy - EL - 3);
       g.closePath(); g.fill(); g.stroke();
       for (const [vx2, vy2] of segs) if (vy2 > 0) slab(vx2, vy2);
-      if (variant.includes('g')) {   // water gate: an arched culvert with water running through the wall
+      if (variant.includes('G')) {   // gatehouse: twin stone towers flanking a studded timber door
+        // two taller tower posts left & right of the doorway
+        for (const sx2 of [-13, 13]) {
+          g.fillStyle = stoneL; g.fillRect(cx + sx2 - 4, cy - EL - 14, 4, EL + 14);
+          g.fillStyle = stoneR; g.fillRect(cx + sx2, cy - EL - 14, 4, EL + 14);
+          g.fillStyle = stoneT; g.fillRect(cx + sx2 - 4, cy - EL - 17, 8, 4);
+          g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1; g.strokeRect(cx + sx2 - 4, cy - EL - 14, 8, EL + 14);
+          // merlon caps
+          g.fillStyle = stoneR; g.fillRect(cx + sx2 - 4, cy - EL - 20, 3, 4); g.fillRect(cx + sx2 + 1, cy - EL - 20, 3, 4);
+        }
+        // recessed archway shadow
+        g.fillStyle = '#1a120a'; g.beginPath();
+        g.moveTo(cx - 9, cy + 3); g.lineTo(cx - 9, cy - 8); g.arc(cx, cy - 8, 9, Math.PI, 0); g.lineTo(cx + 9, cy + 3); g.closePath(); g.fill();
+        // timber double door with iron bands & studs
+        const dw = g.createLinearGradient(cx, cy - 10, cx, cy + 3);
+        dw.addColorStop(0, '#7a5430'); dw.addColorStop(1, '#5a3c20');
+        g.fillStyle = dw; g.beginPath();
+        g.moveTo(cx - 8, cy + 2); g.lineTo(cx - 8, cy - 7); g.arc(cx, cy - 7, 8, Math.PI, 0); g.lineTo(cx + 8, cy + 2); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(20,10,4,.55)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(cx, cy - 15); g.lineTo(cx, cy + 2); g.stroke();   // door seam
+        for (const px2 of [-5, -2.5, 2.5, 5]) { g.beginPath(); g.moveTo(cx + px2, cy - 13); g.lineTo(cx + px2, cy + 2); g.stroke(); } // planks
+        g.strokeStyle = '#3a2a18'; g.lineWidth = 1.6;
+        for (const py2 of [cy - 9, cy - 3]) { g.beginPath(); g.moveTo(cx - 8, py2); g.lineTo(cx + 8, py2); g.stroke(); } // iron bands
+        g.fillStyle = '#caa860'; g.fillRect(cx - 9, cy - 16, 18, 2.4);   // stone lintel
+      } else if (variant.includes('g')) {   // water gate: an arched culvert with water running through the wall
         g.fillStyle = '#1d140a'; g.beginPath();
         g.moveTo(cx - 5, cy + 2); g.lineTo(cx - 5, cy - 7); g.arc(cx, cy - 7, 5, Math.PI, 0); g.lineTo(cx + 5, cy + 2); g.closePath(); g.fill();
         const gw = g.createLinearGradient(cx, cy - 6, cx, cy + 2);

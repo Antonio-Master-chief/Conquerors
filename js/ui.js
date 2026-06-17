@@ -104,7 +104,8 @@ const UI = (() => {
     return c;
   }
   function iconForBld(type, civ) {
-    const s = Sprites.building(type, civ || 'rome', 0, true);
+    const variant = type === 'gate' ? '3G' : (type === 'wall' ? '3' : ''); // show a gate/wall mid-line
+    const s = Sprites.building(type, civ || 'rome', 0, true, variant);
     const c = document.createElement('canvas'); c.width = 30; c.height = 30;
     const g = c.getContext('2d');
     const sc = Math.min(28 / s.cv.width, 28 / s.cv.height);
@@ -285,7 +286,7 @@ const UI = (() => {
         });
       }
       if (settlers.length) {
-        for (const bt of ['storehouse', 'farm', 'canal', 'wall', 'dock', 'barracks', 'range', 'university', 'grounds', 'tower']) {
+        for (const bt of ['storehouse', 'farm', 'canal', 'wall', 'gate', 'dock', 'barracks', 'range', 'university', 'grounds', 'tower']) {
           const B = BUILDINGS[bt];
           const lockAge = B.age > p.age;
           actionBtn(actP, {

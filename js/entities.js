@@ -240,16 +240,27 @@ class Unit {
     if (this.repathT > 0) return false;
     this.repathT = 0.25 + Math.random() * 0.2;
     const grid = this.def.naval ? game.world.navBlocked : game.world.blocked;
+    // an enemy gate reads as a solid wall to anyone who doesn't own it — its owner's
+    // troops pass freely, foes must batter it down. Bar hostile gates just for this search.
+    let barred = null;
+    if (!this.def.naval && game.gates && game.gates.length) {
+      for (const gt of game.gates) {
+        if (gt.dead || gt.owner === this.owner || !game.hostile(this.owner, gt.owner)) continue;
+        const gi = gt.y * World.N + gt.x;
+        if (!grid[gi]) { grid[gi] = 1; (barred || (barred = [])).push(gi); }
+      }
+    }
     // ships get an uncapped-ish search: coastlines force long detours, and a
     // capped A* strands them in dead-end bays chasing straight-line distance
     const p = Path.find(grid, this.x, this.y, tx, ty, this.def.naval ? 9500 : 4200);
+    let ok = false;
     if (p && p.length) {
-      this.path = Path.smooth(grid, this.x, this.y, p); // stride, don't stair-step
+      this.path = Path.smooth(grid, this.x, this.y, p); // stride, don't stair-step (gates still barred)
       this.wp = 0;
-      return true;
-    }
-    this.path = null;
-    return false;
+      ok = true;
+    } else this.path = null;
+    if (barred) for (const gi of barred) grid[gi] = 0; // restore: the gate is walkable to its owner
+    return ok;
   }
   moveAlong(game, dt) {
     if (!this.path || this.wp >= this.path.length) return false;
@@ -1098,6 +1109,7 @@ class Building {
       if (this.type === 'farm' && !this.irrigated) flag = 'dry';
       if (this.type === 'canal' && !this.flowing) flag = 'dry';
       if (this.type === 'wall') flag = String(this.wallMask) + (this.gate ? 'g' : '');
+      if (this.type === 'gate') flag = String(this.wallMask) + 'G'; // gatehouse with a timber door
     }
     const age = (game && this.owner >= 0 && game.players[this.owner]) ? game.players[this.owner].age : 1;
     const s = Sprites.building(this.type, style, this.owner < 0 ? -1 : this.owner, this.built, flag, age);
@@ -1178,6 +1190,12 @@ const Sim = {
       for (let y = by - 1; y <= by + B.size; y++) for (let x = bx - 1; x <= bx + B.size; x++)
         if (World.inB(x, y) && game.world.ter[World.idx(x, y)] >= TERRAIN.SAND) touchesLand = true;
       if (!touchesLand) return false;
+    } else if (B.gateBld) {
+      // a gate drops into a gap in your wall — or supplants one of your own wall segments
+      const i = World.idx(bx, by);
+      if (game.world.objGrid[i] || game.world.ter[i] < TERRAIN.SAND) return false;
+      if (game.world.blocked[i] && !game.buildings.some(b => !b.dead && b.type === 'wall' && b.x === bx && b.y === by))
+        return false; // blocked by something other than a wall
     } else {
       for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++) {
         const i = World.idx(x, y);
@@ -1198,6 +1216,10 @@ const Sim = {
 
   placeBuilding(game, owner, type, bx, by, built) {
     const p = game.players[owner];
+    if (BUILDINGS[type].gateBld) { // a gate supplants the wall segment it's built across
+      const w = game.buildings.find(bb => !bb.dead && bb.type === 'wall' && bb.x === bx && bb.y === by);
+      if (w) { w.dead = true; game.unblockBuilding(w); }
+    }
     const b = new Building(owner, type, bx, by, p ? p.civKey : 'none', built);
     if (built && p) { b.applyHpBonus(p); b.hp = b.maxHp; }
     game.buildings.push(b);
@@ -1205,7 +1227,7 @@ const Sim = {
     if (B.naval) { // docks block ships, not the (already unwalkable) water
       for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++)
         game.world.navBlocked[World.idx(x, y)] = 1;
-    } else if (!B.farm) { // farms walkable
+    } else if (!B.farm && !B.gateBld) { // farms & gateways stay walkable
       for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++)
         game.world.blocked[World.idx(x, y)] = 1;
     }
@@ -1213,11 +1235,12 @@ const Sim = {
       for (let y = by; y < by + B.size; y++) for (let x = bx; x < bx + B.size; x++)
         game.world.sightBlock[World.idx(x, y)] = 1;
     }
+    if (B.gateBld) (game.gates || (game.gates = [])).push(b); // tracked for enemy path-barring
     // clear decorative doodads under the foundation
     for (const o of game.world.objects)
       if (o.doodad && o.alive && o.x >= bx - 1 && o.x < bx + B.size && o.y >= by - 1 && o.y < by + B.size)
         o.alive = false;
-    if (type === 'wall') Sim.refreshWallMasks(game);
+    if (type === 'wall' || type === 'gate') Sim.refreshWallMasks(game);
     return b;
   },
 
@@ -1355,7 +1378,7 @@ const Sim = {
   refreshWallMasks(game) {
     const walls = new Map();
     for (const b of game.buildings)
-      if (!b.dead && b.type === 'wall') walls.set(b.y * World.N + b.x, b);
+      if (!b.dead && (b.type === 'wall' || b.type === 'gate')) walls.set(b.y * World.N + b.x, b);
     for (const b of walls.values()) {
       b.wallMask = (walls.has(b.y * World.N + b.x + 1) ? 1 : 0) |
                    (walls.has(b.y * World.N + b.x - 1) ? 2 : 0) |

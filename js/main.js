@@ -97,12 +97,14 @@ function makeGame(civKey, diff) {
     },
     popFree(u) { const p = this.players[u.owner]; if (p) p.pop -= u.def.pop; },
     unblockBuilding(b) {
+      if (b.def.gateBld && this.gates) { const gi = this.gates.indexOf(b); if (gi >= 0) this.gates.splice(gi, 1); }
       if (b.def.farm) return;
       const grid = b.def.naval ? this.world.navBlocked : this.world.blocked;
       for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) {
         grid[World.idx(x, y)] = 0;
         if (!b.def.canal && !b.def.naval) this.world.sightBlock[World.idx(x, y)] = 0;
       }
+      if (b.type === 'wall' || b.type === 'gate') Sim.refreshWallMasks(this);
     },
     freeSpotNear(b, naval) {
       const grid = naval ? this.world.navBlocked : this.world.blocked;
@@ -159,6 +161,7 @@ function makeGame(civKey, diff) {
 /* ---------------- world setup ---------------- */
 function setupMatch(game, civKey, diff) {
   World.gen((Date.now() % 100000) | 0);
+  game.gates = []; // gateways tracked for enemy path-barring (reset each match)
 
   const civKeys = Object.keys(CIVS);
   const others = civKeys.filter(k => k !== civKey).sort(() => Math.random() - .5);
