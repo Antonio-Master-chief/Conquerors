@@ -307,6 +307,23 @@ const UI = (() => {
           },
         });
       }
+      const scouts = sel.filter(u => u.type === 'scout');
+      if (scouts.length) {
+        actionBtn(actP, {
+          label: 'Auto-Explore', icon: makeIconCv('flag'), cost: { gold: 50 },
+          enabled: p.canAfford({ gold: 50 }) && !scouts.every(u => u.order && u.order.kind === 'autoexplore'),
+          title: 'Pay 50 gold — your scout roams the whole map alone, dodging every fight, until it falls.',
+          onClick: () => { if (p.canAfford({ gold: 50 })) { p.res.gold -= 50; for (const u of scouts) u.orderExplore(); message('Scout sets off to map the world…'); } },
+        });
+        // resource-finder: jump the view to the nearest deposit of a chosen kind
+        for (const [kind, label, icon] of [['gold', 'Find Gold', 'gold'], ['iron', 'Find Iron', 'iron'], ['stone', 'Find Stone', 'stone'], ['tree', 'Find Wood', 'wood'], ['bush', 'Find Food', 'food']]) {
+          actionBtn(actP, {
+            label, icon: makeIconCv(icon), enabled: true,
+            title: `Snap the view to the nearest ${label.split(' ')[1].toLowerCase()} deposit`,
+            onClick: () => { if (!findNearestResource(scouts[0], kind)) message('No more of that to be found!', true); },
+          });
+        }
+      }
       const loaded = sel.filter(u => u.cargo && u.cargo.length);
       if (loaded.length) {
         actionBtn(actP, {
@@ -378,6 +395,22 @@ const UI = (() => {
     const c = document.createElement('canvas'); c.width = 30; c.height = 30;
     c.getContext('2d').drawImage(src, 2, 2, 26, 26);
     return c;
+  }
+  // resource-finder: snap the camera to the nearest deposit of a kind & ping it
+  function findNearestResource(scout, kind) {
+    const W = game.world; let best = null, bd = 1e18;
+    const sx = scout ? scout.x : game.cam.x, sy = scout ? scout.y : game.cam.y;
+    for (const o of W.objects) {
+      if (!o || !o.alive || o.kind !== kind) continue;
+      const d = (o.x - sx) ** 2 + (o.y - sy) ** 2;
+      if (d < bd) { bd = d; best = o; }
+    }
+    if (!best) return false;
+    game.cam.x = World.isoX(best.x + .5, best.y + .5);
+    game.cam.y = World.isoY(best.x + .5, best.y + .5);
+    game.ping(best.x + .5, best.y + .5);
+    Audio2.sfx('click');
+    return true;
   }
   function updateBars() {
     // light refresh of hp bars / queue fills without rebuilding DOM

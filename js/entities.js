@@ -128,6 +128,7 @@ class Unit {
   resetQueue() { if (this.buildQueue) this.buildQueue.length = 0; }
   orderMove(x, y) { this.resetQueue(); this.workObj = null; this.gatherKind = null; this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; }
   orderAttack(t) { this.resetQueue(); this.workObj = null; this.gatherKind = null; this.order = { kind: 'attack', target: t }; this.path = null; this.repathT = 0; this.state = 'attack'; }
+  orderExplore() { this.resetQueue(); this.workObj = null; this.gatherKind = null; this.order = { kind: 'autoexplore' }; this.path = null; this.repathT = 0; this.state = 'move'; }
   orderGarrison(b) { // ranged units man the walls
     if (!this.def.tags.includes('ranged') || this.def.naval) return;
     this.order = { kind: 'garrison', target: b }; this.path = null; this.repathT = 0; this.state = 'move';
@@ -415,6 +416,22 @@ class Unit {
             }
             this.clearOrder();
           }
+          break;
+        }
+        case 'autoexplore': {
+          // a lone scout roams the map revealing it, never stopping to fight, until it falls
+          const o = this.order;
+          const reached = o.tx === undefined || dist(this.x, this.y, o.tx + .5, o.ty + .5) < 2.2;
+          if (reached || (!this.path && this.repathT <= 0)) {
+            const tgt = Sim.frontierTarget(game, this);
+            if (tgt) { o.tx = tgt[0]; o.ty = tgt[1]; this.path = null; this.repathT = 0; }
+            else if (reached) { // whole map mapped — wander idly nearby
+              o.tx = clamp(this.x + Math.random() * 20 - 10, 2, World.N - 3) | 0;
+              o.ty = clamp(this.y + Math.random() * 20 - 10, 2, World.N - 3) | 0;
+            }
+          }
+          if (o.tx !== undefined && this.ensurePath(game, o.tx + .5, o.ty + .5)) this.moveAlong(game, dt);
+          this.anim = this.path ? 'walk' : 'idle';
           break;
         }
         case 'garrison': {
@@ -1316,6 +1333,23 @@ const Sim = {
           o.takeDamage(game, dmg * 0.5, src);
       }
     }
+  },
+
+  /* find a nearby unexplored, walkable tile for a scout to strike out toward */
+  frontierTarget(game, u) {
+    const W = game.world, N = World.N;
+    for (let tries = 0; tries < 60; tries++) {
+      const ang = Math.random() * Math.PI * 2, r = 8 + Math.random() * 44;
+      const x = (u.x + Math.cos(ang) * r) | 0, y = (u.y + Math.sin(ang) * r) | 0;
+      if (x < 2 || y < 2 || x >= N - 2 || y >= N - 2) continue;
+      const i = World.idx(x, y);
+      if (W.vis[i] === 0 && !W.blocked[i]) return [x, y];
+    }
+    for (let y = 2; y < N - 2; y += 5) for (let x = 2; x < N - 2; x += 5) { // coarse fallback sweep
+      const i = World.idx(x, y);
+      if (W.vis[i] === 0 && !W.blocked[i]) return [x, y];
+    }
+    return null;
   },
 
   /* boiling oil tipped from a tower's murder-holes: ignores armour outright, and
