@@ -520,11 +520,15 @@ function loop(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000 || 0.016);
   lastT = now;
 
-  Input.update(dt);
-  // game speed: run extra simulation sub-steps, render once
-  for (let step = 0; step < game.speed; step++) simStep(game, dt);
-
-  render(game);
+  // a single bad frame must never freeze the whole game — keep the loop alive and
+  // log the first error so it can be diagnosed instead of locking up after a while.
+  try {
+    Input.update(dt);
+    for (let step = 0; step < game.speed; step++) simStep(game, dt); // extra sub-steps for game speed
+    render(game);
+  } catch (e) {
+    if (!window.__loopErr) { window.__loopErr = String(e && e.stack || e); console.error('loop recovered from error:', e); }
+  }
   requestAnimationFrame(loop);
 }
 

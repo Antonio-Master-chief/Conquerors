@@ -166,15 +166,25 @@ const World = (() => {
         if (addObj(kind, x, y, amount)) placed++;
       }
     }
+    // place a cluster near (sx,sy), widening the search ring until it actually lands
+    // on open land — guarantees every start has gold/stone/iron even amid mountains/water
+    function guaranteedCluster(kind, sx, sy, count, amount) {
+      for (let ring = 6; ring <= 20; ring += 2) for (let tries = 0; tries < 8; tries++) {
+        const a = rnd() * Math.PI * 2;
+        const before = W.objects.length;
+        cluster(kind, Math.round(sx + Math.cos(a) * ring), Math.round(sy + Math.sin(a) * ring), count, 2.5, amount);
+        if (W.objects.length > before) return;
+      }
+    }
     // per-start guaranteed economy (generous — AI and player both live off this)
     for (const s of W.starts) {
       cluster('bush', s.x + (rnd() < .5 ? -6 : 6), s.y + (rnd() < .5 ? -5 : 5), 8, 2.5, 150);
       cluster('bush', s.x + (rnd() < .5 ? -5 : 5), s.y + (rnd() < .5 ? 7 : -7), 5, 2.2, 150);
       cluster('tree', s.x + (rnd() < .5 ? -9 : 9), s.y + (rnd() < .5 ? 8 : -8), 18, 4.5, 120);
       cluster('tree', s.x + (rnd() < .5 ? -7 : 7), s.y + (rnd() < .5 ? -9 : 9), 10, 3.5, 120);
-      cluster('gold', s.x + (rnd() < .5 ? -8 : 8), s.y + (rnd() < .5 ? -8 : 8), 5, 2.2, 600);
-      cluster('stone', s.x + (rnd() < .5 ? -11 : 11), s.y, 4, 2.2, 500);
-      cluster('iron', s.x, s.y + (rnd() < .5 ? -11 : 11), 4, 2.2, 450);
+      guaranteedCluster('gold', s.x, s.y, 5, 600);
+      guaranteedCluster('stone', s.x, s.y, 4, 500);
+      guaranteedCluster('iron', s.x, s.y, 4, 450);
     }
     // scattered wealth + near towns
     for (const t of W.towns) {

@@ -11,9 +11,9 @@ const CFG = {
   MAP: (BOOT && MAP_SIZES[BOOT.map]) || 240,   // map is MAP x MAP tiles (title-selectable)
   TILE_W: 64, TILE_H: 32,  // iso tile screen size at zoom 1
   CHUNK: 12,               // tiles per terrain cache chunk
-  START_POP: 18,
-  TOWN_POP: 10,
-  MAX_POP: 110,
+  START_POP: 50,           // a Town Center supports 50 population
+  TOWN_POP: 50,            // each captured town adds another +50
+  MAX_POP: 400,            // room to grow as you conquer towns
   CARRY: 10,               // settler carry capacity
   CAPTURE_TIME: 8,         // seconds to capture a neutral town
   XP_RANKS: [25, 70, 150], // veterancy thresholds
