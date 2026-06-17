@@ -162,6 +162,7 @@ function makeGame(civKey, diff) {
 function setupMatch(game, civKey, diff) {
   World.gen((Date.now() % 100000) | 0);
   game.gates = []; // gateways tracked for enemy path-barring (reset each match)
+  game.corpses = []; // fallen soldiers: body+blood, then bones, then dust
 
   const civKeys = Object.keys(CIVS);
   const others = civKeys.filter(k => k !== civKey).sort(() => Math.random() - .5);
@@ -428,6 +429,12 @@ function render(game) {
     if (ix < sxMin || ix > sxMax || iy < syMin || iy > syMax) continue;
     draws.push({ key: u.x + u.y, unit: u });
   }
+  if (game.corpses) for (const c of game.corpses) {
+    if (World.visAt(c.x, c.y) === 0) continue;
+    const ix = World.isoX(c.x, c.y), iy = World.isoY(c.x, c.y);
+    if (ix < sxMin || ix > sxMax || iy < syMin || iy > syMax) continue;
+    draws.push({ key: c.x + c.y - 0.03, corpse: c }); // just under the living
+  }
   draws.sort((a, b) => a.key - b.key);
 
   for (const d of draws) {
@@ -444,6 +451,8 @@ function render(game) {
       const b = d.bld;
       const pos = b.drawSprite(ctx, view, game);
       drawHpBar(ctx, game, b, pos.ix, pos.iy - (b.size * 26 + 26) * z, z, b.size * 40);
+    } else if (d.corpse) {
+      drawCorpse(ctx, d.corpse, view, z, game);
     } else {
       const u = d.unit;
       const pos = u.drawSprite(ctx, view);
@@ -550,6 +559,46 @@ function drawHpBar(ctx, game, e, ix, iy, z, w) {
   ctx.fillRect(ix - ww / 2 + z, iy + z, (ww - 2 * z) * r, 2 * z);
 }
 
+/* a fallen soldier: sprawled body in a spreading bloodstain (0–5s), then bleached
+   bones (5–15s), fading to dust over the final two seconds */
+function drawCorpse(ctx, c, view, z, game) {
+  const ix = (World.isoX(c.x, c.y) - view.left) * z;
+  const iy = (World.isoY(c.x, c.y) - view.top) * z;
+  const age = game.time - c.t0;
+  const sc = z * (c.big ? 0.95 : 0.78);
+  let alpha = age > 13 ? Math.max(0, (15 - age) / 2) : 1; // fade out in the last 2s
+  if (World.visAt(c.x, c.y) === 1) alpha *= 0.7;          // dimmed in explored-but-unseen fog
+  ctx.globalAlpha = alpha;
+  if (age < 5) {
+    // pooling blood, darkening as it spreads
+    const bp = Math.min(1, age / 1.5);
+    ctx.fillStyle = `rgba(96,22,16,${(0.5 * bp).toFixed(2)})`;
+    ctx.beginPath(); ctx.ellipse(ix, iy + 3 * z, 13 * sc * (0.6 + 0.4 * bp), 6 * sc * (0.6 + 0.4 * bp), 0, 0, 7); ctx.fill();
+    // sprawled body, oriented by the way the soldier was facing
+    ctx.save(); ctx.translate(ix, iy); ctx.rotate(0.25 + (c.dir || 0) * 0.06); // sprawl angled by the way they fell
+    const col = Sprites.teamCols(c.owner < 0 ? -1 : c.owner).main;
+    ctx.fillStyle = col;                                    // tunic / torso
+    ctx.beginPath(); ctx.ellipse(0, 0, 9.5 * sc, 4 * sc, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3a322a'; ctx.lineWidth = 2 * sc; ctx.strokeStyle = '#caa882';
+    ctx.beginPath(); ctx.moveTo(-7 * sc, 1 * sc); ctx.lineTo(-12 * sc, 4 * sc); ctx.stroke();   // an outflung arm
+    ctx.fillStyle = '#caa882';                              // head
+    ctx.beginPath(); ctx.arc(11 * sc, -1.5 * sc, 3 * sc, 0, 7); ctx.fill();
+    ctx.restore();
+  } else {
+    // a faded stain and a little heap of bones
+    ctx.fillStyle = 'rgba(70,32,24,.22)';
+    ctx.beginPath(); ctx.ellipse(ix, iy + 3 * z, 10 * sc, 5 * sc, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#ded7c4'; ctx.lineWidth = 1.4 * z;   // ribcage / spine
+    for (let i = 0; i < 4; i++) { const rx = ix - 5 * sc + i * 3 * sc; ctx.beginPath(); ctx.moveTo(rx, iy - 2.6 * sc); ctx.lineTo(rx, iy + 2.6 * sc); ctx.stroke(); }
+    ctx.fillStyle = '#ece6d6';                              // skull
+    ctx.beginPath(); ctx.arc(ix + 7 * sc, iy, 2.7 * sc, 0, 7); ctx.fill();
+    ctx.fillStyle = '#352d25';                              // eye sockets
+    ctx.fillRect(ix + 5.6 * sc, iy - 0.8 * sc, 1.1 * sc, 1.1 * sc);
+    ctx.fillRect(ix + 7.4 * sc, iy - 0.8 * sc, 1.1 * sc, 1.1 * sc);
+  }
+  ctx.globalAlpha = 1;
+}
+
 /* ---------------- main loop ---------------- */
 let lastT = 0, fogT = 0, uiT = 0, mmT = 0, panelT = 0, vicT = 0, leashT = 0, auraT = 0,
     irrT = 0, smokeT = 0, moodT = 0, siegeT2 = 0, poisonT2 = 0;
@@ -585,6 +634,9 @@ function simStep(game, dt) {
     for (const c of game.carcasses) { if (c.team) continue; c.fade -= dt; if (c.fade <= 0 && c.alive) World.removeObj(c); }
     game.carcasses = game.carcasses.filter(c => c.alive);
   }
+  // corpses: body for 5s, bones for 10s, then gone (CFG: 15s total)
+  if (game.corpses && game.corpses.length)
+    game.corpses = game.corpses.filter(c => game.time - c.t0 < 15);
   for (const p of game.players) p.tickResearch(dt, game);
   for (const ai of game.ai) ai.tick(dt);
   maybeSpawnTrader(game, dt);

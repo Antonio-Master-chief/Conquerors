@@ -835,6 +835,11 @@ class Unit {
       game.popFree(this);
       if (this.def.animal) Sim.dropCarcass(game, this, from);
       Sim.puff(game, this.x, this.y - 0.4, '#5b1f18', 9);
+      // a fallen soldier leaves a body, then bleached bones, before returning to dust
+      if (!this.def.animal && !this.def.cart && !this.def.npc && !this.def.naval)
+        (game.corpses || (game.corpses = [])).push({
+          x: this.x, y: this.y, owner: this.owner, dir: this.dir, t0: game.time, big: !!this.def.big,
+        });
       if (this.def.cart) {
         // supply cart destroyed: its in-transit goods are lost for good
         if (this.haulHome) this.haulHome.cart = null;
