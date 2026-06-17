@@ -105,6 +105,32 @@ const World = (() => {
       }
     }
 
+    /* mountain citadels: 2 rich settlements ringed by peaks, reachable only via one pass */
+    W.fortress = [];
+    function carveFortress(fx, fy) {
+      const Rin = 8, gapA = Math.atan2(cy - fy, cx - fx); // pass faces the map centre (where foes approach)
+      for (let y = fy - Rin - 3; y <= fy + Rin + 3; y++) for (let x = fx - Rin - 3; x <= fx + Rin + 3; x++) {
+        if (x < 2 || y < 2 || x >= N - 2 || y >= N - 2) continue;
+        const i = idx(x, y), d = Math.hypot(x - fx, y - fy);
+        if (d < Rin - 1) {                            // interior: open high-ground meadow
+          W.ter[i] = (d < 3) ? TERRAIN.GRASS : (nh(x, y) > 0.5 ? TERRAIN.HILL : TERRAIN.GRASS);
+          W.blocked[i] = 0; W.sightBlock[i] = 0; W.pass[i] = 0;
+        } else if (d <= Rin + 1.6) {                  // the ring of peaks, broken by one pass
+          const ang = Math.atan2(y - fy, x - fx);
+          let dA = Math.abs(((ang - gapA + Math.PI) % (Math.PI * 2)) - Math.PI);
+          if (dA < 0.42) { W.ter[i] = TERRAIN.HILL; W.blocked[i] = 0; W.sightBlock[i] = 0; W.pass[i] = 1; } // the pass
+          else { W.ter[i] = TERRAIN.MOUNTAIN; W.blocked[i] = 1; W.sightBlock[i] = 1; W.pass[i] = 0; }
+        }
+      }
+      // mouth of the pass, just outside the ring — corridors connect here so it stays the ONLY way in
+      W.fortress.push({ x: fx, y: fy, r: Rin,
+        passX: Math.round(fx + Math.cos(gapA) * (Rin + 2.5)),
+        passY: Math.round(fy + Math.sin(gapA) * (Rin + 2.5)) });
+    }
+    // the two towns farthest from the map centre become the citadels
+    W.towns.map(t => ({ t, d: dist(t.x, t.y, cx, cy) })).sort((a, b) => b.d - a.d).slice(0, 2)
+      .forEach(o => { o.t.fortress = true; carveFortress(o.t.x, o.t.y); });
+
     /* guarantee a pond near every start so irrigation farming is always possible */
     function ensurePond(sx, sy) {
       for (let y = Math.max(0, sy - 12); y <= Math.min(N - 1, sy + 12); y++)
@@ -209,8 +235,13 @@ const World = (() => {
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
           const x = cx2 + dx, y = cy2 + dy;
           if (!inB(x, y)) continue;
+          // never breach a citadel's protective ring of peaks (only its pass may admit anyone)
+          let inRing = false;
+          for (const f of W.fortress) { const fd = Math.hypot(x - f.x, y - f.y); if (fd >= f.r - 1 && fd <= f.r + 1.6) { inRing = true; break; } }
+          if (inRing) continue;
           const i = idx(x, y);
           if (W.ter[i] <= TERRAIN.SHALLOW) { W.ter[i] = TERRAIN.SAND; W.blocked[i] = 0; } // ford
+          else if (W.ter[i] === TERRAIN.MOUNTAIN) { W.ter[i] = TERRAIN.HILL; W.blocked[i] = 0; W.sightBlock[i] = 0; } // tunnel a pass
           const oid = W.objGrid[i];
           if (oid) {
             const o = W.objects[oid - 1];
@@ -221,7 +252,17 @@ const World = (() => {
     }
     const hub = W.towns[0]; // center town
     for (const s of W.starts) carve(s.x, s.y, hub.x, hub.y);
-    for (let ti = 1; ti < W.towns.length; ti++) carve(W.towns[ti].x, W.towns[ti].y, hub.x, hub.y);
+    for (let ti = 1; ti < W.towns.length; ti++) if (!W.towns[ti].fortress) carve(W.towns[ti].x, W.towns[ti].y, hub.x, hub.y);
+    // connect each citadel's pass mouth to the road network — the pass is the sole entrance
+    for (const f of (W.fortress || [])) carve(f.passX, f.passY, hub.x, hub.y);
+    // stock each mountain citadel with riches (after carve so corridors don't strip them)
+    for (const f of (W.fortress || [])) {
+      cluster('gold', f.x + 3, f.y - 2, 6, 2.6, 800);
+      cluster('iron', f.x - 3, f.y + 2, 5, 2.6, 700);
+      cluster('stone', f.x - 2, f.y - 3, 4, 2.4, 650);
+      cluster('bush', f.x + 2, f.y + 3, 8, 2.6, 200);
+      cluster('tree', f.x + 4, f.y, 6, 2.5, 120);
+    }
 
     /* ---- island towns: conquest objectives reachable only by sea ----
        (added AFTER carve() so no land corridor is cut to them) */

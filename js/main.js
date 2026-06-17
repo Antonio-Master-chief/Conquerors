@@ -187,17 +187,41 @@ function setupMatch(game, civKey, diff) {
       const o = World.objAt(x, y); if (o) World.removeObj(o);
       game.world.blocked[World.idx(x, y)] = 0;
     }
-    Sim.placeBuilding(game, -1, 'town', t.x - 1, t.y - 1, true);
+    const tb = Sim.placeBuilding(game, -1, 'town', t.x - 1, t.y - 1, true);
+    tb.fortress = !!t.fortress;     // mountain citadels reward +100 knowledge on capture
+    if (t.fortress) { tb.maxHp = Math.round(tb.maxHp * 1.6); tb.hp = tb.maxHp; }
     const center = ti === 0;
-    const garrison = center
-      ? ['spearman', 'spearman', 'spearman', 'spearman', 'archer', 'archer', 'archer', 'sword', 'sword']
-      : ['spearman', 'spearman', 'spearman', 'archer'];
+    // mountain citadels are defended by a fierce garrison guarding the treasure within
+    const garrison = t.fortress
+      ? ['spearman', 'spearman', 'spearman', 'sword', 'sword', 'sword', 'archer', 'archer', 'archer', 'archer', 'sword']
+      : center
+        ? ['spearman', 'spearman', 'spearman', 'spearman', 'archer', 'archer', 'archer', 'sword', 'sword']
+        : ['spearman', 'spearman', 'spearman', 'archer'];
     garrison.forEach((gk, gi) => {
       const a = gi / garrison.length * Math.PI * 2;
-      const u = Sim.spawnUnit(game, -1, gk, t.x + .5 + Math.cos(a) * 2.2, t.y + .5 + Math.sin(a) * 2.2, 'none');
+      const rad = t.fortress ? 2.8 : 2.2;
+      const u = Sim.spawnUnit(game, -1, gk, t.x + .5 + Math.cos(a) * rad, t.y + .5 + Math.sin(a) * rad, 'none');
       u.home = { x: u.x, y: u.y };
     });
   });
+
+  // citadel herds: each mountain-enclosed settlement keeps fat herds of livestock & game
+  for (const f of (game.world.fortress || [])) {
+    const freeAt = (x, y) => World.inB(x, y) && !game.world.blocked[World.idx(x, y)] &&
+                             !game.world.objGrid[World.idx(x, y)] && game.world.ter[World.idx(x, y)] !== TERRAIN.MOUNTAIN;
+    const herd = (kind, n, cx, cy) => {
+      for (let i = 0; i < n; i++) {
+        for (let tries = 0; tries < 24; tries++) {
+          const x = cx + (Math.random() * 5 - 2.5), y = cy + (Math.random() * 5 - 2.5);
+          if (!freeAt(x | 0, y | 0) || dist(x, y, f.x, f.y) < 2.5) continue;
+          Sim.spawnUnit(game, -1, kind, x, y, 'none'); break;
+        }
+      }
+    };
+    herd('deer', 6, f.x - 4, f.y - 4);
+    herd('sheep', 5, f.x + 4, f.y - 4);
+    herd('boar', 3, f.x + 4, f.y + 4);
+  }
 
   // wild animals: deer herds (fast food) + lone boars (dangerous) on open grass
   const farFromBases = (x, y) => game.world.starts.every(s => dist(x, y, s.x, s.y) > 9) &&

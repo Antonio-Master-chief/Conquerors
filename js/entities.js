@@ -1331,16 +1331,19 @@ const Sim = {
     town.owner = pid;
     town.capture = {}; town.captureBy = -2;
     const p = game.players[pid]; // undefined when neutral garrison reclaims it
+    const know = town.fortress ? 100 : 40;   // mountain citadels are a knowledge windfall
     if (p) {
       p.towns++; p.popCap = Math.min(CFG.MAX_POP, p.popCap + CFG.TOWN_POP);
-      p.res.knowledge += 40;
+      p.res.knowledge += know;
       town.applyHpBonus(p); town.hp = town.maxHp;
     }
-    this.puff(game, town.cx(), town.cy() - 1, '#ffd34d', 16);
+    this.puff(game, town.cx(), town.cy() - 1, '#ffd34d', town.fortress ? 28 : 16);
     if (pid === game.humanId) {
-      game.message(`Town captured! +${CFG.TOWN_POP} population, +40 Knowledge`);
+      game.message(town.fortress
+        ? `Mountain Citadel seized! +${CFG.TOWN_POP} population, +100 Knowledge, and its riches are yours!`
+        : `Town captured! +${CFG.TOWN_POP} population, +40 Knowledge`);
       Audio2.sfx('capture');
-      Audio2.say('Town captured! Our empire grows.', true);
+      Audio2.say(town.fortress ? 'A mountain citadel is ours! Its treasures will fund the war.' : 'Town captured! Our empire grows.', true);
     } else if (prev && prev.id === game.humanId) {
       game.message('We lost a town!', true); Audio2.sfx('alert');
       Audio2.say('We have lost a town!', true);
