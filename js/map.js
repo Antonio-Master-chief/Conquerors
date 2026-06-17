@@ -9,6 +9,7 @@ const World = (() => {
     blocked: new Uint8Array(N * N),     // land-unit passability: static + buildings (not units)
     navBlocked: new Uint8Array(N * N),  // ship passability: land = blocked, open water = free
     sightBlock: new Uint8Array(N * N),  // vision blockers: trees, tall buildings (walls later)
+    pass: new Uint8Array(N * N),        // 1 = mountain-pass tile (extreme high-ground bonus)
     salt: new Uint8Array(N * N),        // water type: 1 = sea (salt, docks+fish), 0 = fresh lake (farms+canals)
     vis: new Uint8Array(N * N),         // 0 unexplored 1 explored 2 visible (human player)
     objects: [],                        // resource nodes & decorations
@@ -43,7 +44,7 @@ const World = (() => {
   function gen(seed) {
     const rnd = RNG(seed);
     const n1 = makeNoise(rnd, 13), n2 = makeNoise(rnd, 6), nf = makeNoise(rnd, 5), nd = makeNoise(rnd, 9),
-          nh = makeNoise(rnd, 7); // highlands
+          nh = makeNoise(rnd, 7), nm = makeNoise(rnd, 8); // highlands & mountains
 
     // player starts: triangle around center (kept clear of the wide border ocean)
     const cx = N / 2, cy = N / 2, R = N * 0.31;
@@ -80,10 +81,28 @@ const World = (() => {
       else if (h < 0.365) t = TERRAIN.SHALLOW;
       else if (h < 0.40) t = TERRAIN.SAND;
       else t = nd(x, y) > 0.72 ? TERRAIN.DIRT : TERRAIN.GRASS;
-      // highlands: defensive high ground (walkable, combat bonuses)
-      if (t === TERRAIN.GRASS && nh(x, y) > 0.80) t = TERRAIN.HILL;
+      // highlands: defensive high ground — now common enough to matter strategically
+      if ((t === TERRAIN.GRASS || t === TERRAIN.DIRT) && nh(x, y) > 0.70) t = TERRAIN.HILL;
+      // mountains: craggy impassable ranges, kept clear of bases — their gaps become passes
+      if (t >= TERRAIN.GRASS && nm(x, y) > 0.86 && landBoost(x, y) === 0) t = TERRAIN.MOUNTAIN;
       W.ter[idx(x, y)] = t;
-      if (t <= TERRAIN.SHALLOW) W.blocked[idx(x, y)] = 1;
+      if (t <= TERRAIN.SHALLOW || t === TERRAIN.MOUNTAIN) W.blocked[idx(x, y)] = 1;
+      if (t === TERRAIN.MOUNTAIN) W.sightBlock[idx(x, y)] = 1;
+    }
+    // mountain passes: a walkable tile pinched between peaks is a deadly choke (extreme high ground)
+    W.pass.fill(0);
+    const isMtn = (x, y) => inB(x, y) && W.ter[idx(x, y)] === TERRAIN.MOUNTAIN;
+    const mNeighbours = (x, y) => { let n = 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) if (isMtn(x + dx, y + dy)) n++;
+      return n; };
+    for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) {
+      const tt = W.ter[idx(x, y)];
+      if (tt < TERRAIN.SAND || tt === TERRAIN.MOUNTAIN) continue;
+      const opp = (isMtn(x - 1, y) && isMtn(x + 1, y)) || (isMtn(x, y - 1) && isMtn(x, y + 1));
+      if (opp || mNeighbours(x, y) >= 3) {
+        W.pass[idx(x, y)] = 1;
+        if (tt < TERRAIN.HILL) W.ter[idx(x, y)] = TERRAIN.HILL;   // a pass reads as high ground
+      }
     }
 
     /* guarantee a pond near every start so irrigation farming is always possible */
@@ -596,6 +615,7 @@ const World = (() => {
   }
   const visAt = (x, y) => inB(x | 0, y | 0) ? W.vis[idx(x | 0, y | 0)] : 0;
   const terAt = (x, y) => inB(x | 0, y | 0) ? W.ter[idx(x | 0, y | 0)] : -1;
+  const isPass = (x, y) => inB(x | 0, y | 0) && W.pass[idx(x | 0, y | 0)] === 1;
 
   /* mark a circle as explored (merchant intel) without granting live vision */
   function explore(cx2, cy2, r) {
@@ -622,7 +642,7 @@ const World = (() => {
   function bakeMinimapBase() {
     const cv = document.createElement('canvas'); cv.width = N; cv.height = N;
     const g = cv.getContext('2d');
-    const cols = ['#16345c', '#2e6e96', '#cdb279', '#5d8a3c', '#8a7148', '#93a05a'];
+    const cols = ['#16345c', '#2e6e96', '#cdb279', '#5d8a3c', '#8a7148', '#93a05a', '#6e675c'];
     const img = g.createImageData(N, N);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const t = W.ter[idx(x, y)];
@@ -674,6 +694,6 @@ const World = (() => {
 
   return { W, gen, idx, inB, isoX, isoY, objAt, nearestObj, removeObj,
            drawTerrain, drawFog, recomputeFog, visAt, terAt, explore,
-           isSea, isFresh, lakeHasWater, drainLake, lakeFrac, rainRefill, refreshLakeChunks, N };
+           isSea, isFresh, lakeHasWater, drainLake, lakeFrac, rainRefill, refreshLakeChunks, isPass, N };
 })();
 try { window.World = World; } catch (e) {}   // expose for hosts that don't share script-scope bindings

@@ -1250,15 +1250,23 @@ const Sim = {
 
   calcDamage(game, src, t) {
     let atk = src.kind === 'unit' ? src.effAtk(game) : src.def.atk;
-    // terrain advantage: high ground hits harder and is harder to hurt
-    if (src.kind === 'unit' && World.terAt(src.x, src.y) === TERRAIN.HILL) atk *= 1.2;
+    // terrain: archers rule the high ground; mountain passes are death funnels.
+    if (src.kind === 'unit') {
+      const ranged = src.def.range > 1.2;
+      if (World.isPass(src.x, src.y)) atk *= ranged ? 2.0 : 0.5;          // pass: archers brutal, melee feeble
+      else if (World.terAt(src.x, src.y) === TERRAIN.HILL) atk *= ranged ? 1.5 : 1.2;
+    }
     let mult = 1;
     const bv = src.def.bonusVs;
     if (bv) {
       const tags = t.kind === 'bld' ? ['building'] : t.def.tags || [];
       for (const tag of tags) if (bv[tag]) mult = Math.max(mult, bv[tag]);
     }
-    if (t.kind === 'unit' && World.terAt(t.x, t.y) === TERRAIN.HILL) mult *= 0.85;
+    // defenders on high ground take far less (cover + elevation)
+    if (t.kind === 'unit') {
+      if (World.isPass(t.x, t.y)) mult *= 0.33;                            // ~3x effective defence
+      else if (World.terAt(t.x, t.y) === TERRAIN.HILL) mult *= 0.5;        // ~2x effective defence
+    }
     const armor = t.kind === 'unit' ? t.effArmor(game) : 1;
     return Math.max(1, atk * mult - armor);
   },

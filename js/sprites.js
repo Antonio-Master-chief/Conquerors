@@ -21,6 +21,7 @@ const Sprites = (() => {
     else if (t === TERRAIN.SAND) { base = ['#cdb279', '#c2a76e']; det = 'speck'; }
     else if (t === TERRAIN.DIRT) { base = ['#8a7148', '#7d663f']; det = 'speck'; }
     else if (t === TERRAIN.HILL) { base = ['#93a05a', '#7a8a4a']; det = 'hill'; }
+    else if (t === TERRAIN.MOUNTAIN) { base = ['#8b8479', '#5e574e']; det = 'mountain'; }
     else { // grass: three palettes so meadows don't tile visibly
       base = [['#5d8a3c', '#527c33'], ['#587f37', '#4e7530'], ['#649144', '#578139']][variant % 3];
       det = 'grass';
@@ -51,6 +52,16 @@ const Sprites = (() => {
       g.beginPath(); g.moveTo(2, 15); g.lineTo(32, 1); g.lineTo(62, 15); g.stroke(); // sunlit ridge
       g.strokeStyle = 'rgba(30,35,15,.30)'; g.lineWidth = 2.5;
       g.beginPath(); g.moveTo(2, 17); g.lineTo(32, 31); g.lineTo(62, 17); g.stroke(); // shaded base
+    } else if (det === 'mountain') {
+      // craggy impassable rock — boulders & sharp crags
+      for (let i = 0; i < 11; i++) {
+        const x = 7 + rnd() * 50, y = 4 + rnd() * 24;
+        g.fillStyle = rnd() > .5 ? 'rgba(184,180,170,.5)' : 'rgba(55,50,44,.5)';
+        g.beginPath(); g.ellipse(x, y, 3 + rnd() * 3, 2 + rnd() * 2, rnd() * 3, 0, 7); g.fill();
+      }
+      g.fillStyle = '#9a9388'; g.strokeStyle = 'rgba(20,16,10,.45)'; g.lineWidth = .8;
+      for (let i = 0; i < 3; i++) { const x = 12 + rnd() * 38, y = 11 + rnd() * 9;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - 7 - rnd() * 4); g.lineTo(x + 9, y); g.closePath(); g.fill(); g.stroke(); }
     } else if (det === 'wave') {
       g.strokeStyle = t === TERRAIN.DEEP ? 'rgba(120,170,220,.18)' : 'rgba(200,235,255,.30)';
       g.lineWidth = 1.2;
@@ -65,9 +76,7 @@ const Sprites = (() => {
         g.ellipse(32, 18, 22, 9, 0, 0, 7); g.fill();
       }
     }
-    // edge shading for depth
-    g.strokeStyle = 'rgba(0,0,0,.13)'; g.lineWidth = 1;
-    g.beginPath(); g.moveTo(0, 16); g.lineTo(32, 32); g.lineTo(64, 16); g.stroke();
+    // (no per-tile edge stroke — keeps meadows seamless instead of a visible grid)
     g.restore();
     cache.set(key, c); return c;
   }

@@ -4,11 +4,11 @@
 /* pre-game options chosen on the title screen, persisted across the fresh reload
    that applies them (map size must be known before the world arrays allocate). */
 const BOOT = (() => { try { return JSON.parse(localStorage.getItem('conq_boot') || 'null'); } catch (e) { return null; } })();
-const MAP_SIZES = { small: 96, medium: 144, large: 192, huge: 240 };  // all divisible by CHUNK(12)
+const MAP_SIZES = { small: 240, medium: 288, large: 336, huge: 384 };  // big battlefields, all divisible by CHUNK(12)
 window.GAME_OPTS = { res: (BOOT && BOOT.res) || 1, animals: (BOOT && BOOT.animals) || 1 };
 
 const CFG = {
-  MAP: (BOOT && MAP_SIZES[BOOT.map]) || 96,    // map is MAP x MAP tiles (title-selectable)
+  MAP: (BOOT && MAP_SIZES[BOOT.map]) || 240,   // map is MAP x MAP tiles (title-selectable)
   TILE_W: 64, TILE_H: 32,  // iso tile screen size at zoom 1
   CHUNK: 12,               // tiles per terrain cache chunk
   START_POP: 18,
@@ -37,7 +37,7 @@ const CFG = {
   ZOOM_MIN: 0.55, ZOOM_MAX: 1.6,
 };
 
-const TERRAIN = { DEEP:0, SHALLOW:1, SAND:2, GRASS:3, DIRT:4, HILL:5 };
+const TERRAIN = { DEEP:0, SHALLOW:1, SAND:2, GRASS:3, DIRT:4, HILL:5, MOUNTAIN:6 };
 
 const AGES = [
   { name:'Settlement Age', cost:null },
