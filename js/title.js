@@ -46,6 +46,7 @@ const Title = (() => {
         </div>
         <div class="optrow"><div class="soundhint">⚔ tap anywhere to awaken the war drums ⚔</div></div>
         <button id="startBtn">⚔ TO WAR ⚔</button>
+        <button id="loadBtn" style="display:none">📂 Continue Save</button>
       </div>`;
 
     const row = document.getElementById('civrow');
@@ -84,6 +85,13 @@ const Title = (() => {
     // music on first interaction (browser autoplay rules)
     const wake = () => { Audio2.setMood('battle'); Audio2.startMusic(1.0); Audio2.setIntensity(0.9); root.removeEventListener('pointerdown', wake); };
     root.addEventListener('pointerdown', wake);
+
+    // show "Continue Save" button if a save exists
+    if (SaveLoad.hasSave()) {
+      const lb = document.getElementById('loadBtn');
+      lb.style.display = '';
+      lb.onclick = () => { Audio2.sfx('age'); SaveLoad.requestLoad(); };
+    }
 
     document.getElementById('startBtn').onclick = () => {
       const res = { low: 0.6, normal: 1, high: 1.7 }[sel.res];

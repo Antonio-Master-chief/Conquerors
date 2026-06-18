@@ -99,6 +99,12 @@ class Unit {
     if (this.buffT > 0) a *= 1.25;
     if (game.time - this.hungerT < 4) a *= 0.75;  // starving under siege
     if (game.time - this.poisonT < 4) a *= 0.8;   // sickened by bad water
+    if (p && p.bonus.castleAtk) {
+      const tags = this.def.tags || [];
+      if (tags.includes('infantry') || tags.includes('cavalry') ||
+          tags.includes('ranged') || tags.includes('siege') || tags.includes('ship') || tags.includes('elephant'))
+        a += p.bonus.castleAtk;
+    }
     return a;
   }
   effArmor(game) {
@@ -955,7 +961,25 @@ class Building {
     if (p) this.applyHpBonus(p);
     this.hp = this.maxHp;
     if (this.type === 'canal' || this.type === 'farm') Sim.recomputeIrrigation(game);
-    if (this.owner === game.humanId) { game.message(`${this.def.name} complete`); Audio2.sfx('train'); }
+    if (this.type === 'castle' && p) {
+      // Castle instantly buffs every military unit the owner has
+      p.bonus.castleHp += 50; p.bonus.castleAtk += 10;
+      for (const u of game.units) {
+        if (u.dead || u.owner !== this.owner) continue;
+        const tags = u.def.tags || [];
+        if (tags.includes('infantry') || tags.includes('cavalry') ||
+            tags.includes('ranged') || tags.includes('siege') || tags.includes('ship') || tags.includes('elephant')) {
+          u.hp = Math.min(u.hp + 50, u.maxHp + 50);
+          u.maxHp += 50;
+        }
+      }
+      if (this.owner === game.humanId) {
+        game.message('Castle complete! All military units gain +50 HP and +10 attack!');
+        Audio2.say('The castle stands! Our warriors grow mightier!', true);
+      }
+    } else if (this.owner === game.humanId) {
+      game.message(`${this.def.name} complete`); Audio2.sfx('train');
+    }
   }
 
   trainable(game) {
@@ -1401,7 +1425,11 @@ const Sim = {
 
   fireProjectile(game, src, t, dmgOverride) {
     const p = game.players[src.owner];
-    const burn = p && p.bonus.greekFire && (src.type === 'catapult' || src.type === 'tower');
+    const greekTags = ['ranged', 'siege', 'ship'];
+    const burn = p && p.bonus.greekFire && (
+      src.kind === 'bld' || // towers, keep
+      (src.def && src.def.tags && src.def.tags.some(tg => greekTags.includes(tg)))
+    );
     game.projectiles.push({
       x: src.cx(), y: src.cy() - (src.kind === 'bld' ? 1.2 : 0.5),
       target: t, speed: src.type === 'catapult' ? 7 : 13,
@@ -1433,7 +1461,7 @@ const Sim = {
           for (const o of game.queryUnits(tx, ty, pr.splash)) {
             if (!o.dead && game.hostile(pr.src.owner, o.owner)) {
               o.takeDamage(game, pr.dmg * (o === t ? 1 : 0.6), pr.src);
-              if (pr.burn) { o.burn = { t: 3, dps: 5 }; this.flame(game, o.x, o.y); }
+              if (pr.burn) { o.burn = { t: 4, dps: 8 }; this.flame(game, o.x, o.y); }
             }
           }
           if (t.kind === 'bld') {
@@ -1444,7 +1472,16 @@ const Sim = {
           let dmg = pr.dmg;
           if (t.kind === 'unit' && t.cover) dmg *= 0.7; // forest cover blunts arrows
           t.takeDamage(game, dmg, pr.src);
-          if (pr.burn && t.kind === 'unit') { t.burn = { t: 3, dps: 5 }; this.flame(game, tx, ty); }
+          if (pr.burn && t.kind === 'unit') {
+            t.burn = { t: 4, dps: 8 }; this.flame(game, tx, ty);
+            // spread fire to all units within 1 tile in 4 cardinal directions
+            for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+              for (const adj of game.queryUnits(tx + dx * 0.75, ty + dy * 0.75, 1.2)) {
+                if (!adj.dead && adj !== t && game.hostile(pr.src.owner, adj.owner))
+                  { adj.burn = { t: 4, dps: 8 }; this.flame(game, adj.x, adj.y); }
+              }
+            }
+          }
         }
       } else {
         pr.x += (tx - pr.x) / d * step;

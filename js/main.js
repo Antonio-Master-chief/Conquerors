@@ -160,9 +160,18 @@ function makeGame(civKey, diff) {
 
 /* ---------------- world setup ---------------- */
 function setupMatch(game, civKey, diff) {
-  World.gen((Date.now() % 100000) | 0);
+  const loadData = SaveLoad.getPending();
+  const seed = loadData ? loadData.seed : (Date.now() % 100000) | 0;
+  game.worldSeed = seed;
+  game.diff = diff;
+  World.gen(seed);
   game.gates = []; // gateways tracked for enemy path-barring (reset each match)
   game.corpses = []; // fallen soldiers: body+blood, then bones, then dust
+
+  if (loadData) {
+    SaveLoad.apply(game, loadData);
+    return;
+  }
 
   const civKeys = Object.keys(CIVS);
   const others = civKeys.filter(k => k !== civKey).sort(() => Math.random() - .5);
@@ -445,7 +454,14 @@ function render(game) {
       const iy = (World.elevScreenY(o.x + .5, o.y + .5) - view.top) * z;
       const dim = World.visAt(o.x, o.y) === 1;
       if (dim) ctx.globalAlpha = .8;
-      ctx.drawImage(s.cv, ix - s.ax * z, iy - s.ay * z + 8 * z, s.cv.width * z, s.cv.height * z);
+      // fish: periodic jump animation — each fish has unique phase
+      let fishJump = 0;
+      if (o.kind === 'fish') {
+        const phase = (o.x * 7 + o.y * 13) % 1;
+        const t = (game.time * 0.38 + phase) % 1;
+        if (t > 0.72) fishJump = -Math.sin((t - 0.72) / 0.28 * Math.PI) * 14;
+      }
+      ctx.drawImage(s.cv, ix - s.ax * z, iy - s.ay * z + 8 * z + fishJump * z, s.cv.width * z, s.cv.height * z);
       ctx.globalAlpha = 1;
     } else if (d.bld) {
       const b = d.bld;
@@ -722,4 +738,11 @@ window.startGame = function (civKey, diff) {
   requestAnimationFrame(loop);
 };
 
-Title.build();   // the title pre-selects any options carried across a map-size reload
+const _autoLoad = SaveLoad.checkPending(); // sets _pending for setupMatch; returns data or null
+if (_autoLoad) {
+  // A save was requested — bypass title and load directly into the saved game
+  document.getElementById('title').classList.add('hidden');
+  window.startGame(_autoLoad.civKey, _autoLoad.diff || 'normal');
+} else {
+  Title.build();   // the title pre-selects any options carried across a map-size reload
+}

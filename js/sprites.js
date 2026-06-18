@@ -171,15 +171,42 @@ const Sprites = (() => {
       cache.set(key, { cv: c, ax: 30, ay: 38 }); return cache.get(key);
     }
     if (kind === 'fish') {
-      c = mk(56, 30); g = g2(c);
-      g.strokeStyle = 'rgba(220,240,255,.45)'; g.lineWidth = 1.2;
-      for (const [x, y, r] of [[20, 14, 9], [36, 18, 7]]) { g.beginPath(); g.ellipse(x, y, r, r * .4, 0, 0, 7); g.stroke(); }
-      g.fillStyle = 'rgba(190,210,230,.85)';
-      for (const [x, y] of [[22, 13], [34, 17], [28, 20]]) {
-        g.beginPath(); g.ellipse(x, y, 4, 1.6, .3, 0, 7); g.fill();
-        g.beginPath(); g.moveTo(x - 4, y); g.lineTo(x - 7, y - 2); g.lineTo(x - 7, y + 2); g.closePath(); g.fill();
+      // More visible fish — bright silver-blue body with orange dorsal, visible tail
+      c = mk(64, 36); g = g2(c);
+      const v2 = (variant || 0) % 3;
+      const bodyCol = v2 === 0 ? '#a8d4e8' : v2 === 1 ? '#7ec8a0' : '#e8b870';
+      const finCol  = v2 === 0 ? '#e86030' : v2 === 1 ? '#e07030' : '#c03820';
+      const shimmer = v2 === 0 ? '#d0eef8' : v2 === 1 ? '#b0e4c8' : '#f8d890';
+      // body shadow
+      g.fillStyle = 'rgba(0,0,0,.22)'; g.beginPath(); g.ellipse(32, 29, 16, 4, .2, 0, 7); g.fill();
+      // tail fin
+      g.fillStyle = finCol;
+      g.beginPath(); g.moveTo(10, 18); g.lineTo(4, 11); g.lineTo(4, 25); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(20,12,6,.3)'; g.lineWidth = 1; g.stroke();
+      // body
+      const bg = g.createLinearGradient(12, 12, 12, 26);
+      bg.addColorStop(0, shimmer); bg.addColorStop(0.5, bodyCol); bg.addColorStop(1, bodyCol + 'bb');
+      g.fillStyle = bg;
+      g.beginPath(); g.ellipse(30, 19, 20, 9, .12, 0, 7); g.fill();
+      g.strokeStyle = 'rgba(20,12,6,.28)'; g.lineWidth = 1; g.stroke();
+      // dorsal fin
+      g.fillStyle = finCol;
+      g.beginPath(); g.moveTo(24, 11); g.quadraticCurveTo(32, 5, 40, 11); g.lineTo(40, 14); g.quadraticCurveTo(32, 12, 24, 14); g.closePath(); g.fill();
+      // scales (3 arcs)
+      g.strokeStyle = 'rgba(80,120,160,.35)'; g.lineWidth = 1;
+      for (const [sx, sy] of [[22, 19], [30, 18], [38, 20]]) {
+        g.beginPath(); g.arc(sx, sy + 4, 5, Math.PI * 1.1, Math.PI * 0.1); g.stroke();
       }
-      cache.set(key, { cv: c, ax: 28, ay: 18 }); return cache.get(key);
+      // eye
+      g.fillStyle = '#1a1209'; g.beginPath(); g.arc(46, 18, 2.6, 0, 7); g.fill();
+      g.fillStyle = 'rgba(255,255,255,.7)'; g.beginPath(); g.arc(47, 17, 1, 0, 7); g.fill();
+      // mouth
+      g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(50, 19); g.lineTo(52, 18); g.stroke();
+      // pectoral fin
+      g.fillStyle = finCol + 'cc';
+      g.beginPath(); g.moveTo(40, 20); g.quadraticCurveTo(46, 24, 44, 28); g.lineTo(38, 23); g.closePath(); g.fill();
+      cache.set(key, { cv: c, ax: 32, ay: 22 }); return cache.get(key);
     }
     if (kind === 'palm') {
       c = mk(72, 92); g = g2(c); shadow(g, 36, 86, 17, 6);
@@ -291,12 +318,34 @@ const Sprites = (() => {
     trader:   { tunic: '#7a5d8a', helmet: 'turban',weapon: 'staff',   shield: 'none', pack: true },
   };
 
+  // Civilization-specific visual overrides — applied over UNIT_VIS when civ matches
+  const CIV_UNIT_VIS = {
+    china: {
+      settler:  { tunic: '#7a6840', helmet: 'cone',  weapon: 'axe',     shield: 'none' },
+      spearman: { tunic: '#1e4272', helmet: 'cone',  weapon: 'spear',   shield: 'round' },
+      archer:   { tunic: '#1a3854', helmet: 'cone',  weapon: 'bow',     shield: 'none' },
+      crossbow: { tunic: '#223050', helmet: 'cone',  weapon: 'crossbow',shield: 'none' },
+      longbow:  { tunic: '#162a40', helmet: 'cone',  weapon: 'bow',     shield: 'none' },
+      sword:    { tunic: '#2a204e', helmet: 'metal', weapon: 'sword',   shield: 'kite' },
+    },
+    india: {
+      settler:  { tunic: '#a07848', helmet: 'straw', weapon: 'axe',     shield: 'none' },
+      spearman: { tunic: '#7a3c16', helmet: 'metal', weapon: 'spear',   shield: 'round' },
+      archer:   { tunic: '#5c2e14', helmet: 'hood',  weapon: 'bow',     shield: 'none' },
+      crossbow: { tunic: '#5a2e10', helmet: 'metal', weapon: 'crossbow',shield: 'none' },
+      longbow:  { tunic: '#4a2410', helmet: 'hood',  weapon: 'bow',     shield: 'none' },
+      sword:    { tunic: '#6e3a16', helmet: 'turban',weapon: 'sword',   shield: 'kite' },
+    },
+  };
+
   /* The humanoid is drawn parametrically from a facing vector:
      fx: -1 = facing screen-left … 0 = frontal … +1 = screen-right
      fy: +1 = toward the viewer (front) … -1 = away (back).
      unit() drives this from any of 24 directions (right-facing ones are mirrored). */
   function drawHumanoid(g, type, colorIdx, civ, fx, fy, anim, fr, tool) {
-    const v = UNIT_VIS[type] || UNIT_VIS.spearman;
+    const baseV = UNIT_VIS[type] || UNIT_VIS.spearman;
+    const civV = (CIV_UNIT_VIS[civ] || {})[type];
+    const v = civV || baseV;
     const weapon = tool || v.weapon;       // settlers swap tools by task
     const tc = teamCols(colorIdx);
     const skin = SKIN[civ] || SKIN.none;
@@ -428,6 +477,27 @@ const Sprites = (() => {
       case 'cone': g.fillStyle = '#b8924a'; g.beginPath(); g.moveTo(hx - 7, hy - 2); g.lineTo(hx + 7, hy - 2); g.lineTo(hx, hy - 9); g.closePath(); g.fill(); break;
       case 'turban': g.fillStyle = '#e8e0ce'; g.beginPath(); g.ellipse(hx, hy - 3, 6, 4.4, 0, 0, 7); g.fill();
         g.strokeStyle = '#b8a784'; g.beginPath(); g.moveTo(hx - 5, hy - 4); g.quadraticCurveTo(hx, hy - 1, hx + 5, hy - 4); g.stroke(); break;
+    }
+    // civ-specific helmet accents
+    if (civ === 'china' && v.helmet === 'cone') {
+      g.fillStyle = '#c82828'; // lacquer-red band
+      g.fillRect(hx - 7, hy - 3.5, 14, 2.2);
+      g.strokeStyle = '#8a1a1a'; g.lineWidth = 0.8;
+      g.beginPath(); g.moveTo(hx - 7, hy - 3.5); g.lineTo(hx + 7, hy - 3.5); g.stroke();
+    }
+    if (civ === 'china') { // red sash accent on torso
+      g.fillStyle = '#c82828'; g.fillRect(hipX - tw + 1, hipY - 4, tw * 2 - 2, 2);
+    }
+    if (civ === 'india' && v.helmet === 'turban') {
+      g.fillStyle = '#e8c84a'; g.beginPath(); g.arc(hx, hy - 6.5, 2, 0, 7); g.fill(); // gem
+      g.fillStyle = '#2ab8d8'; g.beginPath(); g.arc(hx, hy - 6.5, 1.1, 0, 7); g.fill(); // gem facet
+    }
+    if (civ === 'india' && v.helmet === 'metal') {
+      g.strokeStyle = '#e8c84a'; g.lineWidth = 1.1; // gold trim on helmet
+      g.beginPath(); g.arc(hx, hy - 1.5, 5.7, Math.PI, 0); g.stroke();
+    }
+    if (civ === 'india') { // saffron sash
+      g.fillStyle = '#e87a1a'; g.fillRect(hipX - tw + 1, hipY - 4, tw * 2 - 2, 2);
     }
 
     // ----- weapon & arms -----
@@ -1899,6 +1969,82 @@ const Sprites = (() => {
       }
       flag(g, cx, cy - KH - 20, colorIdx);
       ageDress(g, cx, cy, BW, 8, KH, age, colorIdx);
+      const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
+    }
+
+    if (type === 'castle') {
+      // Grand fortress — central keep flanked by round towers, battlements all around
+      const CH = 58, BW = 22;
+      g.fillStyle = 'rgba(0,0,0,.28)'; g.beginPath(); g.ellipse(cx, cy, 38, 16, 0, 0, 7); g.fill();
+      // central keep body
+      const kGrad = g.createLinearGradient(cx - BW, 0, cx + BW, 0);
+      kGrad.addColorStop(0, p.wallL); kGrad.addColorStop(.5, p.top); kGrad.addColorStop(1, p.wallR);
+      g.fillStyle = kGrad;
+      g.beginPath(); g.moveTo(cx - BW, cy - 3); g.lineTo(cx - BW + 4, cy - CH);
+      g.lineTo(cx + BW - 4, cy - CH); g.lineTo(cx + BW, cy - 3);
+      g.ellipse(cx, cy - 3, BW, 10, 0, 0, Math.PI); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.3; g.stroke();
+      // stone courses on keep
+      g.strokeStyle = 'rgba(20,12,6,.15)'; g.lineWidth = 1;
+      for (let i = 1; i <= 5; i++) {
+        const yy = cy - 3 - (CH - 6) * i / 6, ww = BW - 4 * i / 6;
+        g.beginPath(); g.moveTo(cx - ww, yy); g.lineTo(cx + ww, yy); g.stroke();
+      }
+      // parapet + merlons on keep
+      g.fillStyle = p.wallR; g.fillRect(cx - BW - 2, cy - CH - 4, (BW + 2) * 2, 6);
+      g.fillStyle = p.top; g.beginPath(); g.ellipse(cx, cy - CH - 4, BW + 2, 6, 0, 0, 7); g.fill();
+      g.strokeStyle = 'rgba(20,12,6,.5)'; g.stroke();
+      g.fillStyle = p.wallR;
+      for (let i = -3; i <= 3; i++) g.fillRect(cx + i * 8 - 3, cy - CH - 14, 6, 11);
+      // grand portcullis gate
+      g.fillStyle = '#1a120a'; g.beginPath();
+      g.moveTo(cx - 10, cy + 2); g.lineTo(cx - 10, cy - 14);
+      g.arc(cx, cy - 14, 10, Math.PI, 0); g.lineTo(cx + 10, cy + 2); g.closePath(); g.fill();
+      const ptc = g.createLinearGradient(cx, cy - 20, cx, cy + 2);
+      ptc.addColorStop(0, '#4a3828'); ptc.addColorStop(1, '#2e2218');
+      g.fillStyle = ptc; g.beginPath();
+      g.moveTo(cx - 9, cy + 1); g.lineTo(cx - 9, cy - 13);
+      g.arc(cx, cy - 13, 9, Math.PI, 0); g.lineTo(cx + 9, cy + 1); g.closePath(); g.fill();
+      g.strokeStyle = '#8a6a42'; g.lineWidth = 1;
+      for (let gx = cx - 7; gx <= cx + 7; gx += 4.5) { g.beginPath(); g.moveTo(gx, cy + 1); g.lineTo(gx, cy - 20); g.stroke(); }
+      for (const gy of [cy - 5, cy - 12]) { g.beginPath(); g.moveTo(cx - 9, gy); g.lineTo(cx + 9, gy); g.stroke(); }
+      // portcullis spikes at the bottom
+      g.fillStyle = '#6a5030';
+      for (let gx = cx - 7; gx <= cx + 7; gx += 4.5) { g.beginPath(); g.moveTo(gx - 1.2, cy + 1); g.lineTo(gx + 1.2, cy + 1); g.lineTo(gx, cy + 4); g.closePath(); g.fill(); }
+      // two flanking round towers
+      for (const [tx, tdir] of [[cx - s * 28, -1], [cx + s * 28, 1]]) {
+        const ty = cy + (tdir < 0 ? s * 14 : -s * 14);
+        const TH = 48, TW = 13;
+        g.fillStyle = tdir < 0 ? p.wallL : p.wallR;
+        g.beginPath(); g.moveTo(tx - TW, ty - 2); g.lineTo(tx - TW + 3, ty - TH);
+        g.lineTo(tx + TW - 3, ty - TH); g.lineTo(tx + TW, ty - 2);
+        g.ellipse(tx, ty - 2, TW, 5, 0, 0, Math.PI); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(20,12,6,.45)'; g.lineWidth = 1; g.stroke();
+        g.strokeStyle = 'rgba(20,12,6,.14)';
+        for (let i = 1; i <= 3; i++) {
+          const yy = ty - 2 - (TH - 4) * i / 4, ww = TW - 3 * i / 4;
+          g.beginPath(); g.moveTo(tx - ww, yy); g.lineTo(tx + ww, yy); g.stroke();
+        }
+        g.fillStyle = tdir < 0 ? p.wallL : p.wallR;
+        g.fillRect(tx - TW - 1, ty - TH - 3, (TW + 1) * 2, 5);
+        g.fillStyle = p.top; g.beginPath(); g.ellipse(tx, ty - TH - 3, TW + 1, 5, 0, 0, 7); g.fill();
+        g.strokeStyle = 'rgba(20,12,6,.5)'; g.stroke();
+        g.fillStyle = tdir < 0 ? p.wallL : p.wallR;
+        for (let i = -1; i <= 1; i++) g.fillRect(tx + i * 7 - 2.5, ty - TH - 11, 5, 8);
+        g.fillStyle = '#1a120a'; g.fillRect(tx - 2, ty - TH + 10, 4, 8); // arrow slit
+        // oil cauldron on tower roof
+        g.fillStyle = '#33291f'; g.beginPath(); g.ellipse(tx, ty - TH - 8, 3, 2, 0, 0, 7); g.fill();
+        g.fillStyle = '#ff6a20'; g.beginPath(); g.arc(tx, ty - TH - 9, 1.4, 0, 7); g.fill();
+      }
+      // arrow slits on keep
+      g.fillStyle = '#1a120a';
+      for (const [slx, sly] of [[cx - 11, cy - CH + 18], [cx + 9, cy - CH + 18], [cx - 1.5, cy - CH + 8]]) {
+        g.fillRect(slx, sly, 3, 10);
+      }
+      // age dressing on the keep
+      ageDress(g, cx, cy, BW, 10, CH, age, colorIdx);
+      flag(g, cx, cy - CH - 19, colorIdx);
+      flag(g, cx - s * 28, cy + s * 14 - 48 - 14, colorIdx);
       const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 

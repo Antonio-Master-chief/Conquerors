@@ -148,7 +148,7 @@ h1.gametitle {
 .diffbtn.sel, .optbtn.sel { background:linear-gradient(180deg,#8a2418,#591009); color:#ffe7c8; border-color:#caa34f; box-shadow:0 0 14px rgba(184,44,26,.5); }
 .optrow label { font-family:'Cinzel',Georgia,serif; min-width:84px; text-align:right; }
 /* war-themed longsword cursor on the title screen */
-#title, #title #startBtn, #title .civcard, #title .optbtn {
+#title, #title #startBtn, #title #loadBtn, #title .civcard, #title .optbtn {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32'%3E%3Cpath d='M5 5 L8 6 L24 22 L22 24 L6 8 Z' fill='%23dfe6ee' stroke='%23778' stroke-width='0.6'/%3E%3Cpath d='M6.5 6.5 L21 21' stroke='%23ffffff' stroke-width='0.8' opacity='0.6'/%3E%3Cpath d='M19 25 L25 19 L28 22 L22 28 Z' fill='%23c9a23e' stroke='%238a6420' stroke-width='0.6'/%3E%3Cpath d='M24 24 L28.5 28.5' stroke='%235d4426' stroke-width='2.6' stroke-linecap='round'/%3E%3Ccircle cx='28.7' cy='28.7' r='1.9' fill='%23c9a23e'/%3E%3C/svg%3E") 5 5, pointer;
 }
 #startBtn {
@@ -162,6 +162,16 @@ h1.gametitle {
 #startBtn:hover { box-shadow:0 0 52px rgba(214,60,36,.7), inset 0 1px 0 rgba(255,225,180,.4); }
 #startBtn:active { transform:scale(.97); }
 #startBtn.dis { opacity:.45; pointer-events:none; }
+#loadBtn {
+  font-family:'Cinzel',Georgia,serif; display:block;
+  margin:-8px auto 20px; padding:10px 48px; font-size:15px; font-weight:600; letter-spacing:.15em;
+  background:linear-gradient(180deg,#3a3020,#24201a); color:#c8a85a; border:1.5px solid #7a6030;
+  border-radius:8px; text-transform:uppercase;
+  box-shadow:0 0 18px rgba(140,90,20,.3), inset 0 1px 0 rgba(200,168,90,.15);
+  transition:transform .1s, box-shadow .2s;
+}
+#loadBtn:hover { box-shadow:0 0 28px rgba(200,140,40,.45), inset 0 1px 0 rgba(200,168,90,.25); color:#e8c870; }
+#loadBtn:active { transform:scale(.97); }
 .soundhint { color:#6e5c3e; font-size:11px; margin-top:-8px; margin-bottom:12px; }
 
 /* victory / defeat */

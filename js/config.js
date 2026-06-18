@@ -197,6 +197,9 @@ const BUILDINGS = {
               naval:true, dropoff:true,
               trains:['fishboat','transport','galley','quinquereme','fireship','catamaran'],
               desc:'Builds ships. Place on shallow water at the shore. Fish drop-off.' },
+  castle:   { name:'Castle', hp:2200, size:3, los:12, cost:{stone:400,gold:200,iron:100}, buildTime:60, age:4,
+              castle:true,
+              desc:'A grand fortress that instantly bestows +50 HP and +10 attack on every military unit you own. One per civilization.' },
 };
 
 /* ---------- Technologies (University) ---------- */
@@ -228,7 +231,7 @@ const TECHS = {
   medicine:{ name:'Medicine', cost:{knowledge:90, gold:100}, age:3, time:28,
     desc:'Units regenerate near Town Centers', apply:p=>p.bonus.tcHeal=true },
   greekfire:{ name:'Greek Fire', cost:{knowledge:200, gold:250, iron:120}, age:4, time:40, civ:'rome',
-    desc:'Catapults & towers set targets ablaze', apply:p=>p.bonus.greekFire=true },
+    desc:'All ranged units, catapults, towers & ships set targets ablaze — and fire spreads to adjacent foes', apply:p=>p.bonus.greekFire=true },
   poisonwells:{ name:'Poison Wells', cost:{knowledge:120, gold:120}, age:3, time:30,
     desc:'Scouts can poison enemy water sources — their troops sicken', apply:p=>p.bonus.poison=true },
 };

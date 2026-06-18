@@ -17,7 +17,8 @@ class Player {
     this.techs = new Set();
     this.researching = null;          // {key, t, total} (univ) or {age:true,...}
     this.bonus = { meleeAtk: 0, rangedAtk: 0, armor: 0, range: 0,
-                   bldHp: 1, gather: 1, tcHeal: false, greekFire: false };
+                   bldHp: 1, gather: 1, tcHeal: false, greekFire: false,
+                   castleHp: 0, castleAtk: 0 };
     this.defeated = false;
     this.knowFrac = 0;
   }

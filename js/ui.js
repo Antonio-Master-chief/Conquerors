@@ -31,6 +31,17 @@ const UI = (() => {
     dp.appendChild(Sprites.icon('pop'));
     resEls.pop = el('span', '', dp);
     ageEl = el('div', '', top); ageEl.id = 'agebadge';
+    const saveB = el('button', '', top); saveB.id = 'menuBtn'; saveB.title = 'Save game';
+    saveB.textContent = '💾';
+    saveB.onclick = () => {
+      if (SaveLoad.save(game)) {
+        saveB.textContent = '✔';
+        game.message('Game saved!');
+        Audio2.sfx('train');
+        setTimeout(() => { saveB.textContent = '💾'; }, 1200);
+      }
+      Audio2.sfx('click');
+    };
     const sb = el('button', '', top); sb.id = 'menuBtn'; sb.textContent = '1×';
     sb.title = 'Game speed';
     sb.onclick = () => {
@@ -286,7 +297,7 @@ const UI = (() => {
         });
       }
       if (settlers.length) {
-        for (const bt of ['storehouse', 'farm', 'canal', 'wall', 'gate', 'dock', 'barracks', 'stable', 'range', 'university', 'grounds', 'tower', 'keep']) {
+        for (const bt of ['storehouse', 'farm', 'canal', 'wall', 'gate', 'dock', 'barracks', 'stable', 'range', 'university', 'grounds', 'tower', 'keep', 'castle']) {
           const B = BUILDINGS[bt];
           const lockAge = B.age > p.age;
           actionBtn(actP, {
