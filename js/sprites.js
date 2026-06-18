@@ -1540,10 +1540,10 @@ const Sprites = (() => {
       const mask = parseInt(variant, 10) || 0;
       const EL = 20, SW2 = 5.5, L = 17;
       const segs = []; // [vx, vy] screen direction to each connected edge
-      if (mask & 2) segs.push([-15.5, -7.75]); // NW (back)
-      if (mask & 8) segs.push([15.5, -7.75]);  // NE (back)
-      if (mask & 4) segs.push([-15.5, 7.75]);  // SW (front)
-      if (mask & 1) segs.push([15.5, 7.75]);   // SE (front)
+      if (mask & 2) segs.push([-16, -8]); // NW (back)
+      if (mask & 8) segs.push([16, -8]);  // NE (back)
+      if (mask & 4) segs.push([-16, 8]);  // SW (front)
+      if (mask & 1) segs.push([16, 8]);   // SE (front)
       const stoneT = style === 'rome' ? '#ddd6c4' : p.top;
       const stoneL = style === 'rome' ? '#c2bba8' : p.wallL;
       const stoneR = style === 'rome' ? '#9b9482' : p.wallR;
@@ -1834,6 +1834,39 @@ const Sprites = (() => {
     }
 
     if (type === 'keep') {
+      // wall integration: draw connecting slabs toward any adjacent wall/gate/keep tiles
+      const kMask = parseInt(variant, 10) || 0;
+      if (kMask) {
+        const KEL = 20, KSW = 5.5;
+        const kStoneT = style === 'rome' ? '#ddd6c4' : p.top;
+        const kStoneL = style === 'rome' ? '#c2bba8' : p.wallL;
+        const kStoneR = style === 'rome' ? '#9b9482' : p.wallR;
+        function keepSlab(vx2, vy2) {
+          const len = Math.hypot(vx2, vy2);
+          const px2 = -vy2 / len * KSW, py2 = vx2 / len * KSW;
+          const quad = [[cx+px2,cy+py2],[cx+px2+vx2,cy+py2+vy2],[cx-px2+vx2,cy-py2+vy2],[cx-px2,cy-py2]];
+          for (const [a, b2] of [[quad[0],quad[1]],[quad[3],quad[2]],[quad[1],quad[2]]]) {
+            if ((a[1]+b2[1])/2 < cy-1) continue;
+            g.fillStyle = (a[0]+b2[0])/2 < cx ? kStoneL : kStoneR;
+            g.strokeStyle='rgba(20,12,6,.4)'; g.lineWidth=1;
+            g.beginPath(); g.moveTo(a[0],a[1]-KEL); g.lineTo(b2[0],b2[1]-KEL);
+            g.lineTo(b2[0],b2[1]); g.lineTo(a[0],a[1]); g.closePath(); g.fill(); g.stroke();
+            g.strokeStyle='rgba(20,12,6,.16)';
+            g.beginPath(); g.moveTo(a[0],a[1]-KEL*.5); g.lineTo(b2[0],b2[1]-KEL*.5); g.stroke();
+          }
+          g.fillStyle=kStoneT; g.strokeStyle='rgba(20,12,6,.4)'; g.lineWidth=1;
+          g.beginPath(); g.moveTo(quad[0][0],quad[0][1]-KEL);
+          for (let i=1;i<4;i++) g.lineTo(quad[i][0],quad[i][1]-KEL);
+          g.closePath(); g.fill(); g.stroke();
+        }
+        const kSegs = [];
+        if (kMask & 2) kSegs.push([-16,-8]);
+        if (kMask & 8) kSegs.push([16,-8]);
+        if (kMask & 4) kSegs.push([-16,8]);
+        if (kMask & 1) kSegs.push([16,8]);
+        for (const [vx2,vy2] of kSegs) if (vy2 < 0) keepSlab(vx2,vy2);
+        for (const [vx2,vy2] of kSegs) if (vy2 > 0) keepSlab(vx2,vy2);
+      }
       // a great wall tower: tall, broad-shouldered, machicolated, bristling with archers
       const KH = 66, BW = 19; // tower height & half-width
       g.fillStyle = 'rgba(0,0,0,.26)'; g.beginPath(); g.ellipse(cx, cy, 26, 11, 0, 0, 7); g.fill();

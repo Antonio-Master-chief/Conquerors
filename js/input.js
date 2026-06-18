@@ -18,6 +18,10 @@ const Input = (() => {
     window.addEventListener('keydown', e => {
       keys[e.key.toLowerCase()] = true;
       if (e.key === 'Escape') { game.placing = null; game.selected = []; UI.refreshPanels(true); }
+      if (e.key.toLowerCase() === 'r' && game.placing && BUILDINGS[game.placing.type].wallTower) {
+        game.placing.keepFlip = !game.placing.keepFlip;
+        UI.message(game.placing.keepFlip ? 'Wall Tower: faces inward (R to flip)' : 'Wall Tower: faces outward (R to flip)');
+      }
     });
     window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
@@ -290,6 +294,7 @@ const Input = (() => {
     if (!p.canAfford(B.cost)) { UI.message('Not enough resources', true); game.placing = null; UI.refreshPanels(true); return; }
     p.pay(B.cost);
     const b = Sim.placeBuilding(game, game.humanId, type, bx, by, false);
+    if (b && B.wallTower && game.placing.keepFlip) b.facingFlip = true;
     const settlers = game.selected.filter(e => !e.dead && e.kind === 'unit' && e.type === 'settler');
     for (const s of settlers) s.orderBuildQueued(b); // queues if already building (AoE style)
     Audio2.sfx('build');
@@ -299,17 +304,21 @@ const Input = (() => {
 
   /* ---------- drag-placement for walls & canals ---------- */
   let placeDrag = null;
-  function dragCells(x0, y0, x1, y1) { // straight tile line, Bresenham
+  function dragCells(x0, y0, x1, y1) { // wall/canal line — Bresenham with gap-filling for cardinal adjacency
     const cells = [];
     let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
     const sx2 = x0 < x1 ? 1 : -1, sy2 = y0 < y1 ? 1 : -1;
     let err = dx + dy, x = x0, y = y0, guard = 0;
-    while (guard++ < 40) {
+    while (guard++ < 80) {
       cells.push([x, y]);
       if (x === x1 && y === y1) break;
       const e2 = 2 * err;
-      if (e2 >= dy) { err += dy; x += sx2; }
-      if (e2 <= dx) { err += dx; y += sy2; }
+      const stepX = e2 >= dy, stepY = e2 <= dx;
+      if (stepX && stepY) {
+        cells.push([x + sx2, y]); // bridge the diagonal gap so walls always connect cardinally
+        err += dy + dx; x += sx2; y += sy2;
+      } else if (stepX) { err += dy; x += sx2; }
+      else               { err += dx; y += sy2; }
     }
     return cells;
   }

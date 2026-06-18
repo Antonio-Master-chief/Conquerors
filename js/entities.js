@@ -1012,7 +1012,8 @@ class Building {
             if (!b.dead && (b.type === 'tc' || b.type === 'town') && b.owner === this.owner) {
               const d = dist(this.cx(), this.cy(), b.cx(), b.cy()); if (d < bd) { bd = d; tc = b; }
             }
-          this.facing = tc ? Math.atan2(this.cy() - tc.cy(), this.cx() - tc.cx()) : 0; // outward from home
+          let angle = tc ? Math.atan2(this.cy() - tc.cy(), this.cx() - tc.cx()) : 0;
+          this.facing = this.facingFlip ? angle + Math.PI : angle; // facingFlip = face inward (R key at placement)
         }
         let best = null, bestD = 1e9;
         for (const u of game.queryUnits(this.cx(), this.cy(), this.def.range)) {
@@ -1169,6 +1170,7 @@ class Building {
       if (this.type === 'canal' && !this.flowing) flag = 'dry';
       if (this.type === 'wall') flag = String(this.wallMask) + (this.gate ? 'g' : '');
       if (this.type === 'gate') flag = String(this.wallMask) + 'G'; // gatehouse with a timber door
+      if (this.type === 'keep') flag = String(this.wallMask || 0); // wall tower carries mask for slab integration
     }
     const age = (game && this.owner >= 0 && game.players[this.owner]) ? game.players[this.owner].age : 1;
     const s = Sprites.building(this.type, style, this.owner < 0 ? -1 : this.owner, this.built, flag, age);

@@ -482,22 +482,25 @@ const World = (() => {
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const i = idx(x, y), t = W.ter[i];
       if (t === TERRAIN.MOUNTAIN) W.elev[i] = 3 + (nm(x, y) > 0.92 ? 1 : 0);
-      else if (t === TERRAIN.HILL || W.pass[i]) W.elev[i] = 2;
+      else if (t === TERRAIN.HILL && !W.pass[i]) W.elev[i] = 2; // pass tiles stay flat (valley floor)
       else if (t === TERRAIN.DIRT && nh(x, y) > 0.72) W.elev[i] = 1;
     }
-    // normalize: no adjacent tile can differ by more than 2 elevation steps
+    // normalize: mountains keep full height; non-mountain tiles smooth to ≤1-step gradient
     let eChanged = true;
     for (let eIter = 0; eIter < 12 && eChanged; eIter++) {
       eChanged = false;
       for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const i = idx(x, y);
+        if (W.ter[i] === TERRAIN.MOUNTAIN) continue; // mountains stay at assigned height
         for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
           if (!inB(x+dx, y+dy)) continue;
-          const i = idx(x, y), j = idx(x+dx, y+dy);
-          if (W.elev[i] > W.elev[j] + 2) { W.elev[i] = W.elev[j] + 2; eChanged = true; }
+          const j = idx(x+dx, y+dy);
+          if (W.elev[i] > W.elev[j] + 1) { W.elev[i] = W.elev[j] + 1; eChanged = true; }
         }
       }
     }
     for (let i = 0; i < N * N; i++) if (W.ter[i] <= TERRAIN.SHALLOW) W.elev[i] = 0;
+    for (let i = 0; i < N * N; i++) if (W.pass[i]) W.elev[i] = 0; // pass corridor = flat valley floor
 
     W.vis.fill(0);
     W.chunks.fill(null);
