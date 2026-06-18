@@ -36,8 +36,8 @@ class Player {
     if (!u || u.npc) return false;
     if (u.age > this.age) return false;
     if (u.civ && u.civ !== this.civKey) return false;
-    // civ replacement: rome trains legionary instead of swordsman
-    if (uKey === 'sword' && this.civ && this.civ.roster.sword) return false;
+    // civ roster replacement: if this civ has a unique swap for this slot, suppress the generic
+    if (this.civ && this.civ.roster && this.civ.roster[uKey]) return false;
     return true;
   }
   techCost(t) {

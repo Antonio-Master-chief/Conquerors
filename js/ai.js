@@ -189,6 +189,7 @@ class AIController {
     const builderFree = settlers.find(s => !s.order || s.order.kind === 'gather');
     if (builderFree) {
       if (!has('barracks') && p.canAfford(BUILDINGS.barracks.cost)) this.tryBuild('barracks', tc, builderFree);
+      else if (p.age >= 2 && !has('stable') && p.canAfford(BUILDINGS.stable.cost)) this.tryBuild('stable', tc, builderFree);
       else if (p.age >= 2 && !has('range') && p.canAfford(BUILDINGS.range.cost)) this.tryBuild('range', tc, builderFree);
       else if (p.age >= 2 && !has('university') && p.canAfford(BUILDINGS.university.cost)) this.tryBuild('university', tc, builderFree);
       else if (p.age >= 2 && this.cfg.techy && !has('grounds') && p.canAfford(BUILDINGS.grounds.cost)) this.tryBuild('grounds', tc, builderFree);
@@ -232,7 +233,12 @@ class AIController {
         continue;
       }
       if (b.type === 'range') pick = options.includes('chukonu') ? 'chukonu' : 'archer';
-      else {
+      else if (b.type === 'stable') {
+        // 60% chance: civ-unique mount (equites/keshik/ashva); else chariot or generic horseman
+        const uniq = options.filter(k => ['equites','keshik','ashva'].includes(k));
+        const rest = options.filter(k => !['equites','keshik','ashva'].includes(k));
+        pick = (uniq.length && Math.random() < .6) ? uniq[0] : rest.length ? rest[0] : options[0];
+      } else {
         // prefer civ specials & counters
         if (options.includes('elephant') && p.res.food > 250 && Math.random() < .4) pick = 'elephant';
         else if (options.includes('chariot') && Math.random() < .3) pick = 'chariot';

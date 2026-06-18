@@ -740,6 +740,65 @@ const Sprites = (() => {
       drawRiderTorso(g, 64, 26, colorIdx, civ, 'spear', raise);
       return { cv: c, ax: 50, ay: 66 };
     }
+    if (type === 'horseman' || type === 'equites' || type === 'keshik' || type === 'ashva') {
+      const horseCol = type === 'ashva' ? '#6a5444' : type === 'equites' ? '#7a6a54' : '#8a6a48';
+      const horseD   = type === 'ashva' ? '#3e3026' : type === 'equites' ? '#5a4a38' : '#5f4830';
+      drawHorse(g, 46, 64, colorIdx, swing, horseCol, horseD);
+      if (type === 'equites') {
+        // Roman heavy lancer: metal helm + red crest, long lance, kite shield
+        g.fillStyle = '#b4bec4'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
+        g.beginPath(); g.arc(46, 27, 5.5, 0, 7); g.fill(); g.stroke();
+        g.fillStyle = '#cc3b2e';
+        g.beginPath(); g.moveTo(41, 23); g.quadraticCurveTo(46, 13, 51, 23); g.closePath(); g.fill();
+        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.beginPath(); g.roundRect(41, 33, 10, 14, 2); g.fill(); g.stroke();
+        g.strokeStyle = '#cfd6dd'; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(46, 33); g.lineTo(24, 18); g.stroke();
+        g.fillStyle = '#cfd6dd';
+        g.beginPath(); g.moveTo(24, 18); g.lineTo(20, 15); g.lineTo(26, 14); g.closePath(); g.fill();
+        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(53, 36); g.lineTo(59, 43); g.quadraticCurveTo(57, 51, 55, 49); g.lineTo(50, 43); g.closePath(); g.fill(); g.stroke();
+      } else if (type === 'keshik') {
+        // Chinese horse archer: conical hat, lamellar armor, bow drawn
+        g.fillStyle = '#a08858'; g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(39, 28); g.lineTo(46, 16); g.lineTo(53, 28); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.beginPath(); g.roundRect(42, 31, 9, 12, 2); g.fill(); g.stroke();
+        g.strokeStyle = '#6e5638'; g.lineWidth = 2.2;
+        g.beginPath(); g.arc(59, 34, 11, Math.PI * 0.55, Math.PI * 1.45); g.stroke();
+        g.strokeStyle = '#c8b07a'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(57, 27); g.quadraticCurveTo(49, 34, 57, 41); g.stroke();
+        g.strokeStyle = '#8a6448'; g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(59, 34); g.lineTo(47, 34); g.stroke();
+        g.fillStyle = '#cfd6dd';
+        g.beginPath(); g.moveTo(47, 34); g.lineTo(44, 32); g.lineTo(44, 36); g.closePath(); g.fill();
+      } else if (type === 'ashva') {
+        // Indian Ashvaroha: turban + gem, curved talwar, horse barding
+        g.fillStyle = tc.main; g.strokeStyle = 'rgba(20,12,6,.3)'; g.lineWidth = 1;
+        g.beginPath(); g.ellipse(46, 24, 7, 5, 0, 0, 7); g.fill(); g.stroke();
+        g.fillStyle = '#f0c040'; g.beginPath(); g.arc(46, 21, 2, 0, 7); g.fill();
+        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.beginPath(); g.roundRect(41, 29, 10, 14, 2); g.fill(); g.stroke();
+        g.strokeStyle = '#cfd6dd'; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(44, 40); g.quadraticCurveTo(38, 30, 34, 21); g.stroke();
+        g.fillStyle = '#8a6a48'; g.beginPath(); g.arc(44, 41, 2.5, 0, 7); g.fill();
+        g.fillStyle = tc.dark; g.strokeStyle = '#f0c040'; g.lineWidth = 1.2;
+        g.beginPath(); g.ellipse(46, 54, 17, 7, 0, 0, 7); g.fill(); g.stroke();
+      } else { // horseman: nasal helm, broadsword raised, round shield
+        g.fillStyle = '#8a9498'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
+        g.beginPath(); g.arc(46, 28, 5.5, 0, 7); g.fill(); g.stroke();
+        g.fillStyle = '#cfd6dd'; g.fillRect(43, 30, 8, 1.8);
+        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.beginPath(); g.roundRect(41, 32, 10, 14, 2); g.fill(); g.stroke();
+        g.strokeStyle = '#cfd6dd'; g.lineWidth = 2.8;
+        g.beginPath(); g.moveTo(46, 38); g.lineTo(40, 20); g.stroke();
+        g.fillStyle = '#8a6a48'; g.beginPath(); g.arc(46, 39, 2.5, 0, 7); g.fill();
+        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.beginPath(); g.arc(53, 39, 5.5, 0, 7); g.fill(); g.stroke();
+        g.strokeStyle = tc.dark; g.beginPath(); g.arc(53, 39, 3, 0, 7); g.stroke();
+      }
+      return { cv: c, ax: 46, ay: 66 };
+    }
     if (type === 'elephant') {
       g.fillStyle = 'rgba(0,0,0,.32)'; g.beginPath(); g.ellipse(50, 76, 28, 7, 0, 0, 7); g.fill();
       // legs
@@ -1029,6 +1088,34 @@ const Sprites = (() => {
       }
       return { cv: c, ax: cx, ay: 73 };
     }
+    if (type === 'horseman' || type === 'equites' || type === 'keshik' || type === 'ashva') {
+      horseFB(72);
+      if (type === 'equites') {
+        g.fillStyle = '#b4bec4'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
+        g.beginPath(); g.arc(cx, 25, 6, 0, 7); g.fill(); g.stroke();
+        g.fillStyle = '#cc3b2e';
+        g.beginPath(); g.moveTo(cx - 5, 21); g.quadraticCurveTo(cx, 12, cx + 5, 21); g.closePath(); g.fill();
+        if (!away) { // lance tip toward viewer
+          g.strokeStyle = '#cfd6dd'; g.lineWidth = 2.5;
+          g.beginPath(); g.moveTo(cx, 36); g.lineTo(cx, 8); g.stroke();
+          g.fillStyle = '#cfd6dd';
+          g.beginPath(); g.moveTo(cx - 3, 8); g.lineTo(cx + 3, 8); g.lineTo(cx, 2); g.closePath(); g.fill();
+        }
+        drawRiderTorso(g, cx, 18, colorIdx, civ, 'none', raise);
+      } else if (type === 'keshik') {
+        g.fillStyle = '#a08858';
+        g.beginPath(); g.moveTo(cx - 8, 27); g.lineTo(cx, 14); g.lineTo(cx + 8, 27); g.closePath(); g.fill();
+        drawRiderTorso(g, cx, 20, colorIdx, civ, 'none', raise);
+      } else if (type === 'ashva') {
+        g.fillStyle = tc.main;
+        g.beginPath(); g.ellipse(cx, 22, 7, 5, 0, 0, 7); g.fill();
+        g.fillStyle = '#f0c040'; g.beginPath(); g.arc(cx, 20, 1.8, 0, 7); g.fill();
+        drawRiderTorso(g, cx, 19, colorIdx, civ, 'none', raise);
+      } else { // horseman
+        drawRiderTorso(g, cx, 20, colorIdx, civ, 'none', raise);
+      }
+      return { cv: c, ax: cx, ay: 73 };
+    }
     if (type === 'elephant') {
       g.fillStyle = 'rgba(0,0,0,.32)'; g.beginPath(); g.ellipse(cx, 76, 20, 6.5, 0, 0, 7); g.fill();
       for (const s of [-1, 1]) { // two thick legs
@@ -1165,7 +1252,8 @@ const Sprites = (() => {
      Humanoids render parametrically — the 12 right-facing dirs are mirrored from
      the 13 left-facing baked poses. Big units quantize to front / side / back. */
   const NDIR = 24;
-  const BIG_TYPES = { scout: 1, chariot: 1, elephant: 1, catapult: 1, cart: 1,
+  const BIG_TYPES = { scout: 1, chariot: 1, horseman: 1, equites: 1, keshik: 1, ashva: 1,
+    elephant: 1, catapult: 1, cart: 1,
     deer: 1, boar: 1, wolf: 1, sheep: 1,
     fishboat: 1, transport: 1, galley: 1, quinquereme: 1, fireship: 1, catamaran: 1 };
   const ANIMAL_TYPES = { deer: 1, boar: 1, wolf: 1, sheep: 1 };
@@ -1664,6 +1752,48 @@ const Sprites = (() => {
       flag(g, cx, cy - hh - 9, colorIdx);
       const out = { cv: c, ax: cx, ay: cy, k: 2 };
       cache.set(key, out); return out;
+    }
+
+    if (type === 'stable') {
+      // Open timber-frame horse barn with stall archways and visible horses
+      const hw = s * 32, hh = s * 16, wallH2 = 22;
+      isoBox(g, cx, cy, s, wallH2, '#c4a870', '#9a7a54', '#7a5e3c');
+      // thatched roof
+      const roofY2 = cy - wallH2;
+      g.fillStyle = '#c8a04a';
+      g.beginPath(); g.moveTo(cx - hw, roofY2); g.lineTo(cx, roofY2 - hh - 10); g.lineTo(cx + hw, roofY2); g.lineTo(cx, roofY2 + hh); g.closePath(); g.fill();
+      g.fillStyle = '#a07c34';
+      g.beginPath(); g.moveTo(cx + hw, roofY2); g.lineTo(cx, roofY2 - hh - 10); g.lineTo(cx, roofY2 + hh); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(80,60,20,.2)'; g.lineWidth = 1.1;
+      for (let i = 1; i <= 4; i++) { const t2 = i / 5;
+        g.beginPath(); g.moveTo(cx - hw * t2, roofY2 + hh * t2 - hh); g.lineTo(cx, roofY2 + hh - hh * t2); g.stroke();
+        g.beginPath(); g.moveTo(cx + hw * t2, roofY2 + hh * t2 - hh); g.lineTo(cx, roofY2 + hh - hh * t2); g.stroke(); }
+      // 3 arched stall openings on the front-left face
+      for (let i = 0; i < 3; i++) {
+        const t2 = 0.18 + i * 0.28, ax2 = cx - hw + hw * t2, ay2 = cy + hh * t2 - wallH2 * 0.28;
+        g.fillStyle = '#241a10';
+        g.beginPath(); g.moveTo(ax2 - 4.5, ay2 + 3); g.lineTo(ax2 - 4.5, ay2 - 7);
+        g.quadraticCurveTo(ax2, ay2 - 13, ax2 + 4.5, ay2 - 7); g.lineTo(ax2 + 4.5, ay2 + 3); g.closePath(); g.fill();
+        g.strokeStyle = '#6e5638'; g.lineWidth = 1; g.stroke();
+        g.fillStyle = '#d4a83c'; g.fillRect(ax2 - 3.5, ay2 + 1, 7, 2.2); // hay
+      }
+      // vertical timber framing on left wall
+      g.strokeStyle = 'rgba(60,40,20,.32)'; g.lineWidth = 1.2;
+      for (let i = 1; i <= 3; i++) { const t2 = i / 4;
+        g.beginPath(); g.moveTo(cx - hw + hw * t2, cy + hh * t2 - wallH2); g.lineTo(cx - hw + hw * t2, cy + hh * t2); g.stroke(); }
+      // two horse heads visible in right-wall stalls
+      g.fillStyle = '#8a6a48'; g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.9;
+      for (const [ox, oy] of [[cx + hw * 0.38, cy - hh * 0.38 - 11], [cx + hw * 0.68, cy - hh * 0.68 - 7]]) {
+        g.beginPath(); g.ellipse(ox, oy, 3.5, 3, -.3, 0, 7); g.fill(); g.stroke();
+        g.beginPath(); g.ellipse(ox - 3.2, oy - 0.5, 2, 1.5, 0, 0, 7); g.fill(); // muzzle
+        g.strokeStyle = '#3a2c1c'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(ox - 1, oy - 3.5); g.quadraticCurveTo(ox + 0.5, oy - 5.5, ox + 2, oy - 3.5); g.stroke();
+        g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.9;
+      }
+      ageDress(g, cx, cy, hw, hh, wallH2, age, colorIdx);
+      flag(g, cx + hw * .5, cy - hh * .5 - wallH2 - 2, colorIdx);
+      const outS = { cv: c, ax: cx, ay: cy, k: 2 };
+      cache.set(key, outS); return outS;
     }
 
     const wallH = type === 'tower' ? 46 : type === 'tc' || type === 'town' ? 26 : 20;
