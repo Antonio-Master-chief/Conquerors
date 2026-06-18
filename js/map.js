@@ -108,31 +108,119 @@ const World = (() => {
       }
     }
 
-    /* mountain citadels: 2 rich settlements ringed by peaks, reachable only via one pass */
+    /* mountain citadels: 2 rich settlements ringed by peaks, reachable only via one wide pass */
     W.fortress = [];
     function carveFortress(fx, fy) {
-      const Rin = 8, gapA = Math.atan2(cy - fy, cx - fx); // pass faces the map centre (where foes approach)
-      for (let y = fy - Rin - 3; y <= fy + Rin + 3; y++) for (let x = fx - Rin - 3; x <= fx + Rin + 3; x++) {
+      const Rin = 12, gapA = Math.atan2(cy - fy, cx - fx); // bigger ring, pass faces map centre
+      for (let y = fy - Rin - 4; y <= fy + Rin + 4; y++) for (let x = fx - Rin - 4; x <= fx + Rin + 4; x++) {
         if (x < 2 || y < 2 || x >= N - 2 || y >= N - 2) continue;
         const i = idx(x, y), d = Math.hypot(x - fx, y - fy);
-        if (d < Rin - 1) {                            // interior: open high-ground meadow
+        if (d < Rin - 1) {                              // interior: rich highland meadow
           W.ter[i] = (d < 3) ? TERRAIN.GRASS : (nh(x, y) > 0.5 ? TERRAIN.HILL : TERRAIN.GRASS);
           W.blocked[i] = 0; W.sightBlock[i] = 0; W.pass[i] = 0;
-        } else if (d <= Rin + 1.6) {                  // the ring of peaks, broken by one pass
+        } else if (d <= Rin + 2) {                      // thick ring of peaks, broken by ONE wide pass
           const ang = Math.atan2(y - fy, x - fx);
-          let dA = Math.abs(((ang - gapA + Math.PI) % (Math.PI * 2)) - Math.PI);
-          if (dA < 0.42) { W.ter[i] = TERRAIN.HILL; W.blocked[i] = 0; W.sightBlock[i] = 0; W.pass[i] = 1; } // the pass
-          else { W.ter[i] = TERRAIN.MOUNTAIN; W.blocked[i] = 1; W.sightBlock[i] = 1; W.pass[i] = 0; }
+          const dA = Math.abs(((ang - gapA + Math.PI) % (Math.PI * 2)) - Math.PI);
+          if (dA < 0.58) { W.ter[i] = TERRAIN.HILL; W.blocked[i] = 0; W.sightBlock[i] = 0; W.pass[i] = 1; }
+          else           { W.ter[i] = TERRAIN.MOUNTAIN; W.blocked[i] = 1; W.sightBlock[i] = 1; W.pass[i] = 0; }
         }
       }
-      // mouth of the pass, just outside the ring — corridors connect here so it stays the ONLY way in
-      W.fortress.push({ x: fx, y: fy, r: Rin,
-        passX: Math.round(fx + Math.cos(gapA) * (Rin + 2.5)),
-        passY: Math.round(fy + Math.sin(gapA) * (Rin + 2.5)) });
+      // Wide approach corridor outside the ring: 3 tiles wide × 9 tiles deep leading to the pass
+      const perpA = gapA + Math.PI / 2;
+      for (let depth = Rin; depth <= Rin + 9; depth++) {
+        for (let side = -2; side <= 2; side++) {
+          const px = Math.round(fx + Math.cos(gapA) * depth + Math.cos(perpA) * side);
+          const py = Math.round(fy + Math.sin(gapA) * depth + Math.sin(perpA) * side);
+          if (!inB(px, py) || px < 2 || py < 2 || px >= N - 2 || py >= N - 2) continue;
+          const i = idx(px, py);
+          if (W.ter[i] >= TERRAIN.SAND) { W.ter[i] = TERRAIN.HILL; W.blocked[i] = 0; W.sightBlock[i] = 0; W.pass[i] = 1; }
+        }
+      }
+      // mouth of the pass corridor — road network connects here, keeping it the SOLE land entry
+      W.fortress.push({ x: fx, y: fy, r: Rin, gapA,
+        passX: Math.round(fx + Math.cos(gapA) * (Rin + 11)),
+        passY: Math.round(fy + Math.sin(gapA) * (Rin + 11)) });
     }
     // the two towns farthest from the map centre become the citadels
     W.towns.map(t => ({ t, d: dist(t.x, t.y, cx, cy) })).sort((a, b) => b.d - a.d).slice(0, 2)
       .forEach(o => { o.t.fortress = true; carveFortress(o.t.x, o.t.y); });
+
+    /* enforce one natural pass per regular mountain cluster — seal thin gaps, keep the best one */
+    {
+      const vis = new Uint8Array(N * N);
+      // pre-mark citadel ring tiles so they're excluded from regular mountain processing
+      for (let y2 = 1; y2 < N - 1; y2++) for (let x2 = 1; x2 < N - 1; x2++) {
+        if (W.ter[idx(x2, y2)] !== TERRAIN.MOUNTAIN) continue;
+        if ((W.fortress || []).some(f => { const d = Math.hypot(x2 - f.x, y2 - f.y); return d >= f.r - 1.5 && d <= f.r + 2.5; }))
+          vis[idx(x2, y2)] = 1;
+      }
+      for (let sy = 1; sy < N - 1; sy++) for (let sx = 1; sx < N - 1; sx++) {
+        const si = idx(sx, sy);
+        if (W.ter[si] !== TERRAIN.MOUNTAIN || vis[si]) continue;
+        // BFS: collect this mountain cluster
+        const cluster2 = [si]; vis[si] = 1;
+        for (let qi = 0; qi < cluster2.length; qi++) {
+          const ci2 = cluster2[qi], cx2 = ci2 % N, cy2 = (ci2 / N) | 0;
+          for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+            const ni = idx(cx2 + dx, cy2 + dy);
+            if (inB(cx2+dx, cy2+dy) && !vis[ni] && W.ter[ni] === TERRAIN.MOUNTAIN) { vis[ni] = 1; cluster2.push(ni); }
+          }
+        }
+        if (cluster2.length < 5) continue;
+        // Find pinch-pass tiles adjacent to this cluster (land tile sandwiched by mountains on opposite sides)
+        const pinchSet = new Set();
+        for (const mi of cluster2) {
+          const mx = mi % N, my = (mi / N) | 0;
+          for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+            const nx = mx + dx, ny = my + dy;
+            if (!inB(nx, ny)) continue;
+            const ni = idx(nx, ny);
+            if (W.ter[ni] === TERRAIN.MOUNTAIN || W.ter[ni] <= TERRAIN.SHALLOW || W.blocked[ni]) continue;
+            const pinchX = isMtn(nx - 1, ny) && isMtn(nx + 1, ny);
+            const pinchY = isMtn(nx, ny - 1) && isMtn(nx, ny + 1);
+            if (pinchX || pinchY) pinchSet.add(ni);
+          }
+        }
+        if (pinchSet.size === 0) continue;
+        // Group adjacent pinch tiles into connected "gap regions"
+        const pVis = new Set(); const groups = [];
+        for (const pi of pinchSet) {
+          if (pVis.has(pi)) continue;
+          const grp = [pi]; pVis.add(pi);
+          for (let qi = 0; qi < grp.length; qi++) {
+            const gi = grp[qi], gx = gi % N, gy = (gi / N) | 0;
+            for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+              const ni = idx(gx + dx, gy + dy);
+              if (!pVis.has(ni) && pinchSet.has(ni)) { pVis.add(ni); grp.push(ni); }
+            }
+          }
+          groups.push(grp);
+        }
+        if (groups.length <= 1) continue;
+        // Pick the gap group closest to the map hub (= strategic chokepoint worth fighting for)
+        const hub2 = W.towns[0];
+        groups.sort((a, b) => {
+          const dA2 = a.reduce((s, i2) => s + dist(i2 % N, (i2/N)|0, hub2.x, hub2.y), 0) / a.length;
+          const dB2 = b.reduce((s, i2) => s + dist(i2 % N, (i2/N)|0, hub2.x, hub2.y), 0) / b.length;
+          return dA2 - dB2;
+        });
+        // Seal all gap groups except the closest one
+        for (let gi2 = 1; gi2 < groups.length; gi2++) {
+          for (const pi of groups[gi2]) {
+            const px = pi % N, py = (pi / N) | 0;
+            if (W.starts.some(s => dist(px,py,s.x,s.y) < 5)) continue;
+            if (W.towns.some(t => dist(px,py,t.x,t.y) < 5)) continue;
+            W.ter[pi] = TERRAIN.MOUNTAIN; W.blocked[pi] = 1; W.sightBlock[pi] = 1; W.pass[pi] = 0;
+          }
+        }
+        // Mark the chosen pass
+        for (const pi of groups[0]) {
+          W.pass[pi] = 1;
+          if (W.ter[pi] < TERRAIN.HILL) W.ter[pi] = TERRAIN.HILL;
+          W.blocked[pi] = 0;
+        }
+      }
+    }
 
     /* guarantee a pond near every start so irrigation farming is always possible */
     function ensurePond(sx, sy) {
@@ -240,7 +328,7 @@ const World = (() => {
           if (!inB(x, y)) continue;
           // never breach a citadel's protective ring of peaks (only its pass may admit anyone)
           let inRing = false;
-          for (const f of W.fortress) { const fd = Math.hypot(x - f.x, y - f.y); if (fd >= f.r - 1 && fd <= f.r + 1.6) { inRing = true; break; } }
+          for (const f of W.fortress) { const fd = Math.hypot(x - f.x, y - f.y); if (fd >= f.r - 1.5 && fd <= f.r + 2.5) { inRing = true; break; } }
           if (inRing) continue;
           const i = idx(x, y);
           if (W.ter[i] <= TERRAIN.SHALLOW) { W.ter[i] = TERRAIN.SAND; W.blocked[i] = 0; } // ford
@@ -265,6 +353,14 @@ const World = (() => {
       cluster('stone', f.x - 2, f.y - 3, 4, 2.4, 650);
       cluster('bush', f.x + 2, f.y + 3, 8, 2.6, 200);
       cluster('tree', f.x + 4, f.y, 6, 2.5, 120);
+      // mountain pass corridor: gold, stone and iron veins guard the approach valley
+      const pcX = Math.round(f.x + Math.cos(f.gapA) * (f.r + 4));
+      const pcY = Math.round(f.y + Math.sin(f.gapA) * (f.r + 4));
+      cluster('gold',  pcX + 1, pcY - 1, 4, 2.0, 700);
+      cluster('stone', pcX - 1, pcY + 1, 3, 1.8, 600);
+      const pmX = Math.round(f.x + Math.cos(f.gapA) * (f.r + 8));
+      const pmY = Math.round(f.y + Math.sin(f.gapA) * (f.r + 8));
+      cluster('iron',  pmX,     pmY,     3, 1.8, 550);
     }
 
     /* ---- island towns: conquest objectives reachable only by sea ----
