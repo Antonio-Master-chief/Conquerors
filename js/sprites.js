@@ -1395,8 +1395,8 @@ const Sprites = (() => {
   }
   const CIV_PAL = {
     rome:  { wallL: '#cfc7b4', wallR: '#a89f8a', top: '#e3dccb', roof: '#b3543b', roofD: '#8a3f2c' },
-    china: { wallL: '#8a6a48', wallR: '#6b513a', top: '#9c7e54', roof: '#2e6b5e', roofD: '#1f4a41' },
-    india: { wallL: '#d4b88a', wallR: '#b3976a', top: '#e0c79a', roof: '#e8e0ce', roofD: '#b8a784' },
+    china: { wallL: '#9a3a2e', wallR: '#6e2820', top: '#b07040', roof: '#2a3a2e', roofD: '#1a2820' },
+    india: { wallL: '#d4aa78', wallR: '#b08858', top: '#e8c898', roof: '#c05838', roofD: '#8a3e28' },
     none:  { wallL: '#9a948a', wallR: '#736e64', top: '#b5ad9c', roof: '#6b6557', roofD: '#4e4a40' },
   };
   function flag(g, x, y, colorIdx) {
@@ -1701,8 +1701,9 @@ const Sprites = (() => {
       const hw = s * 30, hh = s * 15, wallH2 = 20;
       g.fillStyle = 'rgba(0,0,0,.18)'; g.beginPath();
       g.moveTo(cx, cy - hh); g.lineTo(cx + hw, cy); g.lineTo(cx, cy + hh); g.lineTo(cx - hw, cy); g.closePath(); g.fill();
-      // back-corner posts
-      g.strokeStyle = '#5d4426'; g.lineWidth = 3.4;
+      // back-corner posts — civ-tinted
+      const postCol = style === 'china' ? '#7a2018' : style === 'india' ? '#8a6a42' : '#5d4426';
+      g.strokeStyle = postCol; g.lineWidth = 3.4;
       for (const [px2, py2] of [[cx - hw + 4, cy - 1], [cx, cy - hh + 1], [cx + hw - 4, cy - 1], [cx, cy + hh - 1]])
         { g.beginPath(); g.moveTo(px2, py2); g.lineTo(px2, py2 - wallH2); g.stroke(); }
       // stacked crates + sacks under the roof
@@ -1710,7 +1711,9 @@ const Sprites = (() => {
       g.fillRect(cx - 12, cy - 12, 10, 10); g.strokeRect(cx - 12, cy - 12, 10, 10);
       g.fillRect(cx - 1, cy - 9, 9, 8); g.strokeRect(cx - 1, cy - 9, 9, 8);
       g.strokeStyle = 'rgba(60,42,22,.5)'; g.beginPath(); g.moveTo(cx - 7, cy - 12); g.lineTo(cx - 7, cy - 2); g.stroke();
-      for (const [bx2, by2, col] of [[cx + 9, cy + 2, '#c8a24a'], [cx + 13, cy + 4, '#b3895a']]) {
+      const sackA = style === 'china' ? '#c84a2a' : style === 'india' ? '#c88a3a' : '#c8a24a';
+      const sackB = style === 'china' ? '#a83a20' : style === 'india' ? '#a86e28' : '#b3895a';
+      for (const [bx2, by2, col] of [[cx + 9, cy + 2, sackA], [cx + 13, cy + 4, sackB]]) {
         g.fillStyle = col; g.beginPath(); g.ellipse(bx2, by2, 4, 5.5, 0, 0, 7); g.fill();
         g.strokeStyle = '#3a2a16'; g.lineWidth = 1; g.stroke();
       }
@@ -1718,14 +1721,38 @@ const Sprites = (() => {
       g.fillStyle = '#7d5a2e'; g.beginPath(); g.ellipse(cx - 13, cy + 4, 4, 5.5, 0, 0, 7); g.fill();
       g.strokeStyle = '#3a2a16'; g.stroke();
       g.strokeStyle = '#9a7b54'; g.beginPath(); g.ellipse(cx - 13, cy + 4, 4, 2, 0, 0, 7); g.stroke();
-      // low hip roof
-      g.fillStyle = '#8a5a3a'; g.beginPath();
+      // low hip roof — civ-specific color
+      const rfM = style === 'china' ? '#7a2018' : style === 'india' ? '#b84828' : '#8a5a3a';
+      const rfD = style === 'china' ? '#5a1412' : style === 'india' ? '#8a3820' : '#6e4630';
+      g.fillStyle = rfM; g.beginPath();
       g.moveTo(cx - hw - 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6);
       g.lineTo(cx + hw + 3, cy - wallH2); g.lineTo(cx, cy + hh - wallH2 + 2); g.closePath(); g.fill();
-      g.fillStyle = '#6e4630'; g.beginPath();
+      g.fillStyle = rfD; g.beginPath();
       g.moveTo(cx + hw + 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6); g.lineTo(cx, cy + hh - wallH2 + 2); g.closePath(); g.fill();
       g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
       g.beginPath(); g.moveTo(cx - hw - 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6); g.lineTo(cx + hw + 3, cy - wallH2); g.stroke();
+      // civ accents
+      if (style === 'china') {
+        // hanging lanterns at eave corners
+        for (const lx of [cx - hw + 4, cx + hw - 4]) {
+          g.strokeStyle = '#3a2a16'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(lx, cy - wallH2); g.lineTo(lx, cy - wallH2 + 5); g.stroke();
+          g.fillStyle = '#d04a35'; g.beginPath(); g.ellipse(lx, cy - wallH2 + 9, 2.6, 3.4, 0, 0, 7); g.fill();
+          g.fillStyle = '#ffd34d'; g.fillRect(lx - 0.8, cy - wallH2 + 12.4, 1.6, 2);
+        }
+        // gold ridge beam along roof apex
+        g.strokeStyle = '#c9a040'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(cx - 6, cy - hh - wallH2 - 5); g.lineTo(cx + 6, cy - hh - wallH2 - 5); g.stroke();
+      } else if (style === 'india') {
+        // carved lotus arch over goods area
+        g.strokeStyle = '#c9a04a'; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(cx - 10, cy - 5); g.lineTo(cx - 10, cy - 12);
+        g.quadraticCurveTo(cx, cy - 18, cx + 10, cy - 12); g.lineTo(cx + 10, cy - 5); g.stroke();
+        // saffron cloth drape hanging from ridge
+        g.fillStyle = 'rgba(232,122,26,.3)';
+        g.beginPath(); g.moveTo(cx - hw, cy - wallH2 + 1); g.lineTo(cx, cy - hh - wallH2 + 2);
+        g.lineTo(cx, cy - hh - wallH2 + 7); g.lineTo(cx - hw, cy - wallH2 + 6); g.closePath(); g.fill();
+      }
       flag(g, cx + hw - 6, cy - wallH2 - 2, colorIdx);
       ageDress(g, cx, cy, hw, hh, wallH2, age, colorIdx);
       const out = { cv: c, ax: cx, ay: cy, k: 2 };
@@ -1825,40 +1852,66 @@ const Sprites = (() => {
     }
 
     if (type === 'stable') {
-      // Open timber-frame horse barn with stall archways and visible horses
+      // Open timber-frame barn — civ-tinted walls
       const hw = s * 32, hh = s * 16, wallH2 = 22;
-      isoBox(g, cx, cy, s, wallH2, '#c4a870', '#9a7a54', '#7a5e3c');
-      // thatched roof
+      isoBox(g, cx, cy, s, wallH2, p.top, p.wallL, p.wallR);
+      // roof — color varies by civ
       const roofY2 = cy - wallH2;
-      g.fillStyle = '#c8a04a';
+      const stbRM = style === 'china' ? '#7a2018' : style === 'india' ? '#b84828' : '#c8a04a';
+      const stbRD = style === 'china' ? '#5a1412' : style === 'india' ? '#8a3820' : '#a07c34';
+      g.fillStyle = stbRM;
       g.beginPath(); g.moveTo(cx - hw, roofY2); g.lineTo(cx, roofY2 - hh - 10); g.lineTo(cx + hw, roofY2); g.lineTo(cx, roofY2 + hh); g.closePath(); g.fill();
-      g.fillStyle = '#a07c34';
+      g.fillStyle = stbRD;
       g.beginPath(); g.moveTo(cx + hw, roofY2); g.lineTo(cx, roofY2 - hh - 10); g.lineTo(cx, roofY2 + hh); g.closePath(); g.fill();
       g.strokeStyle = 'rgba(80,60,20,.2)'; g.lineWidth = 1.1;
       for (let i = 1; i <= 4; i++) { const t2 = i / 5;
         g.beginPath(); g.moveTo(cx - hw * t2, roofY2 + hh * t2 - hh); g.lineTo(cx, roofY2 + hh - hh * t2); g.stroke();
         g.beginPath(); g.moveTo(cx + hw * t2, roofY2 + hh * t2 - hh); g.lineTo(cx, roofY2 + hh - hh * t2); g.stroke(); }
       // 3 arched stall openings on the front-left face
+      const stallStroke = style === 'china' ? '#7a2018' : style === 'india' ? '#8a6030' : '#6e5638';
       for (let i = 0; i < 3; i++) {
         const t2 = 0.18 + i * 0.28, ax2 = cx - hw + hw * t2, ay2 = cy + hh * t2 - wallH2 * 0.28;
         g.fillStyle = '#241a10';
         g.beginPath(); g.moveTo(ax2 - 4.5, ay2 + 3); g.lineTo(ax2 - 4.5, ay2 - 7);
         g.quadraticCurveTo(ax2, ay2 - 13, ax2 + 4.5, ay2 - 7); g.lineTo(ax2 + 4.5, ay2 + 3); g.closePath(); g.fill();
-        g.strokeStyle = '#6e5638'; g.lineWidth = 1; g.stroke();
+        g.strokeStyle = stallStroke; g.lineWidth = 1; g.stroke();
         g.fillStyle = '#d4a83c'; g.fillRect(ax2 - 3.5, ay2 + 1, 7, 2.2); // hay
       }
-      // vertical timber framing on left wall
-      g.strokeStyle = 'rgba(60,40,20,.32)'; g.lineWidth = 1.2;
+      // vertical framing — civ-tinted
+      g.strokeStyle = style === 'china' ? 'rgba(140,30,20,.4)' : style === 'india' ? 'rgba(100,70,30,.35)' : 'rgba(60,40,20,.32)'; g.lineWidth = 1.2;
       for (let i = 1; i <= 3; i++) { const t2 = i / 4;
         g.beginPath(); g.moveTo(cx - hw + hw * t2, cy + hh * t2 - wallH2); g.lineTo(cx - hw + hw * t2, cy + hh * t2); g.stroke(); }
-      // two horse heads visible in right-wall stalls
-      g.fillStyle = '#8a6a48'; g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.9;
-      for (const [ox, oy] of [[cx + hw * 0.38, cy - hh * 0.38 - 11], [cx + hw * 0.68, cy - hh * 0.68 - 7]]) {
-        g.beginPath(); g.ellipse(ox, oy, 3.5, 3, -.3, 0, 7); g.fill(); g.stroke();
-        g.beginPath(); g.ellipse(ox - 3.2, oy - 0.5, 2, 1.5, 0, 0, 7); g.fill(); // muzzle
-        g.strokeStyle = '#3a2c1c'; g.lineWidth = 1;
-        g.beginPath(); g.moveTo(ox - 1, oy - 3.5); g.quadraticCurveTo(ox + 0.5, oy - 5.5, ox + 2, oy - 3.5); g.stroke();
-        g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.9;
+      if (style === 'india') {
+        // elephant silhouette in stalls — India uses war elephants
+        const ex = cx + hw * 0.5, ey = cy - hh * 0.3 - 8;
+        g.fillStyle = '#6a5a48'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 0.9;
+        g.beginPath(); g.ellipse(ex, ey, 8, 5, -0.15, 0, 7); g.fill(); g.stroke();
+        g.beginPath(); g.ellipse(ex - 6.5, ey - 2, 5, 4, -0.25, 0, 7); g.fill(); g.stroke();
+        g.strokeStyle = '#6a5a48'; g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(ex - 10.5, ey - 0.5); g.quadraticCurveTo(ex - 14, ey + 2, ex - 11, ey + 4); g.stroke(); // trunk
+        g.strokeStyle = '#e0d0b0'; g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(ex - 10, ey + 0.5); g.quadraticCurveTo(ex - 13.5, ey + 1, ex - 12, ey + 3); g.stroke(); // tusk
+        g.fillStyle = 'rgba(232,122,26,.55)'; // saffron saddle cloth
+        g.beginPath(); g.moveTo(ex - 2, ey - 8); g.lineTo(ex + 4, ey - 8); g.lineTo(ex + 5, ey - 4); g.lineTo(ex - 3, ey - 4); g.closePath(); g.fill();
+      } else {
+        // horse heads visible in right-wall stalls (Rome / China)
+        g.fillStyle = '#8a6a48'; g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.9;
+        for (const [ox, oy] of [[cx + hw * 0.38, cy - hh * 0.38 - 11], [cx + hw * 0.68, cy - hh * 0.68 - 7]]) {
+          g.beginPath(); g.ellipse(ox, oy, 3.5, 3, -.3, 0, 7); g.fill(); g.stroke();
+          g.beginPath(); g.ellipse(ox - 3.2, oy - 0.5, 2, 1.5, 0, 0, 7); g.fill();
+          g.strokeStyle = '#3a2c1c'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(ox - 1, oy - 3.5); g.quadraticCurveTo(ox + 0.5, oy - 5.5, ox + 2, oy - 3.5); g.stroke();
+          g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.9;
+        }
+      }
+      if (style === 'china') {
+        // central hanging lantern + red ridge beam
+        g.strokeStyle = '#3a2a16'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(cx, roofY2 + 2); g.lineTo(cx, roofY2 + 7); g.stroke();
+        g.fillStyle = '#d04a35'; g.beginPath(); g.ellipse(cx, roofY2 + 11, 2.8, 3.6, 0, 0, 7); g.fill();
+        g.fillStyle = '#ffd34d'; g.fillRect(cx - 0.8, roofY2 + 14.8, 1.6, 2.2);
+        g.strokeStyle = '#c9a040'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(cx - 8, roofY2 - hh - 8); g.lineTo(cx + 8, roofY2 - hh - 8); g.stroke();
       }
       ageDress(g, cx, cy, hw, hh, wallH2, age, colorIdx);
       flag(g, cx + hw * .5, cy - hh * .5 - wallH2 - 2, colorIdx);
@@ -1884,8 +1937,26 @@ const Sprites = (() => {
       }
       // overhanging parapet
       g.fillStyle = p.top; g.beginPath(); g.ellipse(cx, cy - wallH, 13, 5, 0, 0, 7); g.fill(); g.stroke();
-      g.fillStyle = p.wallR;
-      for (let i = -1; i <= 1; i++) g.fillRect(cx + i * 9 - 2.5, cy - wallH - 6, 5, 7);
+      if (style === 'india') {
+        // dome cap replaces flat merlons
+        g.fillStyle = p.roof; g.beginPath(); g.ellipse(cx, cy - wallH - 1, 12, 10, 0, Math.PI, 0); g.fill();
+        g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1; g.stroke();
+        g.fillStyle = '#d4a647'; g.fillRect(cx - 1, cy - wallH - 12, 2, 5);
+        g.beginPath(); g.arc(cx, cy - wallH - 13, 2.2, 0, 7); g.fill();
+        g.strokeStyle = '#8a6420'; g.lineWidth = 1; g.stroke();
+        // carved arch ring around dome base
+        g.strokeStyle = '#c9a04a'; g.lineWidth = 0.9;
+        for (let i = -1; i <= 1; i++) { g.beginPath(); g.arc(cx + i * 7.5, cy - wallH + 1, 2.2, Math.PI, 0); g.stroke(); }
+      } else if (style === 'china') {
+        // red-painted merlons + eave bracket
+        g.fillStyle = '#8a2018';
+        for (let i = -1; i <= 1; i++) g.fillRect(cx + i * 9 - 2.5, cy - wallH - 6, 5, 7);
+        g.fillStyle = '#9a3020'; g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.8;
+        g.fillRect(cx - 16, cy - wallH + 2, 32, 3.5); g.strokeRect(cx - 16, cy - wallH + 2, 32, 3.5);
+      } else {
+        g.fillStyle = p.wallR;
+        for (let i = -1; i <= 1; i++) g.fillRect(cx + i * 9 - 2.5, cy - wallH - 6, 5, 7);
+      }
       // arrow slits + door
       g.fillStyle = '#241a10';
       g.fillRect(cx - 1.4, cy - wallH + 9, 2.8, 8);
@@ -1898,7 +1969,8 @@ const Sprites = (() => {
       g.moveTo(cx - 2.5, cy - wallH - 8); g.quadraticCurveTo(cx, cy - wallH - 17, cx + 2.5, cy - wallH - 8); g.closePath(); g.fill();
       g.fillStyle = '#ffc14d'; g.beginPath();
       g.moveTo(cx - 1.2, cy - wallH - 8.5); g.quadraticCurveTo(cx, cy - wallH - 13, cx + 1.2, cy - wallH - 8.5); g.closePath(); g.fill();
-      flag(g, cx, cy - wallH - 16, colorIdx);
+      const twrFlagY = style === 'india' ? cy - wallH - 24 : cy - wallH - 16;
+      flag(g, cx, twrFlagY, colorIdx);
       ageDress(g, cx, cy, 15, 6, wallH, age, colorIdx);
       const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
@@ -1954,8 +2026,25 @@ const Sprites = (() => {
       g.fillStyle = p.wallR; g.fillRect(cx - BW - 2, cy - KH - 4, (BW + 2) * 2, 6);
       g.fillStyle = p.top; g.beginPath(); g.ellipse(cx, cy - KH - 4, BW + 2, 6, 0, 0, 7); g.fill();
       g.strokeStyle = 'rgba(20,12,6,.5)'; g.stroke();
-      g.fillStyle = p.wallR;
-      for (let i = -2; i <= 2; i++) g.fillRect(cx + i * 8 - 3, cy - KH - 13, 6, 9); // merlons
+      if (style === 'china') {
+        g.fillStyle = '#8a2018';
+        for (let i = -2; i <= 2; i++) g.fillRect(cx + i * 8 - 3, cy - KH - 13, 6, 9); // red merlons
+        // eave bracket below parapet
+        g.fillStyle = '#9a3020'; g.strokeStyle = 'rgba(20,12,6,.3)'; g.lineWidth = 0.8;
+        g.fillRect(cx - BW - 3, cy - KH - 6, (BW + 3) * 2, 3.5); g.strokeRect(cx - BW - 3, cy - KH - 6, (BW + 3) * 2, 3.5);
+      } else if (style === 'india') {
+        // carved arch cornice + mini dome silhouette instead of box merlons
+        g.strokeStyle = '#c9a04a'; g.lineWidth = 1.1;
+        for (let i = -2; i <= 2; i++) { g.beginPath(); g.arc(cx + i * 8, cy - KH - 9, 3.8, Math.PI, 0); g.stroke(); }
+        g.fillStyle = p.roof;
+        g.beginPath(); g.ellipse(cx, cy - KH - 9, 8, 7, 0, Math.PI, 0); g.fill(); // mini dome above gate
+        g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1; g.stroke();
+        g.fillStyle = '#d4a647'; g.fillRect(cx - 0.8, cy - KH - 16, 1.6, 4);
+        g.beginPath(); g.arc(cx, cy - KH - 17, 1.8, 0, 7); g.fill();
+      } else {
+        g.fillStyle = p.wallR;
+        for (let i = -2; i <= 2; i++) g.fillRect(cx + i * 8 - 3, cy - KH - 13, 6, 9);
+      }
       // arrow slits up the shaft + a great door
       g.fillStyle = '#201509';
       for (const yy of [KH - 14, KH - 28, KH - 42]) { g.fillRect(cx - 9, cy - yy, 2.6, 9); g.fillRect(cx + 6.4, cy - yy, 2.6, 9); g.fillRect(cx - 1.3, cy - yy - 4, 2.6, 9); }
@@ -2050,9 +2139,31 @@ const Sprites = (() => {
 
     isoBox(g, cx, cy, s, wallH, p.top, p.wallL, p.wallR);
 
-    // door
-    g.fillStyle = '#241a10'; g.beginPath();
-    g.moveTo(cx - s * 13, cy + s * 7 - 1); g.lineTo(cx - s * 13, cy + s * 7 - 13); g.lineTo(cx - s * 7, cy + s * 10 - 13); g.lineTo(cx - s * 7, cy + s * 10 - 1); g.closePath(); g.fill();
+    // door — civ-specific arch style
+    g.fillStyle = '#241a10';
+    const dxL = cx - s * 13, dxR = cx - s * 7, dBotL = cy + s * 7 - 1, dBotR = cy + s * 10 - 1;
+    const dTopL = cy + s * 7 - 13, dTopR = cy + s * 10 - 13, dMidX = (dxL + dxR) * 0.5, dMidY = (dTopL + dTopR) * 0.5;
+    if (style === 'china') {
+      // round-arch door
+      g.beginPath(); g.moveTo(dxL, dBotL); g.lineTo(dxL, dTopL + 5);
+      g.quadraticCurveTo(dMidX, dMidY - 9, dxR, dTopR + 5); g.lineTo(dxR, dBotR); g.closePath(); g.fill();
+      g.fillStyle = '#8a2018'; // red lacquer panels
+      g.fillRect(dxL + 0.5, dTopL + 5.5, (dxR - dxL) * 0.44, dBotL - dTopL - 5.5);
+      g.fillRect(dMidX + 0.5, dTopR + 5.5, (dxR - dxL) * 0.44, dBotR - dTopR - 5.5);
+      g.strokeStyle = '#c9a040'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(dxL - 0.5, dBotL); g.lineTo(dxL - 0.5, dTopL + 4);
+      g.quadraticCurveTo(dMidX, dMidY - 11, dxR + 0.5, dTopR + 4); g.lineTo(dxR + 0.5, dBotR); g.stroke();
+    } else if (style === 'india') {
+      // pointed Mughal arch door
+      g.beginPath(); g.moveTo(dxL, dBotL); g.lineTo(dxL, dTopL + 4);
+      g.quadraticCurveTo(dMidX, dMidY - 13, dxR, dTopR + 4); g.lineTo(dxR, dBotR); g.closePath(); g.fill();
+      g.strokeStyle = '#c9a04a'; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(dxL - 0.6, dBotL); g.lineTo(dxL - 0.6, dTopL + 3);
+      g.quadraticCurveTo(dMidX, dMidY - 15.5, dxR + 0.6, dTopR + 3); g.lineTo(dxR + 0.6, dBotR); g.stroke();
+    } else {
+      // Rome rectangular parallelogram door
+      g.beginPath(); g.moveTo(dxL, dBotL); g.lineTo(dxL, dTopL); g.lineTo(dxR, dTopR); g.lineTo(dxR, dBotR); g.closePath(); g.fill();
+    }
 
     // civ roof on top
     roofFor(g, type === 'town' ? 'flat' : style, cx, cy - wallH, s);
@@ -2070,12 +2181,20 @@ const Sprites = (() => {
       const yo = wallH * f;
       g.beginPath(); g.moveTo(cx - s * 32, cy - yo); g.lineTo(cx, cy + s * 16 - yo); g.lineTo(cx + s * 32, cy - yo); g.stroke();
     }
-    // windows on the big halls
+    // windows on the big halls — shape varies by civ
     if (type === 'tc' || type === 'barracks' || type === 'range' || type === 'university') {
       g.fillStyle = '#241a10';
       for (const t2 of [0.3, 0.62]) {
         const wx2 = cx + s * 32 * t2, wy2 = cy + s * 16 * t2 - wallH * 0.62;
-        g.fillRect(wx2 - 2.2, wy2, 4.4, 6); // right wall
+        if (style === 'china') {
+          g.beginPath(); g.arc(wx2, wy2 + 3, 3.2, 0, 7); g.fill(); // round moon window
+        } else if (style === 'india') {
+          g.beginPath(); g.moveTo(wx2 - 2.2, wy2 + 6); g.lineTo(wx2 - 2.2, wy2 + 2);
+          g.quadraticCurveTo(wx2, wy2 - 2.5, wx2 + 2.2, wy2 + 2); g.lineTo(wx2 + 2.2, wy2 + 6);
+          g.closePath(); g.fill(); // pointed arch window
+        } else {
+          g.fillRect(wx2 - 2.2, wy2, 4.4, 6); // Rome rectangular
+        }
       }
     }
 
@@ -2094,15 +2213,47 @@ const Sprites = (() => {
       }
       // re-stamp the main hall body over the plinth so columns sit on it
       isoBox(g, cx, cy - 6, s, wallH, p.top, p.wallL, p.wallR);
-      // grand entrance: tall arched doorway with steps
+      // grand entrance: civ-specific arch style
       g.fillStyle = '#2a1f12';
-      g.beginPath();
-      g.moveTo(cx - s * 8, cy + s * 8 - 6); g.lineTo(cx - s * 8, cy - 4);
-      g.quadraticCurveTo(cx, cy - 16, cx + s * 8, cy - 4); g.lineTo(cx + s * 8, cy + s * 8 - 6);
-      g.closePath(); g.fill();
-      g.strokeStyle = '#8a6420'; g.lineWidth = 1.4; g.stroke();
+      if (style === 'china') {
+        // Wide circular (moon gate) arch — red lacquer surround
+        g.beginPath(); g.moveTo(cx - s * 8, cy + s * 8 - 6); g.lineTo(cx - s * 8, cy + 4);
+        g.quadraticCurveTo(cx - s * 4, cy - 16, cx, cy - 20);
+        g.quadraticCurveTo(cx + s * 4, cy - 16, cx + s * 8, cy + 4); g.lineTo(cx + s * 8, cy + s * 8 - 6);
+        g.closePath(); g.fill();
+        g.strokeStyle = '#e7b840'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(cx - s * 8 - 1, cy + s * 8 - 4); g.lineTo(cx - s * 8 - 1, cy + 3);
+        g.quadraticCurveTo(cx - s * 4, cy - 19, cx, cy - 23);
+        g.quadraticCurveTo(cx + s * 4, cy - 19, cx + s * 8 + 1, cy + 3); g.lineTo(cx + s * 8 + 1, cy + s * 8 - 4);
+        g.stroke();
+        // red door panels inside arch
+        g.fillStyle = '#8a2018';
+        g.fillRect(cx - s * 8 + 1, cy + 4, s * 7, cy + s * 8 - 6 - cy - 4);
+        g.fillRect(cx + 1, cy + 4, s * 7, cy + s * 8 - 6 - cy - 4);
+      } else if (style === 'india') {
+        // Pointed Mughal arch with carved gold trim
+        g.beginPath(); g.moveTo(cx - s * 8, cy + s * 8 - 6); g.lineTo(cx - s * 8, cy - 2);
+        g.quadraticCurveTo(cx, cy - 24, cx + s * 8, cy - 2); g.lineTo(cx + s * 8, cy + s * 8 - 6);
+        g.closePath(); g.fill();
+        g.strokeStyle = '#c9a04a'; g.lineWidth = 1.8;
+        g.beginPath(); g.moveTo(cx - s * 8 - 1, cy + s * 8 - 4); g.lineTo(cx - s * 8 - 1, cy - 3);
+        g.quadraticCurveTo(cx, cy - 27, cx + s * 8 + 1, cy - 3); g.lineTo(cx + s * 8 + 1, cy + s * 8 - 4); g.stroke();
+        // lotus dots along the arch
+        g.fillStyle = '#e7b840';
+        for (let i = 0; i <= 4; i++) {
+          const at = Math.PI * 0.38 + i * Math.PI * 0.062;
+          const rx = cx + Math.cos(at - Math.PI * 0.5) * s * 8.4, ry = cy - 24 + Math.sin(at - Math.PI * 0.5 + Math.PI * 0.5) * 14;
+          g.beginPath(); g.arc(cx - s * 8 * Math.cos(i / 4 * Math.PI * 0.5), cy - 2 - i * 3.5, 1.6, 0, 7); g.fill();
+        }
+      } else {
+        // Rome standard arch
+        g.beginPath(); g.moveTo(cx - s * 8, cy + s * 8 - 6); g.lineTo(cx - s * 8, cy - 4);
+        g.quadraticCurveTo(cx, cy - 16, cx + s * 8, cy - 4); g.lineTo(cx + s * 8, cy + s * 8 - 6);
+        g.closePath(); g.fill();
+        g.strokeStyle = '#8a6420'; g.lineWidth = 1.4; g.stroke();
+      }
       // full marble colonnade across the front-left face
-      const colCol = style === 'china' ? '#b34a3a' : '#ece4d2';
+      const colCol = style === 'china' ? '#b34a3a' : style === 'india' ? '#c9a070' : '#ece4d2';
       for (let i = 0; i < 5; i++) {
         const t2 = 0.1 + i * 0.2, capx = cx - s * 32 + s * 32 * t2, capy = cy + s * 16 * t2 - 6;
         g.fillStyle = colCol; g.fillRect(capx - 2.6, capy - wallH + 1, 5.2, wallH - 2);
@@ -2149,7 +2300,7 @@ const Sprites = (() => {
       g.fillStyle = 'rgba(255,255,255,.18)';
       g.beginPath(); g.moveTo(cx - s * 32, cy); g.lineTo(cx, cy + s * 16); g.lineTo(cx + s * 32, cy);
       g.lineTo(cx + s * 32, cy - 3); g.lineTo(cx, cy + s * 16 - 3); g.lineTo(cx - s * 32, cy - 3); g.closePath(); g.fill();
-      g.fillStyle = style === 'china' ? '#9c2f2f' : '#e3dccb';
+      g.fillStyle = style === 'china' ? '#9c2f2f' : style === 'india' ? '#c9a070' : '#e3dccb';
       for (let i = 0; i < 5; i++) {
         const t2 = 0.12 + i * 0.19;
         g.fillRect(cx - s * 32 + s * 32 * t2 - 2.2, cy + s * 16 * t2 - wallH + 2, 4.4, wallH - 3);
@@ -2185,7 +2336,8 @@ const Sprites = (() => {
       for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(cx + s * 26 + i * 5, cy - 16); g.lineTo(cx + s * 24 + i * 5, cy - 21); g.lineTo(cx + s * 28 + i * 5, cy - 19); g.closePath(); g.fill(); }
       // forge: glowing furnace mouth + anvil + quench barrel (the armory is a workshop)
       const fgx = cx - s * 24, fgy = cy + s * 2;
-      g.fillStyle = '#57534a'; g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1.2;
+      g.fillStyle = style === 'china' ? '#5a3028' : style === 'india' ? '#6a4e38' : '#57534a';
+      g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 1.2;
       g.beginPath(); g.moveTo(fgx - 8, fgy); g.lineTo(fgx - 8, fgy - 12); g.arc(fgx, fgy - 12, 8, Math.PI, 0); g.lineTo(fgx + 8, fgy); g.closePath(); g.fill(); g.stroke();
       const fg = g.createRadialGradient(fgx, fgy - 4, 1, fgx, fgy - 4, 6.5);
       fg.addColorStop(0, '#ffd34d'); fg.addColorStop(.55, '#ff7a30'); fg.addColorStop(1, '#9a3b30');
@@ -2201,7 +2353,52 @@ const Sprites = (() => {
       const tcb2 = teamCols(colorIdx);
       g.fillStyle = tcb2.main; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1;
       g.beginPath(); g.moveTo(asx - 4.5, asy - 8); g.lineTo(asx + 4.5, asy - 8); g.lineTo(asx + 3.4, asy + 1); g.lineTo(asx - 3.4, asy + 1); g.closePath(); g.fill(); g.stroke();
-      g.fillStyle = '#9aa2ad'; g.beginPath(); g.arc(asx, asy - 12.5, 3.6, Math.PI, 0); g.fill(); g.stroke();
+      if (style === 'india') {
+        // turban-style helm for India
+        g.fillStyle = '#e87a1a'; g.beginPath(); g.arc(asx, asy - 12.5, 3.6, Math.PI, 0); g.fill(); g.stroke();
+        g.fillStyle = '#e7b840'; g.beginPath(); g.arc(asx, asy - 12.5, 1.2, 0, 7); g.fill();
+      } else {
+        g.fillStyle = '#9aa2ad'; g.beginPath(); g.arc(asx, asy - 12.5, 3.6, Math.PI, 0); g.fill(); g.stroke();
+      }
+      // civ-specific barracks banner/standard
+      if (style === 'china') {
+        // horizontal dragon banner hanging above the entrance
+        const bx2 = cx - s * 10, bby = cy + s * 8.5 - wallH - 2;
+        g.strokeStyle = '#3a2a16'; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(bx2 - 12, bby); g.lineTo(bx2 + 12, bby); g.stroke(); // pole
+        g.fillStyle = '#9a2018';
+        g.beginPath(); g.moveTo(bx2 - 11, bby); g.lineTo(bx2 + 11, bby); g.lineTo(bx2 + 13, bby + 6); g.lineTo(bx2, bby + 9); g.lineTo(bx2 - 13, bby + 6); g.closePath(); g.fill();
+        g.fillStyle = '#e7b840'; g.beginPath(); g.arc(bx2, bby + 4, 2.6, 0, 7); g.fill(); // gold boss
+        // vertical dao swords on right side
+        g.strokeStyle = '#c0c8d0'; g.lineWidth = 1.6;
+        for (let i = 0; i < 3; i++) {
+          const sx2 = cx + s * 20 + i * 5.5;
+          g.beginPath(); g.moveTo(sx2, cy + 4); g.lineTo(sx2, cy - 18); g.stroke();
+          g.fillStyle = '#8a6420'; g.fillRect(sx2 - 2.2, cy - 7, 4.4, 2); // dao guard
+          g.fillStyle = '#c0c8d0'; g.beginPath(); g.moveTo(sx2 - 1.4, cy - 18); g.lineTo(sx2 + 2.4, cy - 21.5); g.lineTo(sx2 + 1.4, cy - 17); g.closePath(); g.fill(); // curved tip
+        }
+      } else if (style === 'india') {
+        // elephant war standard above armor stand
+        g.strokeStyle = '#5d4426'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(asx, asy - 14); g.lineTo(asx, asy - 26); g.stroke();
+        g.fillStyle = '#6a5a48'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 0.9;
+        g.beginPath(); g.ellipse(asx, asy - 30, 4.5, 3.5, 0, 0, 7); g.fill(); g.stroke(); // elephant head
+        g.strokeStyle = '#6a5a48'; g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(asx - 3.5, asy - 29); g.quadraticCurveTo(asx - 6, asy - 26, asx - 4, asy - 24); g.stroke(); // trunk
+        g.strokeStyle = '#e0d0b0'; g.lineWidth = 1.3;
+        g.beginPath(); g.moveTo(asx - 3, asy - 28.5); g.quadraticCurveTo(asx - 5.5, asy - 27, asx - 4.5, asy - 25.5); g.stroke(); // tusk
+        // lotus shields (gold lotus overlay on the main shields)
+        for (let i = 0; i < 3; i++) {
+          const t2 = 0.25 + i * 0.22;
+          const sx3 = cx - s * 32 + s * 32 * t2, sy3 = cy + s * 16 * t2 - wallH * 0.45;
+          g.strokeStyle = '#e7b840'; g.lineWidth = 0.8;
+          for (let pp = 0; pp < 8; pp++) {
+            const ang2 = pp * Math.PI / 4;
+            g.beginPath(); g.moveTo(sx3, sy3); g.lineTo(sx3 + Math.cos(ang2) * 3.2, sy3 + Math.sin(ang2) * 3.2); g.stroke();
+          }
+          g.fillStyle = '#e7b840'; g.beginPath(); g.arc(sx3, sy3, 1, 0, 7); g.fill();
+        }
+      }
     }
     if (type === 'range') {
       // striped shooting awning + big target + arrow barrel
@@ -2209,16 +2406,26 @@ const Sprites = (() => {
       g.strokeStyle = '#5d4426'; g.lineWidth = 2.2;
       g.beginPath(); g.moveTo(ax2 - 10, ay2 + 8); g.lineTo(ax2 - 10, ay2 - 14); g.stroke();
       g.beginPath(); g.moveTo(ax2 + 12, ay2 + 2); g.lineTo(ax2 + 12, ay2 - 18); g.stroke();
+      const cA = style === 'china' ? '#e7d04a' : style === 'india' ? '#e87a1a' : '#e8e0ce';
+      const cB = style === 'china' ? '#c4543f' : style === 'india' ? '#c8983a' : '#c4543f';
       for (let i = 0; i < 4; i++) { // striped canopy
-        g.fillStyle = i % 2 ? '#e8e0ce' : '#c4543f';
+        g.fillStyle = i % 2 ? cA : cB;
         g.beginPath();
         g.moveTo(ax2 - 12 + i * 6.5, ay2 - 14 - i * 1.2); g.lineTo(ax2 - 5.5 + i * 6.5, ay2 - 15.2 - i * 1.2);
         g.lineTo(ax2 - 3.5 + i * 6.5, ay2 - 22 - i * 1.2); g.lineTo(ax2 - 10 + i * 6.5, ay2 - 20.8 - i * 1.2);
         g.closePath(); g.fill();
       }
       const tx = cx + s * 24, ty = cy + 4;
-      for (const [r, col] of [[8.5, '#e8e0ce'], [6, '#c4543f'], [3.4, '#e8e0ce'], [1.6, '#c4543f']]) {
+      const tgtA = style === 'china' ? '#e8e0ce' : style === 'india' ? '#e8d098' : '#e8e0ce';
+      const tgtB = style === 'china' ? '#c4543f' : style === 'india' ? '#c05838' : '#c4543f';
+      for (const [r, col] of [[8.5, tgtA], [6, tgtB], [3.4, tgtA], [1.6, tgtB]]) {
         g.fillStyle = col; g.beginPath(); g.ellipse(tx, ty, r, r * .8, 0, 0, 7); g.fill();
+      }
+      if (style === 'india') {
+        // lotus petals on center ring
+        g.strokeStyle = '#e7b840'; g.lineWidth = 0.8;
+        for (let i = 0; i < 8; i++) { const aa = i * Math.PI / 4;
+          g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + Math.cos(aa) * 2.5, ty + Math.sin(aa) * 2); g.stroke(); }
       }
       g.strokeStyle = '#6e5638'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(tx - 5, ty + 10); g.lineTo(tx, ty + 5); g.lineTo(tx + 5, ty + 10); g.stroke();
@@ -2228,19 +2435,30 @@ const Sprites = (() => {
       g.strokeStyle = '#9a7b54'; g.lineWidth = 1.2;
       for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(cx - s * 22 + i * 2, cy + s * 6 - 4); g.lineTo(cx - s * 22 + i * 3.4, cy + s * 6 - 12); g.stroke(); }
     }
-    // civilization accents
-    if (style === 'china' && (type === 'tc' || type === 'barracks' || type === 'range' || type === 'university')) {
+    // civilization accents — applied to all generic-path buildings
+    if (style === 'china') {
       for (const lx of [cx - s * 30, cx + s * 30]) { // red lanterns at the eaves
         g.strokeStyle = '#3a2a16'; g.lineWidth = 1;
         g.beginPath(); g.moveTo(lx, cy - wallH - 2); g.lineTo(lx, cy - wallH + 4); g.stroke();
         g.fillStyle = '#d04a35'; g.beginPath(); g.ellipse(lx, cy - wallH + 8, 3.4, 4.2, 0, 0, 7); g.fill();
         g.fillStyle = '#ffd34d'; g.fillRect(lx - 1, cy - wallH + 12.2, 2, 2.6);
       }
+      // red eave trim across the building top
+      g.strokeStyle = '#9a2818'; g.lineWidth = 2.2;
+      g.beginPath(); g.moveTo(cx - s * 32, cy - wallH); g.lineTo(cx, cy - wallH + s * 16); g.lineTo(cx + s * 32, cy - wallH); g.stroke();
     }
-    if (style === 'india' && (type === 'tc' || type === 'barracks' || type === 'range')) {
+    if (style === 'india') {
       for (const fx2 of [cx - s * 26, cx + s * 26]) { // gold corner finials
         g.fillStyle = '#d4a647';
         g.beginPath(); g.moveTo(fx2 - 2.4, cy - wallH - 1); g.lineTo(fx2 + 2.4, cy - wallH - 1); g.lineTo(fx2, cy - wallH - 8); g.closePath(); g.fill();
+      }
+      // carved stone base band
+      g.strokeStyle = '#c9a04a'; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(cx - s * 32, cy - 1); g.lineTo(cx, cy + s * 16 - 1); g.lineTo(cx + s * 32, cy - 1); g.stroke();
+      g.strokeStyle = 'rgba(200,160,70,.4)'; g.lineWidth = 0.8;
+      for (let i = 1; i < 5; i++) { const t2 = i / 5;
+        g.beginPath(); g.arc(cx - s * 32 + s * 32 * t2, cy + s * 16 * t2 - 1, 2, Math.PI, 0); g.stroke(); // arch chain
+        g.beginPath(); g.arc(cx + s * 32 * t2, cy + s * 16 * t2 - 1, 2, Math.PI, 0); g.stroke();
       }
     }
     flag(g, cx + s * 28, cy - wallH - 2, colorIdx);
