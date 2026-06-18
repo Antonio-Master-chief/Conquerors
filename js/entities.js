@@ -126,7 +126,7 @@ class Unit {
   /* ---- orders (repathT reset = commands respond INSTANTLY) ---- */
   clearOrder() { this.order = null; this.path = null; this.state = 'idle'; }
   resetQueue() { if (this.buildQueue) this.buildQueue.length = 0; }
-  orderMove(x, y) { this.resetQueue(); this.workObj = null; this.gatherKind = null; this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; }
+  orderMove(x, y) { this.resetQueue(); this.workObj = null; this.gatherKind = null; this.order = { kind: 'move', x, y }; this.path = null; this.repathT = 0; this.state = 'move'; this.groupSpeedCap = null; }
   orderAttack(t) { this.resetQueue(); this.workObj = null; this.gatherKind = null; this.order = { kind: 'attack', target: t }; this.path = null; this.repathT = 0; this.state = 'attack'; }
   orderExplore() { this.resetQueue(); this.workObj = null; this.gatherKind = null; this.order = { kind: 'autoexplore' }; this.path = null; this.repathT = 0; this.state = 'move'; }
   orderGarrison(b) { // ranged units man the walls
@@ -264,9 +264,10 @@ class Unit {
     return ok;
   }
   moveAlong(game, dt) {
-    if (!this.path || this.wp >= this.path.length) return false;
+    if (!this.path || this.wp >= this.path.length) { this.groupSpeedCap = null; return false; }
     // consume the whole step across waypoints — no stutter at tile centers
-    let step = this.speed * dt;
+    const effSpeed = this.groupSpeedCap != null ? Math.min(this.speed, this.groupSpeedCap) : this.speed;
+    let step = effSpeed * dt;
     while (step > 0 && this.wp < this.path.length) {
       const [tx, ty] = this.path[this.wp];
       const gx = tx + .5, gy = ty + .5;

@@ -125,6 +125,42 @@ const Input = (() => {
     }
   }
 
+  // Returns [right, forward] offsets for each unit in a formation.
+  // right = perpendicular to travel; forward = toward destination (positive = ahead).
+  function formationOffsets(formation, n) {
+    const sp = 0.9;
+    const slots = [];
+    switch (formation) {
+      case 'line': {
+        const cols = Math.min(n, 8);
+        for (let i = 0; i < n; i++)
+          slots.push([(i % cols - (cols - 1) / 2) * sp, -Math.floor(i / cols) * sp]);
+        break;
+      }
+      case 'column': {
+        for (let i = 0; i < n; i++)
+          slots.push([(i % 2 - 0.5) * sp, -Math.floor(i / 2) * sp]);
+        break;
+      }
+      case 'wedge': {
+        let idx = 0;
+        for (let row = 0; idx < n; row++) {
+          const cnt = row === 0 ? 1 : row * 2;
+          for (let c = 0; c < cnt && idx < n; c++, idx++)
+            slots.push([(c - (cnt - 1) / 2) * sp, -row * sp * 0.85]);
+        }
+        break;
+      }
+      default: { // box / loose square
+        const cols = Math.ceil(Math.sqrt(n));
+        for (let i = 0; i < n; i++)
+          slots.push([(i % cols - (cols - 1) / 2) * sp,
+                      -(Math.floor(i / cols) - (Math.ceil(n / cols) - 1) / 2) * sp]);
+      }
+    }
+    return slots;
+  }
+
   function commandAt(px, py) {
     const sel = game.selected.filter(e => !e.dead && e.kind === 'unit' && e.owner === game.humanId);
     const [tx, ty] = screenToTile(px, py);
@@ -251,16 +287,40 @@ const Input = (() => {
       mark('move', tx, ty);
       Audio2.sfx('click'); return true;
     }
-    // formation move — never assign a slot that sits on a blocked tile
+    // formation move — slots oriented toward destination, pace matched to slowest unit
     const n = sel.length;
-    const cols = Math.ceil(Math.sqrt(n));
+    // direction from group centroid toward click target
+    const cx0 = sel.reduce((s, u) => s + u.x, 0) / n;
+    const cy0 = sel.reduce((s, u) => s + u.y, 0) / n;
+    const fwdAng = Math.atan2(ty - cy0, tx - cx0);
+    const fcos = Math.cos(fwdAng), fsin = Math.sin(fwdAng);
+    const pcos = Math.cos(fwdAng + Math.PI / 2), psin = Math.sin(fwdAng + Math.PI / 2);
+    // compute world-space slot positions
+    const rawSlots = formationOffsets(game.formation || 'box', n);
+    const slots = rawSlots.map(([r, f]) => [tx + r * pcos + f * fcos, ty + r * psin + f * fsin]);
+    // greedy assignment: each unit takes nearest unoccupied slot (minimises path crossing)
+    const used = new Set();
+    const assignment = [];
+    for (const u of sel) {
+      let bestI = 0, bestD = Infinity;
+      for (let i = 0; i < slots.length; i++) {
+        if (used.has(i)) continue;
+        const d = (u.x - slots[i][0]) ** 2 + (u.y - slots[i][1]) ** 2;
+        if (d < bestD) { bestD = d; bestI = i; }
+      }
+      used.add(bestI);
+      assignment.push(bestI);
+    }
+    // pace: all military units travel at the slowest unit's speed
+    const milSel = sel.filter(u => !u.civilian && !u.def.animal);
+    const minSpeed = milSel.length > 1 ? Math.min(...milSel.map(u => u.speed)) : 0;
     sel.forEach((u, i) => {
-      const ox = (i % cols - (cols - 1) / 2) * 0.9;
-      const oy = (Math.floor(i / cols) - (Math.ceil(n / cols) - 1) / 2) * 0.9;
-      let gx = clamp(tx + ox, 1, World.N - 2), gy = clamp(ty + oy, 1, World.N - 2);
+      const [gx, gy] = slots[assignment[i]];
+      const cx2 = clamp(gx, 1, World.N - 2), cy2 = clamp(gy, 1, World.N - 2);
       const grid = u.def.naval ? game.world.navBlocked : game.world.blocked;
-      if (grid[World.idx(gx | 0, gy | 0)]) { gx = tx; gy = ty; } // fall back to the click point
-      u.orderMove(gx, gy);
+      u.orderMove(grid[World.idx(cx2 | 0, cy2 | 0)] ? tx : cx2,
+                   grid[World.idx(cx2 | 0, cy2 | 0)] ? ty : cy2);
+      if (minSpeed > 0 && !u.civilian && !u.def.animal) u.groupSpeedCap = minSpeed;
     });
     mark('move', tx, ty);
     Audio2.ack('move', big);

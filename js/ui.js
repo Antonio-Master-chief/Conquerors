@@ -126,7 +126,7 @@ const UI = (() => {
 
   function panelKey() {
     const sel = game.selected;
-    let k = sel.map(e => e.id).join(',') + '|' + (game.placing ? game.placing.type : '');
+    let k = sel.map(e => e.id).join(',') + '|' + (game.placing ? game.placing.type : '') + '|' + (game.formation || 'box');
     const b = sel[0];
     if (b && b.kind === 'bld') k += '|' + b.queue.length + '|' + (game.players[game.humanId].researching ? 'r' : '');
     return k;
@@ -324,6 +324,39 @@ const UI = (() => {
           });
         }
       }
+      // formation picker — shown when 2+ military units are selected
+      const milU = sel.filter(u => !u.civilian && !u.def.animal);
+      if (milU.length >= 2) {
+        const curF = game.formation || 'box';
+        const fRow = el('div', '', actP);
+        fRow.style.cssText = 'display:flex;gap:3px;flex-wrap:wrap;padding:2px 0 4px;border-top:1px solid rgba(255,255,255,.1);margin-top:2px;width:100%;';
+        const fLabel = el('div', '', fRow);
+        fLabel.textContent = 'Formation:';
+        fLabel.style.cssText = 'font-size:10px;color:rgba(255,220,100,.75);align-self:center;margin-right:2px;white-space:nowrap;';
+        for (const [key, icon, tip] of [
+          ['box',    '□ Box',    'Balanced square — default marching order'],
+          ['line',   '≡ Line',   'Wide battle line — maximises frontage for archers & melee'],
+          ['wedge',  '▲ Wedge',  'Tip-forward V — cavalry charge, punches through the centre'],
+          ['column', '|| Col',   'Two-file column — march through gates & narrow terrain'],
+        ]) {
+          const b = el('button', '', fRow);
+          b.textContent = icon;
+          b.title = tip;
+          b.style.cssText = 'font-size:10px;padding:3px 5px;border-radius:3px;cursor:pointer;white-space:nowrap;' +
+            (key === curF
+              ? 'background:#e8c96a;color:#2a1a08;border:1px solid #c8a840;font-weight:bold;'
+              : 'background:rgba(255,255,255,.1);color:#e8dfc8;border:1px solid rgba(255,255,255,.18);');
+          b.onclick = ev => { ev.stopPropagation(); game.formation = key; Audio2.sfx('click'); refreshPanels(true); };
+        }
+        // pace note when mixed-speed units are selected
+        const slowest = Math.min(...milU.map(u => u.speed));
+        if (milU.some(u => u.speed > slowest + 0.05)) {
+          const note = el('div', '', actP);
+          note.style.cssText = 'font-size:10px;color:rgba(255,220,100,.65);padding:1px 0 3px;';
+          note.textContent = `⚡ Army pace locked to slowest unit (${slowest.toFixed(2)})`;
+        }
+      }
+
       const loaded = sel.filter(u => u.cargo && u.cargo.length);
       if (loaded.length) {
         actionBtn(actP, {
