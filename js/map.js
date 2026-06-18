@@ -3,6 +3,8 @@
 
 const World = (() => {
   const N = CFG.MAP, CH = CFG.CHUNK, NCH = N / CH;
+  const ELEV_H = 14;   // pixels per elevation step (height of one iso cliff face)
+  const MAX_ELEV = 4;  // maximum elevation level
 
   const W = {
     ter: new Uint8Array(N * N),
@@ -11,6 +13,7 @@ const World = (() => {
     sightBlock: new Uint8Array(N * N),  // vision blockers: trees, tall buildings (walls later)
     pass: new Uint8Array(N * N),        // 1 = mountain-pass tile (extreme high-ground bonus)
     salt: new Uint8Array(N * N),        // water type: 1 = sea (salt, docks+fish), 0 = fresh lake (farms+canals)
+    elev: new Uint8Array(N * N),        // per-tile elevation 0-4 (drives cliff faces + unit height)
     vis: new Uint8Array(N * N),         // 0 unexplored 1 explored 2 visible (human player)
     objects: [],                        // resource nodes & decorations
     objGrid: new Int32Array(N * N),     // object id+1 at tile
@@ -474,6 +477,28 @@ const World = (() => {
     // ship passability: anything that's not water is a wall for ships
     for (let i = 0; i < N * N; i++) W.navBlocked[i] = W.ter[i] <= TERRAIN.SHALLOW ? 0 : 1;
 
+    // --- per-tile elevation (drives cliff faces + unit Y offset) ---
+    W.elev.fill(0);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const i = idx(x, y), t = W.ter[i];
+      if (t === TERRAIN.MOUNTAIN) W.elev[i] = 3 + (nm(x, y) > 0.92 ? 1 : 0);
+      else if (t === TERRAIN.HILL || W.pass[i]) W.elev[i] = 2;
+      else if (t === TERRAIN.DIRT && nh(x, y) > 0.72) W.elev[i] = 1;
+    }
+    // normalize: no adjacent tile can differ by more than 2 elevation steps
+    let eChanged = true;
+    for (let eIter = 0; eIter < 12 && eChanged; eIter++) {
+      eChanged = false;
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          if (!inB(x+dx, y+dy)) continue;
+          const i = idx(x, y), j = idx(x+dx, y+dy);
+          if (W.elev[i] > W.elev[j] + 2) { W.elev[i] = W.elev[j] + 2; eChanged = true; }
+        }
+      }
+    }
+    for (let i = 0; i < N * N; i++) if (W.ter[i] <= TERRAIN.SHALLOW) W.elev[i] = 0;
+
     W.vis.fill(0);
     W.chunks.fill(null);
     bakeMinimapBase();
@@ -512,28 +537,31 @@ const World = (() => {
     const x0 = cgx * CH, y0 = cgy * CH;
     const ox = isoX(x0, y0 + CH - 1) - 32;
     const oy = isoY(x0, y0);
+    const PAD = MAX_ELEV * ELEV_H;  // extra vertical space above base tile row for elevated tiles
     const cv = document.createElement('canvas');
-    cv.width = CH * 64; cv.height = CH * 32 + 16;
+    cv.width = CH * 64; cv.height = CH * 32 + 16 + PAD;
     const g = cv.getContext('2d');
+
+    // pass 1: tile surfaces (elevation shifts each tile up by elev * ELEV_H)
     for (let y = y0; y < y0 + CH; y++) for (let x = x0; x < x0 + CH; x++) {
       const i = idx(x, y), t = W.ter[i];
+      const elev = W.elev[i];
       const fresh = t <= TERRAIN.SHALLOW && W.salt[i] === 0;
       const dried = fresh && W.lakeWater && W.lakeWater[W.waterRegion[i]] <= 0;
-      const tx2 = isoX(x, y) - ox, ty2 = isoY(x, y) - oy;
+      const tx2 = isoX(x, y) - ox;
+      const ty2 = isoY(x, y) - oy + PAD - elev * ELEV_H;
       if (dried) {
-        // an emptied lakebed: cracked brown mud, no water
         g.drawImage(Sprites.tile(TERRAIN.SAND, (x * 31 + y * 17) % 6), tx2 - 32, ty2);
         const mud = g.createLinearGradient(tx2, ty2, tx2, ty2 + 32);
         mud.addColorStop(0, 'rgba(96,76,48,.78)'); mud.addColorStop(1, 'rgba(70,54,33,.82)');
         g.fillStyle = mud; g.beginPath();
         g.moveTo(tx2, ty2); g.lineTo(tx2 + 32, ty2 + 16); g.lineTo(tx2, ty2 + 32); g.lineTo(tx2 - 32, ty2 + 16); g.closePath(); g.fill();
-        g.strokeStyle = 'rgba(45,33,18,.55)'; g.lineWidth = 1; // dried cracks
+        g.strokeStyle = 'rgba(45,33,18,.55)'; g.lineWidth = 1;
         for (let k = 0; k < 3; k++) { const a = (x * 7 + y * 13 + k * 5) % 6;
           g.beginPath(); g.moveTo(tx2 - 14 + a * 5, ty2 + 8 + k * 6); g.lineTo(tx2 - 4 + a * 4, ty2 + 14 + k * 5); g.stroke(); }
         continue;
       }
       g.drawImage(Sprites.tile(t, (x * 31 + y * 17 + ((x * x + y) >> 2)) % 6), tx2 - 32, ty2);
-      // freshwater lakes get a green-teal wash so they read differently from the sea
       if (fresh) {
         g.fillStyle = t === TERRAIN.DEEP ? 'rgba(60,150,110,.32)' : 'rgba(90,180,140,.30)';
         g.beginPath();
@@ -541,17 +569,18 @@ const World = (() => {
         g.closePath(); g.fill();
       }
     }
-    // soft blending where two LAND terrains meet (kills the patchwork look)
+
+    // pass 2: land blending (uses elevated tile positions)
     const BLEND = { 2: 'rgba(205,178,121,.30)', 3: 'rgba(88,138,60,.30)', 4: 'rgba(138,113,72,.30)', 5: 'rgba(147,160,90,.30)' };
     g.lineCap = 'round';
     for (let y = y0; y < y0 + CH; y++) for (let x = x0; x < x0 + CH; x++) {
       const t = W.ter[idx(x, y)];
       if (t < TERRAIN.SAND) continue;
-      const tx2 = isoX(x, y) - ox, ty2 = isoY(x, y) - oy;
-      // down-facing edges only (each boundary drawn once)
+      const elev = W.elev[idx(x, y)];
+      const tx2 = isoX(x, y) - ox, ty2 = isoY(x, y) - oy + PAD - elev * ELEV_H;
       for (const [nx, ny, ex0, ey0, ex1, ey1] of [
-        [x + 1, y, tx2 + 32, ty2 + 16, tx2, ty2 + 32],   // SE edge
-        [x, y + 1, tx2, ty2 + 32, tx2 - 32, ty2 + 16]]) { // SW edge
+        [x + 1, y, tx2 + 32, ty2 + 16, tx2, ty2 + 32],
+        [x, y + 1, tx2, ty2 + 32, tx2 - 32, ty2 + 16]]) {
         if (!inB(nx, ny)) continue;
         const nt = W.ter[idx(nx, ny)];
         if (nt < TERRAIN.SAND || nt === t) continue;
@@ -559,21 +588,72 @@ const World = (() => {
         g.beginPath(); g.moveTo(ex0, ey0); g.lineTo(ex1, ey1); g.stroke();
       }
     }
-    // coastline foam: white edge where shallow water meets land
+
+    // pass 3: cliff faces — SE and SW walls where a tile is higher than its front neighbour
+    for (let y = y0; y < y0 + CH; y++) for (let x = x0; x < x0 + CH; x++) {
+      const i = idx(x, y), e0 = W.elev[i];
+      if (e0 === 0) continue;
+      const t = W.ter[i];
+      const tx2 = isoX(x, y) - ox;
+      const ty0 = isoY(x, y) - oy + PAD;  // base Y at elevation 0 (no elev offset)
+      // SE cliff: between (x,y) and (x+1,y)
+      if (inB(x + 1, y)) {
+        const e1 = W.elev[idx(x + 1, y)];
+        if (e0 > e1) {
+          const isMtn = t === TERRAIN.MOUNTAIN;
+          const cFill = isMtn ? '#7e7870' : '#8a6e4a';
+          const cShade = isMtn ? '#524e4a' : '#5a4832';
+          const cLight = isMtn ? '#a09890' : '#b08c60';
+          g.fillStyle = cFill;
+          g.beginPath();
+          g.moveTo(tx2 + 32, ty0 - e0 * ELEV_H + 16);
+          g.lineTo(tx2,      ty0 - e0 * ELEV_H + 32);
+          g.lineTo(tx2,      ty0 - e1 * ELEV_H + 32);
+          g.lineTo(tx2 + 32, ty0 - e1 * ELEV_H + 16);
+          g.closePath(); g.fill();
+          g.strokeStyle = cLight; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(tx2 + 32, ty0 - e0 * ELEV_H + 16); g.lineTo(tx2, ty0 - e0 * ELEV_H + 32); g.stroke();
+          g.strokeStyle = cShade; g.lineWidth = 0.8;
+          g.beginPath(); g.moveTo(tx2, ty0 - e1 * ELEV_H + 32); g.lineTo(tx2 + 32, ty0 - e1 * ELEV_H + 16); g.stroke();
+        }
+      }
+      // SW cliff: between (x,y) and (x,y+1)
+      if (inB(x, y + 1)) {
+        const e1 = W.elev[idx(x, y + 1)];
+        if (e0 > e1) {
+          const isMtn = t === TERRAIN.MOUNTAIN;
+          const cFill = isMtn ? '#635e5a' : '#6e5438';
+          const cShade = isMtn ? '#3c3830' : '#453224';
+          const cLight = isMtn ? '#8a8480' : '#8a6a48';
+          g.fillStyle = cFill;
+          g.beginPath();
+          g.moveTo(tx2,      ty0 - e0 * ELEV_H + 32);
+          g.lineTo(tx2 - 32, ty0 - e0 * ELEV_H + 16);
+          g.lineTo(tx2 - 32, ty0 - e1 * ELEV_H + 16);
+          g.lineTo(tx2,      ty0 - e1 * ELEV_H + 32);
+          g.closePath(); g.fill();
+          g.strokeStyle = cLight; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(tx2, ty0 - e0 * ELEV_H + 32); g.lineTo(tx2 - 32, ty0 - e0 * ELEV_H + 16); g.stroke();
+          g.strokeStyle = cShade; g.lineWidth = 0.8;
+          g.beginPath(); g.moveTo(tx2 - 32, ty0 - e1 * ELEV_H + 16); g.lineTo(tx2, ty0 - e1 * ELEV_H + 32); g.stroke();
+        }
+      }
+    }
+
+    // pass 4: coastline foam (water tiles always at elev 0)
     g.lineCap = 'round';
     const land = (xx, yy) => inB(xx, yy) && W.ter[idx(xx, yy)] >= TERRAIN.SAND;
     for (let y = y0; y < y0 + CH; y++) for (let x = x0; x < x0 + CH; x++) {
       if (W.ter[idx(x, y)] !== TERRAIN.SHALLOW) continue;
-      if (W.salt[idx(x, y)] === 0 && W.lakeWater && W.lakeWater[W.waterRegion[idx(x, y)]] <= 0) continue; // dried bed: no foam
-      const tx = isoX(x, y) - ox, ty = isoY(x, y) - oy; // diamond top corner
+      if (W.salt[idx(x, y)] === 0 && W.lakeWater && W.lakeWater[W.waterRegion[idx(x, y)]] <= 0) continue;
+      const tx = isoX(x, y) - ox, ty = isoY(x, y) - oy + PAD; // elev=0 for water
       const edges = [];
-      if (land(x + 1, y)) edges.push([[tx + 32, ty + 16], [tx, ty + 32]]); // SE
-      if (land(x, y + 1)) edges.push([[tx, ty + 32], [tx - 32, ty + 16]]); // SW
-      if (land(x - 1, y)) edges.push([[tx - 32, ty + 16], [tx, ty]]);      // NW
-      if (land(x, y - 1)) edges.push([[tx, ty], [tx + 32, ty + 16]]);      // NE
+      if (land(x + 1, y)) edges.push([[tx + 32, ty + 16], [tx, ty + 32]]);
+      if (land(x, y + 1)) edges.push([[tx, ty + 32], [tx - 32, ty + 16]]);
+      if (land(x - 1, y)) edges.push([[tx - 32, ty + 16], [tx, ty]]);
+      if (land(x, y - 1)) edges.push([[tx, ty], [tx + 32, ty + 16]]);
       for (const [[ax2, ay2], [bx2, by2]] of edges) {
         const mx = (ax2 + bx2) / 2, my = (ay2 + by2) / 2;
-        // push the wavy midpoint slightly toward the water side (tile center)
         const wx2 = mx + (tx - mx) * 0.18, wy2 = my + (ty + 16 - my) * 0.18;
         g.strokeStyle = 'rgba(235,248,255,.55)'; g.lineWidth = 2.4;
         g.beginPath(); g.moveTo(ax2, ay2); g.quadraticCurveTo(wx2, wy2, bx2, by2); g.stroke();
@@ -581,7 +661,8 @@ const World = (() => {
         g.beginPath(); g.moveTo(ax2, ay2); g.quadraticCurveTo(wx2, wy2, bx2, by2); g.stroke();
       }
     }
-    ch = { cv, ox, oy };
+
+    ch = { cv, ox, oy: oy - PAD };
     W.chunks[ci] = ch;
     return ch;
   }
@@ -589,13 +670,15 @@ const World = (() => {
   /* draw visible terrain chunks. cam = {x, y, zoom}; canvas w,h */
   function drawTerrain(g, cam, w, h) {
     const z = cam.zoom;
+    const PAD = MAX_ELEV * ELEV_H;
     const left = cam.x - w / 2 / z, top = cam.y - h / 2 / z;
     const right = cam.x + w / 2 / z, bottom = cam.y + h / 2 / z;
     for (let ci = 0; ci < NCH * NCH; ci++) {
       const cgx = ci % NCH, cgy = (ci / NCH) | 0;
       const x0 = cgx * CH, y0 = cgy * CH;
-      const ox = isoX(x0, y0 + CH - 1) - 32, oy = isoY(x0, y0);
-      const cw = CH * 64, chh = CH * 32 + 16;
+      const ox = isoX(x0, y0 + CH - 1) - 32;
+      const oy = isoY(x0, y0) - PAD;   // canvas top is PAD px above the base tile row
+      const cw = CH * 64, chh = CH * 32 + 16 + PAD;
       if (ox > right || ox + cw < left || oy > bottom || oy + chh < top) continue;
       const ch = chunkCanvas(ci);
       g.drawImage(ch.cv, (ox - left) * z, (oy - top) * z, cw * z, chh * z);
@@ -743,7 +826,10 @@ const World = (() => {
     }
   }
 
-  return { W, gen, idx, inB, isoX, isoY, objAt, nearestObj, removeObj,
+  const elevAt = (x, y) => W.elev[idx(x | 0, y | 0)] || 0;
+  const elevScreenY = (x, y) => isoY(x, y) - elevAt(x, y) * ELEV_H;
+
+  return { W, gen, idx, inB, isoX, isoY, elevScreenY, elevAt, ELEV_H, objAt, nearestObj, removeObj,
            drawTerrain, drawFog, recomputeFog, visAt, terAt, explore,
            isSea, isFresh, lakeHasWater, drainLake, lakeFrac, rainRefill, refreshLakeChunks, isPass, N };
 })();

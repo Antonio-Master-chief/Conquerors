@@ -876,11 +876,10 @@ class Unit {
     const civ = this.civKey || 'none';
     const s = Sprites.unit(this.type, this.owner < 0 ? -1 : this.owner, civ, this.dir, this.anim, this.frame, this.tool());
     const ix = (World.isoX(this.x, this.y) - view.left) * view.z;
-    const iy = (World.isoY(this.x, this.y) - view.top) * view.z;
+    const iy = (World.elevScreenY(this.x, this.y) - view.top) * view.z;
     const sc = view.z * (this.def.big ? 0.95 : 0.78);
-    const k = s.k || 1; // supersampled sprites render at logical size
+    const k = s.k || 1;
     let bob = this.def.naval ? Math.sin(performance.now() / 450 + this.id * 1.7) * 2 * view.z : 0;
-    if (World.terAt(this.x, this.y) === TERRAIN.HILL) bob -= 5 * view.z; // standing tall on high ground
     if (this.fade < 1) g.globalAlpha = this.fade;
     g.drawImage(s.cv, ix - s.ax * sc, iy - s.ay * sc + bob, s.cv.width * sc / k, s.cv.height * sc / k);
     if (performance.now() < this.flashUntil) { // hit flash
@@ -1174,7 +1173,7 @@ class Building {
     const age = (game && this.owner >= 0 && game.players[this.owner]) ? game.players[this.owner].age : 1;
     const s = Sprites.building(this.type, style, this.owner < 0 ? -1 : this.owner, this.built, flag, age);
     const ix = (World.isoX(this.cx(), this.cy()) - view.left) * view.z;
-    const iy = (World.isoY(this.cx(), this.cy()) - view.top) * view.z;
+    const iy = (World.elevScreenY(this.cx(), this.cy()) - view.top) * view.z;
     const bk = s.k || 1;
     g.drawImage(s.cv, ix - s.ax * view.z, iy - s.ay * view.z, s.cv.width * view.z / bk, s.cv.height * view.z / bk);
     // construction progress

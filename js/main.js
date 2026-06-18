@@ -313,7 +313,7 @@ function render(game) {
     const isRes = e.kind !== 'unit' && e.kind !== 'bld'; // a resource node / animal
     const ecx = isRes ? e.x + .5 : e.cx(), ecy = isRes ? e.y + .5 : e.cy();
     const ix = (World.isoX(ecx, ecy) - view.left) * z;
-    const iy = (World.isoY(ecx, ecy) - view.top) * z;
+    const iy = (World.elevScreenY(ecx, ecy) - view.top) * z;
     const r = isRes ? 15 : e.kind === 'bld' ? e.size * 30 : (e.def.big ? 24 : 13);
     const yy = iy + (e.kind === 'bld' || isRes ? 0 : 1 * z);
     ctx.strokeStyle = 'rgba(10,20,8,.6)';
@@ -338,7 +338,7 @@ function render(game) {
     // rally flag for selected production buildings
     if (e.kind === 'bld' && e.owner === game.humanId && e.rally) {
       const rx = (World.isoX(e.rally.x, e.rally.y) - view.left) * z;
-      const ry = (World.isoY(e.rally.x, e.rally.y) - view.top) * z;
+      const ry = (World.elevScreenY(e.rally.x, e.rally.y) - view.top) * z;
       ctx.strokeStyle = 'rgba(120,200,255,.9)'; ctx.lineWidth = 2 * z;
       ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx, ry - 18 * z); ctx.stroke();
       ctx.fillStyle = 'rgba(120,200,255,.9)';
@@ -352,7 +352,7 @@ function render(game) {
   for (const m of game.markers) {
     const tt = clamp((game.time - m.t0) / 0.9, 0, 1);
     const ix = (World.isoX(m.x, m.y) - view.left) * z;
-    const iy = (World.isoY(m.x, m.y) - view.top) * z;
+    const iy = (World.elevScreenY(m.x, m.y) - view.top) * z;
     const col = m.kind === 'attack' ? '230,80,55' : m.kind === 'gather' ? '255,211,77'
               : m.kind === 'rally' ? '120,200,255' : '130,235,95';
     const a = (1 - tt).toFixed(2);
@@ -376,7 +376,7 @@ function render(game) {
       const ok = Sim.canPlace(game, type, bx2, by2);
       ctx.fillStyle = ok ? 'rgba(110,220,90,.4)' : 'rgba(220,70,50,.4)';
       const gx = (World.isoX(bx2 + .5, by2 + .5) - view.left) * z;
-      const gy = (World.isoY(bx2 + .5, by2 + .5) - view.top) * z;
+      const gy = (World.elevScreenY(bx2 + .5, by2 + .5) - view.top) * z;
       ctx.beginPath();
       ctx.moveTo(gx, gy - 16 * z); ctx.lineTo(gx + 32 * z, gy);
       ctx.lineTo(gx, gy + 16 * z); ctx.lineTo(gx - 32 * z, gy);
@@ -389,7 +389,7 @@ function render(game) {
     ctx.fillStyle = ok ? 'rgba(110,220,90,.3)' : 'rgba(220,70,50,.35)';
     ctx.beginPath();
     const cx = bx + B.size / 2, cy = by + B.size / 2;
-    const tx = (World.isoX(cx, cy) - view.left) * z, ty = (World.isoY(cx, cy) - view.top) * z;
+    const tx = (World.isoX(cx, cy) - view.left) * z, ty = (World.elevScreenY(cx, cy) - view.top) * z;
     ctx.moveTo(tx, ty - B.size * 16 * z);
     ctx.lineTo(tx + B.size * 32 * z, ty);
     ctx.lineTo(tx, ty + B.size * 16 * z);
@@ -408,32 +408,32 @@ function render(game) {
   const syMin = view.top - margin, syMax = view.top + cv.height / z + margin;
   const draws = [];
   for (const o of game.world.objects) {
-    if (!o.alive || o.carried) continue;   // carried kills are drawn on the carriers' pole
+    if (!o.alive || o.carried) continue;
     const v = World.visAt(o.x, o.y);
     if (v === 0) continue;
-    const ix = World.isoX(o.x + .5, o.y + .5), iy = World.isoY(o.x + .5, o.y + .5);
+    const ix = World.isoX(o.x + .5, o.y + .5), iy = World.elevScreenY(o.x + .5, o.y + .5);
     if (ix < sxMin || ix > sxMax || iy < syMin || iy > syMax) continue;
-    draws.push({ key: o.x + o.y + 1, obj: o });
+    draws.push({ key: iy + 16, obj: o });
   }
   for (const b of game.buildings) {
     if (b.dead) continue;
     if (World.visAt(b.cx(), b.cy()) === 0) continue;
-    const ix = World.isoX(b.cx(), b.cy()), iy = World.isoY(b.cx(), b.cy());
+    const ix = World.isoX(b.cx(), b.cy()), iy = World.elevScreenY(b.cx(), b.cy());
     if (ix < sxMin - 100 || ix > sxMax + 100 || iy < syMin || iy > syMax + 100) continue;
-    draws.push({ key: b.x + b.y + b.size, bld: b });
+    draws.push({ key: iy + b.size * 16, bld: b });
   }
   for (const u of game.units) {
     if (u.dead || u.inShip || u.inWall) continue;
     if (u.owner !== game.humanId && World.visAt(u.x, u.y) !== 2) continue;
-    const ix = World.isoX(u.x, u.y), iy = World.isoY(u.x, u.y);
+    const ix = World.isoX(u.x, u.y), iy = World.elevScreenY(u.x, u.y);
     if (ix < sxMin || ix > sxMax || iy < syMin || iy > syMax) continue;
-    draws.push({ key: u.x + u.y, unit: u });
+    draws.push({ key: iy, unit: u });
   }
   if (game.corpses) for (const c of game.corpses) {
     if (World.visAt(c.x, c.y) === 0) continue;
-    const ix = World.isoX(c.x, c.y), iy = World.isoY(c.x, c.y);
+    const ix = World.isoX(c.x, c.y), iy = World.elevScreenY(c.x, c.y);
     if (ix < sxMin || ix > sxMax || iy < syMin || iy > syMax) continue;
-    draws.push({ key: c.x + c.y - 0.03, corpse: c }); // just under the living
+    draws.push({ key: iy - 0.5, corpse: c });
   }
   draws.sort((a, b) => a.key - b.key);
 
@@ -442,7 +442,7 @@ function render(game) {
       const o = d.obj;
       const s = Sprites.obj(o.kind, o.variant);
       const ix = (World.isoX(o.x + .5, o.y + .5) - view.left) * z;
-      const iy = (World.isoY(o.x + .5, o.y + .5) - view.top) * z;
+      const iy = (World.elevScreenY(o.x + .5, o.y + .5) - view.top) * z;
       const dim = World.visAt(o.x, o.y) === 1;
       if (dim) ctx.globalAlpha = .8;
       ctx.drawImage(s.cv, ix - s.ax * z, iy - s.ay * z + 8 * z, s.cv.width * z, s.cv.height * z);
@@ -465,8 +465,8 @@ function render(game) {
     if (!c.team || c.team.length < 2) continue;
     const a = c.team[0], b = c.team[1];
     if (!a || !b || a.dead || b.dead) continue;
-    const ax = (World.isoX(a.x, a.y) - view.left) * z, ay = (World.isoY(a.x, a.y) - view.top) * z;
-    const bx = (World.isoX(b.x, b.y) - view.left) * z, by = (World.isoY(b.x, b.y) - view.top) * z;
+    const ax = (World.isoX(a.x, a.y) - view.left) * z, ay = (World.elevScreenY(a.x, a.y) - view.top) * z;
+    const bx = (World.isoX(b.x, b.y) - view.left) * z, by = (World.elevScreenY(b.x, b.y) - view.top) * z;
     const sh = 22 * z;
     const x1 = ax, y1 = ay - sh, x2 = bx, y2 = by - sh, mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
     ctx.strokeStyle = '#7d5a2e'; ctx.lineWidth = 2.4 * z; ctx.lineCap = 'round';   // pole
@@ -483,13 +483,13 @@ function render(game) {
   // projectiles
   for (const pr of game.projectiles) {
     const ix = (World.isoX(pr.x, pr.y) - view.left) * z;
-    const iy = (World.isoY(pr.x, pr.y) - view.top) * z;
+    const iy = (World.elevScreenY(pr.x, pr.y) - view.top) * z;
     if (pr.stone) {
       ctx.fillStyle = pr.burn ? '#ff7a30' : '#6b6557';
       ctx.beginPath(); ctx.arc(ix, iy - 14 * z, 4 * z, 0, 7); ctx.fill();
     } else {
       const t = pr.target;
-      const tx = (World.isoX(t.cx(), t.cy()) - view.left) * z, ty = (World.isoY(t.cx(), t.cy()) - view.top) * z;
+      const tx = (World.isoX(t.cx(), t.cy()) - view.left) * z, ty = (World.elevScreenY(t.cx(), t.cy()) - view.top) * z;
       const d = Math.hypot(tx - ix, ty - iy) || 1;
       ctx.strokeStyle = '#e8dcc3'; ctx.lineWidth = 1.6 * z;
       ctx.beginPath(); ctx.moveTo(ix, iy - 10 * z);
@@ -500,7 +500,7 @@ function render(game) {
   // particles (p.z = screen-space height, used by rising smoke)
   for (const p of game.particles) {
     const ix = (World.isoX(p.x, p.y) - view.left) * z;
-    const iy = (World.isoY(p.x, p.y) - view.top) * z;
+    const iy = (World.elevScreenY(p.x, p.y) - view.top) * z;
     ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
     ctx.fillStyle = p.color;
     ctx.fillRect(ix - p.size * z / 2, iy - (8 + (p.z || 0)) * z - p.size * z / 2, p.size * z, p.size * z);
@@ -563,7 +563,7 @@ function drawHpBar(ctx, game, e, ix, iy, z, w) {
    bones (5–15s), fading to dust over the final two seconds */
 function drawCorpse(ctx, c, view, z, game) {
   const ix = (World.isoX(c.x, c.y) - view.left) * z;
-  const iy = (World.isoY(c.x, c.y) - view.top) * z;
+  const iy = (World.elevScreenY(c.x, c.y) - view.top) * z;
   const age = game.time - c.t0;
   const sc = z * (c.big ? 0.95 : 0.78);
   let alpha = age > 13 ? Math.max(0, (15 - age) / 2) : 1; // fade out in the last 2s
