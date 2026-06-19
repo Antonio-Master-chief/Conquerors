@@ -313,6 +313,16 @@ const World = (() => {
       if (nearSite(x, y, 8)) continue;
       cluster(['gold', 'stone', 'iron', 'bush'][i % 4], x, y, 4, 2.2, 500);
     }
+    // exactly 2 platinum mines — one at each alternate mid-ring neutral town
+    {
+      const platTowns = W.towns.slice(1, 4).filter((_, i) => i % 2 === 0).slice(0, 2);
+      for (const t of platTowns) {
+        const pa = (t.x * 7 + t.y * 13) % (Math.PI * 2); // deterministic offset
+        const px = Math.round(t.x + Math.cos(pa) * 7), py = Math.round(t.y + Math.sin(pa) * 7);
+        if (free(px, py)) { addObj('platinum', px, py, 500); W.blocked[idx(px, py)] = 1; }
+        else { addObj('platinum', t.x, t.y, 500); W.blocked[idx(t.x, t.y)] = 1; }
+      }
+    }
     /* ---- connectivity: carve corridors so every start & town is reachable ----
        (clears trees/rocks, turns water into sand fords along jittered lines) */
     function carve(x0, y0, x1, y1) {
@@ -607,7 +617,7 @@ const World = (() => {
   function removeObj(o) {
     o.alive = false;
     W.objGrid[idx(o.x, o.y)] = 0;
-    if (o.kind === 'tree' || o.kind === 'gold' || o.kind === 'stone' || o.kind === 'iron') W.blocked[idx(o.x, o.y)] = 0;
+    if (o.kind === 'tree' || o.kind === 'gold' || o.kind === 'stone' || o.kind === 'iron' || o.kind === 'platinum') W.blocked[idx(o.x, o.y)] = 0;
     if (o.kind === 'tree') W.sightBlock[idx(o.x, o.y)] = 0;
   }
 
@@ -700,20 +710,45 @@ const World = (() => {
         const e1 = W.elev[idx(x + 1, y)];
         if (e0 > e1) {
           const isMtn = t === TERRAIN.MOUNTAIN;
-          const cFill = isMtn ? '#7e7870' : '#8a6e4a';
-          const cShade = isMtn ? '#524e4a' : '#5a4832';
-          const cLight = isMtn ? '#a09890' : '#b08c60';
-          g.fillStyle = cFill;
-          g.beginPath();
-          g.moveTo(tx2 + 32, ty0 - e0 * ELEV_H + 16);
-          g.lineTo(tx2,      ty0 - e0 * ELEV_H + 32);
-          g.lineTo(tx2,      ty0 - e1 * ELEV_H + 32);
-          g.lineTo(tx2 + 32, ty0 - e1 * ELEV_H + 16);
-          g.closePath(); g.fill();
-          g.strokeStyle = cLight; g.lineWidth = 1;
-          g.beginPath(); g.moveTo(tx2 + 32, ty0 - e0 * ELEV_H + 16); g.lineTo(tx2, ty0 - e0 * ELEV_H + 32); g.stroke();
-          g.strokeStyle = cShade; g.lineWidth = 0.8;
-          g.beginPath(); g.moveTo(tx2, ty0 - e1 * ELEV_H + 32); g.lineTo(tx2 + 32, ty0 - e1 * ELEV_H + 16); g.stroke();
+          // vertex positions
+          const x0v = tx2 + 32, y0v = ty0 - e0 * ELEV_H + 16;  // top-right
+          const x1v = tx2,      y1v = ty0 - e0 * ELEV_H + 32;  // top-left
+          const x2v = tx2,      y2v = ty0 - e1 * ELEV_H + 32;  // bot-left
+          const x3v = tx2 + 32, y3v = ty0 - e1 * ELEV_H + 16;  // bot-right
+          const faceH = y2v - y1v;
+          // 1. Main fill: horizontal rock strata gradient top→bottom
+          const grad = g.createLinearGradient(0, y0v, 0, y2v);
+          if (isMtn) {
+            grad.addColorStop(0, '#9a9288'); grad.addColorStop(0.5, '#706a62'); grad.addColorStop(1, '#4a4540');
+          } else {
+            grad.addColorStop(0, '#a08868'); grad.addColorStop(0.5, '#7a6448'); grad.addColorStop(1, '#504030');
+          }
+          g.fillStyle = grad;
+          g.beginPath(); g.moveTo(x0v, y0v); g.lineTo(x1v, y1v); g.lineTo(x2v, y2v); g.lineTo(x3v, y3v); g.closePath(); g.fill();
+          // 2. Horizontal strata lines (seeded per-tile)
+          if (faceH > 3) {
+            const spacing = isMtn ? 5 : 6;
+            const seed = (x * 7 + y * 13) % spacing;
+            g.save(); g.beginPath(); g.moveTo(x0v, y0v); g.lineTo(x1v, y1v); g.lineTo(x2v, y2v); g.lineTo(x3v, y3v); g.closePath(); g.clip();
+            for (let sy = y0v + seed; sy < y2v; sy += spacing) {
+              const f = (sy - y0v) / Math.max(1, faceH);
+              g.strokeStyle = f < 0.5 ? (isMtn ? 'rgba(175,168,158,.45)' : 'rgba(168,148,118,.45)') : (isMtn ? 'rgba(40,36,32,.35)' : 'rgba(45,35,22,.35)');
+              g.lineWidth = 0.9;
+              const t2 = (sy - y0v) / faceH;
+              g.beginPath(); g.moveTo(x1v, sy); g.lineTo(x0v + (x1v - x0v) * t2 + (x3v - x0v) * (1 - t2), sy); g.stroke();
+            }
+            g.restore();
+          }
+          // 3. Left-edge highlight stripe + bottom shadow
+          g.strokeStyle = isMtn ? '#b8b0a8' : '#c8a878'; g.lineWidth = 1.4;
+          g.beginPath(); g.moveTo(x0v, y0v); g.lineTo(x1v, y1v); g.stroke();
+          g.strokeStyle = isMtn ? 'rgba(20,16,12,.55)' : 'rgba(30,20,10,.5)'; g.lineWidth = 1.2;
+          g.beginPath(); g.moveTo(x2v, y2v); g.lineTo(x3v, y3v); g.stroke();
+          // 4. Blue-grey tint for mountain tiles
+          if (isMtn) {
+            g.fillStyle = 'rgba(80,90,110,.08)';
+            g.beginPath(); g.moveTo(x0v, y0v); g.lineTo(x1v, y1v); g.lineTo(x2v, y2v); g.lineTo(x3v, y3v); g.closePath(); g.fill();
+          }
         }
       }
       // SW cliff: between (x,y) and (x,y+1)
@@ -721,20 +756,45 @@ const World = (() => {
         const e1 = W.elev[idx(x, y + 1)];
         if (e0 > e1) {
           const isMtn = t === TERRAIN.MOUNTAIN;
-          const cFill = isMtn ? '#635e5a' : '#6e5438';
-          const cShade = isMtn ? '#3c3830' : '#453224';
-          const cLight = isMtn ? '#8a8480' : '#8a6a48';
-          g.fillStyle = cFill;
-          g.beginPath();
-          g.moveTo(tx2,      ty0 - e0 * ELEV_H + 32);
-          g.lineTo(tx2 - 32, ty0 - e0 * ELEV_H + 16);
-          g.lineTo(tx2 - 32, ty0 - e1 * ELEV_H + 16);
-          g.lineTo(tx2,      ty0 - e1 * ELEV_H + 32);
-          g.closePath(); g.fill();
-          g.strokeStyle = cLight; g.lineWidth = 1;
-          g.beginPath(); g.moveTo(tx2, ty0 - e0 * ELEV_H + 32); g.lineTo(tx2 - 32, ty0 - e0 * ELEV_H + 16); g.stroke();
-          g.strokeStyle = cShade; g.lineWidth = 0.8;
-          g.beginPath(); g.moveTo(tx2 - 32, ty0 - e1 * ELEV_H + 16); g.lineTo(tx2, ty0 - e1 * ELEV_H + 32); g.stroke();
+          // vertex positions
+          const x0v = tx2,      y0v = ty0 - e0 * ELEV_H + 32;  // top-right
+          const x1v = tx2 - 32, y1v = ty0 - e0 * ELEV_H + 16;  // top-left
+          const x2v = tx2 - 32, y2v = ty0 - e1 * ELEV_H + 16;  // bot-left
+          const x3v = tx2,      y3v = ty0 - e1 * ELEV_H + 32;  // bot-right
+          const faceH = y2v - y1v;
+          // 1. Main fill: horizontal rock strata gradient
+          const grad = g.createLinearGradient(0, y0v, 0, y2v);
+          if (isMtn) {
+            grad.addColorStop(0, '#8e8880'); grad.addColorStop(0.5, '#6a6460'); grad.addColorStop(1, '#464240');
+          } else {
+            grad.addColorStop(0, '#907858'); grad.addColorStop(0.5, '#6e5440'); grad.addColorStop(1, '#483428');
+          }
+          g.fillStyle = grad;
+          g.beginPath(); g.moveTo(x0v, y0v); g.lineTo(x1v, y1v); g.lineTo(x2v, y2v); g.lineTo(x3v, y3v); g.closePath(); g.fill();
+          // 2. Horizontal strata lines (seeded per-tile)
+          if (faceH > 3) {
+            const spacing = isMtn ? 5 : 6;
+            const seed = (x * 7 + y * 13) % spacing;
+            g.save(); g.beginPath(); g.moveTo(x0v, y0v); g.lineTo(x1v, y1v); g.lineTo(x2v, y2v); g.lineTo(x3v, y3v); g.closePath(); g.clip();
+            for (let sy = y1v + seed; sy < y2v; sy += spacing) {
+              const f = (sy - y1v) / Math.max(1, faceH);
+              g.strokeStyle = f < 0.5 ? (isMtn ? 'rgba(165,158,148,.4)' : 'rgba(148,128,98,.4)') : (isMtn ? 'rgba(35,30,28,.35)' : 'rgba(40,28,18,.35)');
+              g.lineWidth = 0.9;
+              const t2 = (sy - y1v) / faceH;
+              g.beginPath(); g.moveTo(x1v, sy); g.lineTo(x0v + (x1v - x0v) * t2 + (x3v - x0v) * (1 - t2), sy); g.stroke();
+            }
+            g.restore();
+          }
+          // 3. Left-edge highlight + bottom shadow (shadow on right side, highlight on left for SW)
+          g.strokeStyle = isMtn ? '#b0a8a0' : '#b89070'; g.lineWidth = 1.4;
+          g.beginPath(); g.moveTo(x1v, y1v); g.lineTo(x2v, y2v); g.stroke();
+          g.strokeStyle = isMtn ? 'rgba(20,16,12,.5)' : 'rgba(30,20,10,.45)'; g.lineWidth = 1.2;
+          g.beginPath(); g.moveTo(x3v, y3v); g.lineTo(x0v, y0v); g.stroke();
+          // 4. Blue-grey tint for mountain tiles
+          if (isMtn) {
+            g.fillStyle = 'rgba(80,90,110,.08)';
+            g.beginPath(); g.moveTo(x0v, y0v); g.lineTo(x1v, y1v); g.lineTo(x2v, y2v); g.lineTo(x3v, y3v); g.closePath(); g.fill();
+          }
         }
       }
     }

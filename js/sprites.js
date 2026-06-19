@@ -53,15 +53,29 @@ const Sprites = (() => {
       g.strokeStyle = 'rgba(30,35,15,.30)'; g.lineWidth = 2.5;
       g.beginPath(); g.moveTo(2, 17); g.lineTo(32, 31); g.lineTo(62, 17); g.stroke(); // shaded base
     } else if (det === 'mountain') {
-      // craggy impassable rock — boulders & sharp crags
+      // craggy impassable rock — boulders + triangular peak crags suggesting height
       for (let i = 0; i < 11; i++) {
         const x = 7 + rnd() * 50, y = 4 + rnd() * 24;
         g.fillStyle = rnd() > .5 ? 'rgba(184,180,170,.5)' : 'rgba(55,50,44,.5)';
         g.beginPath(); g.ellipse(x, y, 3 + rnd() * 3, 2 + rnd() * 2, rnd() * 3, 0, 7); g.fill();
       }
+      // 2-3 triangular peak crags pointing upward from the diamond surface
+      const peakRng = RNG(t * 31 + variant * 7 + 19);
+      const nPeaks = 2 + (peakRng() > 0.5 ? 1 : 0);
+      for (let i = 0; i < nPeaks; i++) {
+        const px = 12 + peakRng() * 38, py = 12 + peakRng() * 10;
+        const pw = 7 + peakRng() * 6, ph2 = 10 + peakRng() * 8;
+        g.fillStyle = '#9a9690'; g.strokeStyle = 'rgba(20,16,10,.5)'; g.lineWidth = 0.8;
+        g.beginPath(); g.moveTo(px, py - ph2); g.lineTo(px + pw * 0.6, py); g.lineTo(px - pw * 0.6, py); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = '#5a5450'; // dark shadow face (right side)
+        g.beginPath(); g.moveTo(px, py - ph2); g.lineTo(px + pw * 0.6, py); g.lineTo(px, py - ph2 * 0.12); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(220,216,208,.65)'; g.lineWidth = 1; // snow/bright left edge
+        g.beginPath(); g.moveTo(px, py - ph2); g.lineTo(px - pw * 0.6, py); g.stroke();
+      }
+      // boulder detail at base
       g.fillStyle = '#9a9388'; g.strokeStyle = 'rgba(20,16,10,.45)'; g.lineWidth = .8;
-      for (let i = 0; i < 3; i++) { const x = 12 + rnd() * 38, y = 11 + rnd() * 9;
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - 7 - rnd() * 4); g.lineTo(x + 9, y); g.closePath(); g.fill(); g.stroke(); }
+      for (let i = 0; i < 2; i++) { const x = 14 + rnd() * 34, y = 20 + rnd() * 8;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - 5 - rnd() * 3); g.lineTo(x + 8, y); g.closePath(); g.fill(); g.stroke(); }
     } else if (det === 'wave') {
       g.strokeStyle = t === TERRAIN.DEEP ? 'rgba(120,170,220,.18)' : 'rgba(200,235,255,.30)';
       g.lineWidth = 1.2;
@@ -168,6 +182,40 @@ const Sprites = (() => {
       g.fillStyle = P.rd; g.strokeStyle = 'rgba(15,12,8,.5)'; g.lineWidth = 1;
       g.beginPath(); g.ellipse(45, 38, 4, 2.6, .3, 0, 7); g.fill(); g.stroke();
       if (P.vein) { g.fillStyle = P.vein; g.beginPath(); g.arc(45, 37.4, 1.2, 0, 7); g.fill(); }
+      cache.set(key, { cv: c, ax: 30, ay: 38 }); return cache.get(key);
+    }
+    if (kind === 'platinum') {
+      c = mk(60, 44); g = g2(c); shadow(g, 30, 39, 20, 6);
+      // silvery-white rock formation
+      for (const [x, y, r] of [[21, 28, 12], [39, 30, 10], [30, 20, 11], [30, 34, 7]]) {
+        const gr = g.createLinearGradient(x, y - r, x, y + r);
+        gr.addColorStop(0, '#c8c4bc'); gr.addColorStop(1, '#7a7870');
+        g.fillStyle = gr; g.strokeStyle = 'rgba(15,12,8,.5)'; g.lineWidth = 1.1;
+        g.beginPath();
+        g.moveTo(x - r, y + r * .4); g.lineTo(x - r * .6, y - r * .8); g.lineTo(x + r * .5, y - r);
+        g.lineTo(x + r, y + r * .2); g.lineTo(x + r * .4, y + r * .7); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = 'rgba(255,255,255,.12)'; // top facet highlight
+        g.beginPath(); g.moveTo(x - r * .6, y - r * .8); g.lineTo(x + r * .5, y - r); g.lineTo(x + r * .1, y - r * .2); g.closePath(); g.fill();
+      }
+      // silver-white veins
+      const rv2 = RNG(23); g.lineCap = 'round';
+      for (let i = 0; i < 5; i++) { const x0 = 16 + rv2() * 30, y0 = 18 + rv2() * 16, x1 = x0 + 6 - rv2() * 12, y1 = y0 + 5 + rv2() * 4;
+        g.strokeStyle = 'rgba(220,215,200,.4)'; g.lineWidth = 3.4; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+        g.strokeStyle = '#e8e4dc'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+      for (let i = 0; i < 8; i++) { const x = 15 + rv2() * 30, y = 17 + rv2() * 18;
+        g.fillStyle = '#f8f4ec'; g.beginPath(); g.arc(x, y, 1.8, 0, 7); g.fill(); }
+      // silver gleam overlay
+      g.fillStyle = 'rgba(220,215,200,.4)';
+      g.beginPath(); g.ellipse(30, 22, 14, 6, 0, 0, 7); g.fill();
+      // 4 sparkle glints
+      for (const [gx, gy, gs] of [[18, 16, 2.2], [40, 24, 1.8], [28, 32, 1.6], [38, 18, 1.4]]) {
+        g.fillStyle = '#fff'; g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 0.8;
+        g.beginPath(); g.moveTo(gx - gs, gy); g.lineTo(gx + gs, gy); g.moveTo(gx, gy - gs); g.lineTo(gx, gy + gs); g.stroke();
+      }
+      // loose chunk
+      g.fillStyle = '#7a7870'; g.strokeStyle = 'rgba(15,12,8,.5)'; g.lineWidth = 1;
+      g.beginPath(); g.ellipse(45, 38, 4, 2.6, .3, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = '#e8e4dc'; g.beginPath(); g.arc(45, 37.4, 1.2, 0, 7); g.fill();
       cache.set(key, { cv: c, ax: 30, ay: 38 }); return cache.get(key);
     }
     if (kind === 'fish') {
@@ -384,7 +432,7 @@ const Sprites = (() => {
     // ----- legs: stride along the facing axis, stance across it -----
     for (const s of [-1, 1]) {
       const a = swing * s;
-      const stepX = dnx * Math.sin(a) * 9, stepY = dny * Math.sin(a) * 4.5;
+      const stepX = dnx * Math.sin(a) * 13, stepY = dny * Math.sin(a) * 6.5;
       const stanceX = -dny * s * 3.4 * (1 - sideAmt * 0.55);
       const stanceY = dnx * s * 1.4;
       const stepF = (atkStep && s > 0) ? atkStep : 0;   // lead foot lunges forward on the swing
@@ -631,7 +679,7 @@ const Sprites = (() => {
     // legs
     g.lineWidth = 3;
     for (const [ox, ph] of [[-10, 0], [-6, Math.PI], [7, Math.PI], [11, 0]]) {
-      const a = Math.sin(ph) * 0 + Math.sin(ph + swing * Math.PI) * 0.55 * (swing ? 1 : 0);
+      const a = swing * Math.sin(ph + Math.PI / 2) * 0.7;
       g.strokeStyle = ox < 0 ? colD : col;
       g.beginPath(); g.moveTo(x + ox, y - 12); g.lineTo(x + ox + Math.sin(a) * 8, y); g.stroke();
     }
@@ -1733,16 +1781,10 @@ const Sprites = (() => {
       g.beginPath(); g.moveTo(cx - hw - 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6); g.lineTo(cx + hw + 3, cy - wallH2); g.stroke();
       // civ accents
       if (style === 'china') {
-        // hanging lanterns at eave corners
-        for (const lx of [cx - hw + 4, cx + hw - 4]) {
-          g.strokeStyle = '#3a2a16'; g.lineWidth = 1;
-          g.beginPath(); g.moveTo(lx, cy - wallH2); g.lineTo(lx, cy - wallH2 + 5); g.stroke();
-          g.fillStyle = '#d04a35'; g.beginPath(); g.ellipse(lx, cy - wallH2 + 9, 2.6, 3.4, 0, 0, 7); g.fill();
-          g.fillStyle = '#ffd34d'; g.fillRect(lx - 0.8, cy - wallH2 + 12.4, 1.6, 2);
+        // red lacquer post-top caps only — simple and clean
+        for (const [px2, py2] of [[cx - hw + 4, cy - 1], [cx, cy - hh + 1], [cx + hw - 4, cy - 1], [cx, cy + hh - 1]]) {
+          g.fillStyle = '#9a3a2e'; g.fillRect(px2 - 3, py2 - wallH2 - 4, 6, 4);
         }
-        // gold ridge beam along roof apex
-        g.strokeStyle = '#c9a040'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(cx - 6, cy - hh - wallH2 - 5); g.lineTo(cx + 6, cy - hh - wallH2 - 5); g.stroke();
       } else if (style === 'india') {
         // carved lotus arch over goods area
         g.strokeStyle = '#c9a04a'; g.lineWidth = 1.2;
@@ -1904,14 +1946,11 @@ const Sprites = (() => {
           g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.9;
         }
       }
+      // china stable: red-framed stall door on right wall only — no lanterns
       if (style === 'china') {
-        // central hanging lantern + red ridge beam
-        g.strokeStyle = '#3a2a16'; g.lineWidth = 1;
-        g.beginPath(); g.moveTo(cx, roofY2 + 2); g.lineTo(cx, roofY2 + 7); g.stroke();
-        g.fillStyle = '#d04a35'; g.beginPath(); g.ellipse(cx, roofY2 + 11, 2.8, 3.6, 0, 0, 7); g.fill();
-        g.fillStyle = '#ffd34d'; g.fillRect(cx - 0.8, roofY2 + 14.8, 1.6, 2.2);
-        g.strokeStyle = '#c9a040'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(cx - 8, roofY2 - hh - 8); g.lineTo(cx + 8, roofY2 - hh - 8); g.stroke();
+        g.strokeStyle = '#9a3a2e'; g.lineWidth = 1.8;
+        g.beginPath(); g.moveTo(cx + hw * 0.25, cy - hh * 0.25 - wallH2 + 2); g.lineTo(cx + hw * 0.25, cy - hh * 0.25); g.stroke();
+        g.beginPath(); g.moveTo(cx + hw * 0.55, cy - hh * 0.55 - wallH2 + 2); g.lineTo(cx + hw * 0.55, cy - hh * 0.55); g.stroke();
       }
       ageDress(g, cx, cy, hw, hh, wallH2, age, colorIdx);
       flag(g, cx + hw * .5, cy - hh * .5 - wallH2 - 2, colorIdx);
@@ -1948,11 +1987,11 @@ const Sprites = (() => {
         g.strokeStyle = '#c9a04a'; g.lineWidth = 0.9;
         for (let i = -1; i <= 1; i++) { g.beginPath(); g.arc(cx + i * 7.5, cy - wallH + 1, 2.2, Math.PI, 0); g.stroke(); }
       } else if (style === 'china') {
-        // red-painted merlons + eave bracket
+        // red merlons + simple red cornice band at merlon base
         g.fillStyle = '#8a2018';
         for (let i = -1; i <= 1; i++) g.fillRect(cx + i * 9 - 2.5, cy - wallH - 6, 5, 7);
-        g.fillStyle = '#9a3020'; g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.8;
-        g.fillRect(cx - 16, cy - wallH + 2, 32, 3.5); g.strokeRect(cx - 16, cy - wallH + 2, 32, 3.5);
+        g.fillStyle = '#9a3a2e'; // simple cornice band
+        g.fillRect(cx - 15, cy - wallH - 2, 30, 4);
       } else {
         g.fillStyle = p.wallR;
         for (let i = -1; i <= 1; i++) g.fillRect(cx + i * 9 - 2.5, cy - wallH - 6, 5, 7);
@@ -2029,9 +2068,9 @@ const Sprites = (() => {
       if (style === 'china') {
         g.fillStyle = '#8a2018';
         for (let i = -2; i <= 2; i++) g.fillRect(cx + i * 8 - 3, cy - KH - 13, 6, 9); // red merlons
-        // eave bracket below parapet
-        g.fillStyle = '#9a3020'; g.strokeStyle = 'rgba(20,12,6,.3)'; g.lineWidth = 0.8;
-        g.fillRect(cx - BW - 3, cy - KH - 6, (BW + 3) * 2, 3.5); g.strokeRect(cx - BW - 3, cy - KH - 6, (BW + 3) * 2, 3.5);
+        // simple red cornice band at base of merlons
+        g.fillStyle = '#9a3a2e';
+        g.fillRect(cx - BW - 2, cy - KH - 5, (BW + 2) * 2, 4);
       } else if (style === 'india') {
         // carved arch cornice + mini dome silhouette instead of box merlons
         g.strokeStyle = '#c9a04a'; g.lineWidth = 1.1;
@@ -2137,6 +2176,102 @@ const Sprites = (() => {
       const out = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, out); return out;
     }
 
+    if (type === 'wonder') {
+      // Civ-specific wonder building silhouette (size 3)
+      if (style === 'rome') {
+        // Colosseum — large oval arena wall with arch openings
+        g.fillStyle = 'rgba(0,0,0,.28)'; g.beginPath(); g.ellipse(cx, cy, 55, 22, 0, 0, 7); g.fill();
+        // outer oval wall
+        g.strokeStyle = '#a89f8a'; g.lineWidth = 18;
+        g.beginPath(); g.ellipse(cx, cy - 28, 48, 22, 0, 0, 7); g.stroke();
+        g.strokeStyle = '#d4cbb8'; g.lineWidth = 14;
+        g.beginPath(); g.ellipse(cx, cy - 28, 48, 22, 0, 0, 7); g.stroke();
+        // 8 arched openings around the oval
+        for (let i = 0; i < 8; i++) {
+          const ang2 = i / 8 * Math.PI * 2;
+          const ax2 = cx + Math.cos(ang2) * 48, ay2 = cy - 28 + Math.sin(ang2) * 22;
+          g.fillStyle = '#1a120a'; g.beginPath(); g.arc(ax2, ay2, 4.5, 0, 7); g.fill();
+        }
+        // upper tier
+        g.strokeStyle = '#c2bba8'; g.lineWidth = 8;
+        g.beginPath(); g.ellipse(cx, cy - 42, 40, 17, 0, 0, 7); g.stroke();
+        // arena floor
+        g.fillStyle = '#c8b88a'; g.beginPath(); g.ellipse(cx, cy - 28, 30, 12, 0, 0, 7); g.fill();
+        g.strokeStyle = 'rgba(60,44,24,.4)'; g.lineWidth = 1; g.stroke();
+        // top trim
+        g.strokeStyle = '#ece4d2'; g.lineWidth = 2.5;
+        g.beginPath(); g.ellipse(cx, cy - 50, 42, 18, 0, 0, 7); g.stroke();
+        ageDress(g, cx, cy, s * 32, s * 16, 50, age, colorIdx);
+        flag(g, cx, cy - 68, colorIdx);
+      } else if (style === 'china') {
+        // Temple of Heaven — white marble platform + round 3-tier pagoda
+        // white marble circular platform
+        g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(cx, cy, 54, 20, 0, 0, 7); g.fill();
+        g.fillStyle = '#f0ece4'; g.beginPath(); g.ellipse(cx, cy - 8, 50, 18, 0, 0, 7); g.fill();
+        g.strokeStyle = '#c8c0b0'; g.lineWidth = 1.5; g.stroke();
+        // blue marble steps (3 tiers going up)
+        for (let tier = 0; tier < 3; tier++) {
+          const r = 38 - tier * 10, ry = 13 - tier * 3.5;
+          g.fillStyle = tier % 2 ? '#e8e4dc' : '#d8d4cc';
+          g.beginPath(); g.ellipse(cx, cy - 8 - tier * 8, r, ry, 0, 0, 7); g.fill();
+          g.strokeStyle = '#b0a898'; g.lineWidth = 1; g.stroke();
+        }
+        // triple circular pagoda roofs using china palette
+        const pPal = CIV_PAL.china;
+        for (let i = 2; i >= 0; i--) {
+          const rw = 22 - i * 6, ry2 = cy - 32 - i * 16;
+          g.fillStyle = pPal.roofD;
+          g.beginPath(); g.moveTo(cx - rw - 5, ry2 + 4);
+          g.quadraticCurveTo(cx - rw, ry2 - 4, cx, ry2 - 8);
+          g.quadraticCurveTo(cx + rw, ry2 - 4, cx + rw + 5, ry2 + 4);
+          g.quadraticCurveTo(cx, ry2 + 12, cx - rw - 5, ry2 + 4); g.closePath(); g.fill();
+          g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1; g.stroke();
+          // gold railing between roof tiers
+          if (i > 0) { g.strokeStyle = '#d4a647'; g.lineWidth = 1.2; g.beginPath(); g.ellipse(cx, ry2 + 5, rw - 1, 4, 0, 0, 7); g.stroke(); }
+        }
+        // golden finial spire
+        g.fillStyle = '#d4a647'; g.fillRect(cx - 1.5, cy - 82, 3, 18);
+        g.beginPath(); g.arc(cx, cy - 82, 3.5, 0, 7); g.fill();
+        ageDress(g, cx, cy, s * 32, s * 16, 50, age, colorIdx);
+        flag(g, cx, cy - 90, colorIdx);
+      } else {
+        // India — Taj Mahal: central white dome + 4 corner minarets
+        g.fillStyle = 'rgba(0,0,0,.26)'; g.beginPath(); g.ellipse(cx, cy, 55, 20, 0, 0, 7); g.fill();
+        // white marble plinth
+        g.fillStyle = '#f4f0e8'; g.strokeStyle = '#d8d4cc'; g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(cx - 48, cy); g.lineTo(cx, cy + 22); g.lineTo(cx + 48, cy); g.lineTo(cx, cy - 22); g.closePath(); g.fill(); g.stroke();
+        // 4 corner minarets
+        for (const [mx, my] of [[cx - 36, cy - 10], [cx + 36, cy - 10], [cx - 18, cy + 14], [cx + 18, cy + 14]]) {
+          g.fillStyle = '#f0ece4'; g.strokeStyle = '#c8c4bc'; g.lineWidth = 1;
+          g.fillRect(mx - 3, my - 38, 6, 36); g.strokeRect(mx - 3, my - 38, 6, 36);
+          // balcony ring
+          g.fillStyle = '#e8e4dc'; g.beginPath(); g.ellipse(mx, my - 30, 5, 2.5, 0, 0, 7); g.fill();
+          // mini dome cap
+          g.fillStyle = '#f4f0e8'; g.beginPath(); g.ellipse(mx, my - 38, 4, 5, 0, Math.PI, 0); g.fill();
+          g.fillStyle = '#d4a647'; g.fillRect(mx - 0.8, my - 44, 1.6, 6); g.beginPath(); g.arc(mx, my - 44, 1.8, 0, 7); g.fill();
+        }
+        // central hall body
+        g.fillStyle = '#f4f0e8'; g.strokeStyle = '#d0ccc4'; g.lineWidth = 1.5;
+        g.fillRect(cx - 20, cy - 48, 40, 44); g.strokeRect(cx - 20, cy - 48, 40, 44);
+        // pointed arched niches on face
+        g.fillStyle = '#1a120a';
+        for (const nx of [-10, 0, 10]) {
+          g.beginPath(); g.moveTo(cx + nx - 4.5, cy - 10); g.lineTo(cx + nx - 4.5, cy - 22);
+          g.quadraticCurveTo(cx + nx, cy - 30, cx + nx + 4.5, cy - 22); g.lineTo(cx + nx + 4.5, cy - 10); g.closePath(); g.fill();
+        }
+        // central dome
+        g.fillStyle = '#f4f0e8'; g.strokeStyle = '#d4cfc8'; g.lineWidth = 1.5;
+        g.beginPath(); g.ellipse(cx, cy - 48, 22, 28, 0, Math.PI, 0); g.fill(); g.stroke();
+        g.fillStyle = 'rgba(0,0,0,.08)'; g.beginPath(); g.ellipse(cx + 8, cy - 48, 12, 22, 0, Math.PI, 0); g.fill();
+        // gold finial
+        g.fillStyle = '#d4a647'; g.fillRect(cx - 1.2, cy - 78, 2.4, 14);
+        g.beginPath(); g.arc(cx, cy - 78, 3, 0, 7); g.fill();
+        ageDress(g, cx, cy, s * 32, s * 16, 50, age, colorIdx);
+        flag(g, cx, cy - 84, colorIdx);
+      }
+      const wOut = { cv: c, ax: cx, ay: cy, k: 2 }; cache.set(key, wOut); return wOut;
+    }
+
     isoBox(g, cx, cy, s, wallH, p.top, p.wallL, p.wallR);
 
     // door — civ-specific arch style
@@ -2144,13 +2279,10 @@ const Sprites = (() => {
     const dxL = cx - s * 13, dxR = cx - s * 7, dBotL = cy + s * 7 - 1, dBotR = cy + s * 10 - 1;
     const dTopL = cy + s * 7 - 13, dTopR = cy + s * 10 - 13, dMidX = (dxL + dxR) * 0.5, dMidY = (dTopL + dTopR) * 0.5;
     if (style === 'china') {
-      // round-arch door
+      // moon-gate arch: dark opening + cream border, no gold complexity
       g.beginPath(); g.moveTo(dxL, dBotL); g.lineTo(dxL, dTopL + 5);
       g.quadraticCurveTo(dMidX, dMidY - 9, dxR, dTopR + 5); g.lineTo(dxR, dBotR); g.closePath(); g.fill();
-      g.fillStyle = '#8a2018'; // red lacquer panels
-      g.fillRect(dxL + 0.5, dTopL + 5.5, (dxR - dxL) * 0.44, dBotL - dTopL - 5.5);
-      g.fillRect(dMidX + 0.5, dTopR + 5.5, (dxR - dxL) * 0.44, dBotR - dTopR - 5.5);
-      g.strokeStyle = '#c9a040'; g.lineWidth = 1;
+      g.strokeStyle = '#e8e0ce'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(dxL - 0.5, dBotL); g.lineTo(dxL - 0.5, dTopL + 4);
       g.quadraticCurveTo(dMidX, dMidY - 11, dxR + 0.5, dTopR + 4); g.lineTo(dxR + 0.5, dBotR); g.stroke();
     } else if (style === 'india') {
@@ -2187,7 +2319,8 @@ const Sprites = (() => {
       for (const t2 of [0.3, 0.62]) {
         const wx2 = cx + s * 32 * t2, wy2 = cy + s * 16 * t2 - wallH * 0.62;
         if (style === 'china') {
-          g.beginPath(); g.arc(wx2, wy2 + 3, 3.2, 0, 7); g.fill(); // round moon window
+          g.beginPath(); g.arc(wx2, wy2 + 3, 3.2, 0, 7); g.fill(); // round moon window (dark)
+          g.strokeStyle = '#e8e0ce'; g.lineWidth = 1; g.beginPath(); g.arc(wx2, wy2 + 3, 3.2, 0, 7); g.stroke();
         } else if (style === 'india') {
           g.beginPath(); g.moveTo(wx2 - 2.2, wy2 + 6); g.lineTo(wx2 - 2.2, wy2 + 2);
           g.quadraticCurveTo(wx2, wy2 - 2.5, wx2 + 2.2, wy2 + 2); g.lineTo(wx2 + 2.2, wy2 + 6);
@@ -2216,20 +2349,16 @@ const Sprites = (() => {
       // grand entrance: civ-specific arch style
       g.fillStyle = '#2a1f12';
       if (style === 'china') {
-        // Wide circular (moon gate) arch — red lacquer surround
+        // Wide moon gate arch — dark opening + cream border only
         g.beginPath(); g.moveTo(cx - s * 8, cy + s * 8 - 6); g.lineTo(cx - s * 8, cy + 4);
         g.quadraticCurveTo(cx - s * 4, cy - 16, cx, cy - 20);
         g.quadraticCurveTo(cx + s * 4, cy - 16, cx + s * 8, cy + 4); g.lineTo(cx + s * 8, cy + s * 8 - 6);
         g.closePath(); g.fill();
-        g.strokeStyle = '#e7b840'; g.lineWidth = 2;
+        g.strokeStyle = '#e8e0ce'; g.lineWidth = 2;
         g.beginPath(); g.moveTo(cx - s * 8 - 1, cy + s * 8 - 4); g.lineTo(cx - s * 8 - 1, cy + 3);
         g.quadraticCurveTo(cx - s * 4, cy - 19, cx, cy - 23);
         g.quadraticCurveTo(cx + s * 4, cy - 19, cx + s * 8 + 1, cy + 3); g.lineTo(cx + s * 8 + 1, cy + s * 8 - 4);
         g.stroke();
-        // red door panels inside arch
-        g.fillStyle = '#8a2018';
-        g.fillRect(cx - s * 8 + 1, cy + 4, s * 7, cy + s * 8 - 6 - cy - 4);
-        g.fillRect(cx + 1, cy + 4, s * 7, cy + s * 8 - 6 - cy - 4);
       } else if (style === 'india') {
         // Pointed Mughal arch with carved gold trim
         g.beginPath(); g.moveTo(cx - s * 8, cy + s * 8 - 6); g.lineTo(cx - s * 8, cy - 2);
@@ -2362,21 +2491,12 @@ const Sprites = (() => {
       }
       // civ-specific barracks banner/standard
       if (style === 'china') {
-        // horizontal dragon banner hanging above the entrance
-        const bx2 = cx - s * 10, bby = cy + s * 8.5 - wallH - 2;
+        // single red vertical banner hanging from the left-wall eave
+        const bnrX = cx - s * 26, bnrTop = cy - wallH + 2;
         g.strokeStyle = '#3a2a16'; g.lineWidth = 1.2;
-        g.beginPath(); g.moveTo(bx2 - 12, bby); g.lineTo(bx2 + 12, bby); g.stroke(); // pole
-        g.fillStyle = '#9a2018';
-        g.beginPath(); g.moveTo(bx2 - 11, bby); g.lineTo(bx2 + 11, bby); g.lineTo(bx2 + 13, bby + 6); g.lineTo(bx2, bby + 9); g.lineTo(bx2 - 13, bby + 6); g.closePath(); g.fill();
-        g.fillStyle = '#e7b840'; g.beginPath(); g.arc(bx2, bby + 4, 2.6, 0, 7); g.fill(); // gold boss
-        // vertical dao swords on right side
-        g.strokeStyle = '#c0c8d0'; g.lineWidth = 1.6;
-        for (let i = 0; i < 3; i++) {
-          const sx2 = cx + s * 20 + i * 5.5;
-          g.beginPath(); g.moveTo(sx2, cy + 4); g.lineTo(sx2, cy - 18); g.stroke();
-          g.fillStyle = '#8a6420'; g.fillRect(sx2 - 2.2, cy - 7, 4.4, 2); // dao guard
-          g.fillStyle = '#c0c8d0'; g.beginPath(); g.moveTo(sx2 - 1.4, cy - 18); g.lineTo(sx2 + 2.4, cy - 21.5); g.lineTo(sx2 + 1.4, cy - 17); g.closePath(); g.fill(); // curved tip
-        }
+        g.beginPath(); g.moveTo(bnrX, bnrTop - 2); g.lineTo(bnrX, bnrTop - 5); g.stroke(); // short pole
+        g.fillStyle = '#9a2018'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
+        g.fillRect(bnrX - 3, bnrTop - 5, 6, 20); g.strokeRect(bnrX - 3, bnrTop - 5, 6, 20);
       } else if (style === 'india') {
         // elephant war standard above armor stand
         g.strokeStyle = '#5d4426'; g.lineWidth = 2;
@@ -2437,15 +2557,12 @@ const Sprites = (() => {
     }
     // civilization accents — applied to all generic-path buildings
     if (style === 'china') {
-      for (const lx of [cx - s * 30, cx + s * 30]) { // red lanterns at the eaves
-        g.strokeStyle = '#3a2a16'; g.lineWidth = 1;
-        g.beginPath(); g.moveTo(lx, cy - wallH - 2); g.lineTo(lx, cy - wallH + 4); g.stroke();
-        g.fillStyle = '#d04a35'; g.beginPath(); g.ellipse(lx, cy - wallH + 8, 3.4, 4.2, 0, 0, 7); g.fill();
-        g.fillStyle = '#ffd34d'; g.fillRect(lx - 1, cy - wallH + 12.2, 2, 2.6);
-      }
-      // red eave trim across the building top
-      g.strokeStyle = '#9a2818'; g.lineWidth = 2.2;
-      g.beginPath(); g.moveTo(cx - s * 32, cy - wallH); g.lineTo(cx, cy - wallH + s * 16); g.lineTo(cx + s * 32, cy - wallH); g.stroke();
+      // simple 4px-tall red band along the front roofline edge only
+      g.fillStyle = '#9a3a2e';
+      g.save();
+      g.beginPath(); g.moveTo(cx - s * 32, cy - wallH); g.lineTo(cx, cy - wallH + s * 16); g.lineTo(cx + s * 32, cy - wallH); g.closePath(); g.clip();
+      g.fillRect(cx - s * 32 - 2, cy - wallH - 1, (s * 32 + 2) * 2, 4);
+      g.restore();
     }
     if (style === 'india') {
       for (const fx2 of [cx - s * 26, cx + s * 26]) { // gold corner finials

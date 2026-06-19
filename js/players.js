@@ -8,7 +8,7 @@ class Player {
     this.civ = CIVS[civKey] || null;
     this.isHuman = isHuman;
     this.difficulty = difficulty || 'normal';
-    this.res = { food: 200, wood: 200, gold: 100, stone: 0, iron: 0, knowledge: 0 };
+    this.res = { food: 200, wood: 200, gold: 100, stone: 0, iron: 0, knowledge: 0, platinum: 0 };
     this.age = 1;
     this.meatCuring = 0;               // hauled carcass meat trickling into food
     this.popCap = CFG.START_POP;
@@ -18,7 +18,7 @@ class Player {
     this.researching = null;          // {key, t, total} (univ) or {age:true,...}
     this.bonus = { meleeAtk: 0, rangedAtk: 0, armor: 0, range: 0,
                    bldHp: 1, gather: 1, tcHeal: false, greekFire: false,
-                   castleHp: 0, castleAtk: 0 };
+                   castleHp: 0, castleAtk: 0, wonderActive: false };
     this.defeated = false;
     this.knowFrac = 0;
   }

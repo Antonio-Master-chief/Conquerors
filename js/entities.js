@@ -1,8 +1,8 @@
 /* ============ CONQUERORS — units, buildings, combat, capture ============ */
 'use strict';
 
-const GATHER_RATE = { bush: 0.55, farm: 0.42, tree: 0.50, gold: 0.45, stone: 0.42, iron: 0.40, fish: 0.65, carcass: 28 };
-const OBJ_RES = { bush: 'food', farm: 'food', tree: 'wood', gold: 'gold', stone: 'stone', iron: 'iron', fish: 'food', carcass: 'food' };
+const GATHER_RATE = { bush: 0.55, farm: 0.42, tree: 0.50, gold: 0.45, stone: 0.42, iron: 0.40, fish: 0.65, carcass: 28, platinum: 0.25 };
+const OBJ_RES = { bush: 'food', farm: 'food', tree: 'wood', gold: 'gold', stone: 'stone', iron: 'iron', fish: 'food', carcass: 'food', platinum: 'platinum' };
 let NEXT_ID = 1;
 
 /* ================= UNIT ================= */
@@ -60,7 +60,7 @@ class Unit {
     if (node) {
       const k = node.kind === 'bld' ? 'farm' : node.kind;
       if (k === 'tree') return 'axe';
-      if (k === 'gold' || k === 'stone' || k === 'iron') return 'pick';
+      if (k === 'gold' || k === 'stone' || k === 'iron' || k === 'platinum') return 'pick';
       if (k === 'farm') return 'hoe';                       // tilling a crop field
       if (k === 'carcass') return 'knife';                  // butchering a kill
       if (k === 'bush') return 'forage';                    // hand-picking berries
@@ -80,7 +80,7 @@ class Unit {
       if (node) {
         const k = node.kind === 'bld' ? 'farm' : node.kind;
         const title = { tree: 'Lumberjack', gold: 'Gold Miner', stone: 'Quarryman',
-                        iron: 'Iron Miner', bush: 'Forager', farm: 'Farmer',
+                        iron: 'Iron Miner', platinum: 'Platinum Miner', bush: 'Forager', farm: 'Farmer',
                         deer: 'Hunter', boar: 'Hunter' }[k];
         if (title) return 'Settler (' + title + ')';
       }
@@ -105,11 +105,24 @@ class Unit {
           tags.includes('ranged') || tags.includes('siege') || tags.includes('ship') || tags.includes('elephant'))
         a += p.bonus.castleAtk;
     }
+    if (p && p.bonus.wonderActive) {
+      const tags = this.def.tags || [];
+      if (tags.includes('infantry') || tags.includes('cavalry') ||
+          tags.includes('ranged') || tags.includes('siege') || tags.includes('ship') || tags.includes('elephant'))
+        a *= 2;
+    }
     return a;
   }
   effArmor(game) {
     const p = game.players[this.owner];
-    return (p ? p.statArmor(this.def) : this.def.armor);
+    let arm = p ? p.statArmor(this.def) : this.def.armor;
+    if (p && p.bonus.wonderActive) {
+      const tags = this.def.tags || [];
+      if (tags.includes('infantry') || tags.includes('cavalry') ||
+          tags.includes('ranged') || tags.includes('siege') || tags.includes('ship') || tags.includes('elephant'))
+        arm *= 2;
+    }
+    return arm;
   }
   effRange(game) {
     const p = game.players[this.owner];
@@ -977,6 +990,24 @@ class Building {
         game.message('Castle complete! All military units gain +50 HP and +10 attack!');
         Audio2.say('The castle stands! Our warriors grow mightier!', true);
       }
+    } else if (this.type === 'wonder' && p) {
+      // Wonder doubles HP, attack and defence of all owned military units + grants knowledge
+      p.bonus.wonderActive = true;
+      for (const u of game.units) {
+        if (u.dead || u.owner !== this.owner) continue;
+        const tags = u.def.tags || [];
+        if (tags.includes('infantry') || tags.includes('cavalry') ||
+            tags.includes('ranged') || tags.includes('siege') || tags.includes('ship') || tags.includes('elephant')) {
+          u.maxHp = Math.round(u.maxHp * 2);
+          u.hp = Math.min(u.hp * 2, u.maxHp);
+        }
+      }
+      if (!p.res.knowledge) p.res.knowledge = 0;
+      p.res.knowledge += 3000;
+      if (this.owner === game.humanId) {
+        game.message('Wonder complete! All units doubled in power — and 3000 Knowledge granted!');
+        Audio2.say('Our wonder stands! The world marvels at our greatness!', true);
+      }
     } else if (this.owner === game.humanId) {
       game.message(`${this.def.name} complete`); Audio2.sfx('train');
     }
@@ -1009,6 +1040,12 @@ class Building {
   update(game, dt) {
     if (this.dead) return;
     const p = game.players[this.owner];
+
+    // wonder: passive gold trickle (3 gold/sec)
+    if (this.built && this.type === 'wonder' && p) {
+      if (!p.res.gold) p.res.gold = 0;
+      p.res.gold += 3 * dt;
+    }
 
     // training
     if (this.built && this.queue.length) {
@@ -1179,6 +1216,21 @@ class Building {
       if (this.type === 'wall') Sim.refreshWallMasks(game);
       if (this.type === 'canal' || this.type === 'farm') Sim.recomputeIrrigation(game);
       if (from && from.kind === 'unit') from.addXP(20, game);
+      if (this.type === 'wonder') {
+        // Wonder destroyed: grant opponents 10000 Knowledge each
+        const wonnerOwner = game.players[this.owner];
+        if (wonnerOwner) wonnerOwner.bonus.wonderActive = false;
+        for (const pl of game.players) {
+          if (!pl || pl.id === this.owner) continue;
+          if (!pl.res.knowledge) pl.res.knowledge = 0;
+          pl.res.knowledge += 10000;
+          if (pl.id === game.humanId) game.message('The enemy Wonder has fallen! +10000 Knowledge!');
+        }
+        if (this.owner === game.humanId) {
+          game.message('Our Wonder has been destroyed!');
+          Audio2.say('Our wonder has fallen!', true);
+        }
+      }
       if (this.type === 'town') {
         // razed towns revert to neutral ruins-with-hp; previous owner loses cap
         const prev = game.players[this.owner];

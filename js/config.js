@@ -48,7 +48,7 @@ const AGES = [
   { name:'Conquest Age',  cost:{food:1500, gold:900,  iron:450},      towns:2 },
 ];
 
-const RES_KEYS = ['food','wood','gold','stone','iron','knowledge'];
+const RES_KEYS = ['food','wood','gold','stone','iron','knowledge','platinum'];
 
 /* ---------- Civilizations ---------- */
 const CIVS = {
@@ -200,6 +200,9 @@ const BUILDINGS = {
   castle:   { name:'Castle', hp:2200, size:3, los:12, cost:{stone:400,gold:200,iron:100}, buildTime:60, age:4,
               castle:true,
               desc:'A grand fortress that instantly bestows +50 HP and +10 attack on every military unit you own. One per civilization.' },
+  wonder:   { name:'Wonder', hp:3200, size:3, los:14, cost:{food:2500,gold:2000,wood:3000,iron:2000,platinum:500}, buildTime:360, age:4,
+              wonder:true, one:true,
+              desc:'A monument to your civilisation. Doubles HP, attack and defence of all your units. Generates 3 gold per second. Grants 3000 Knowledge on completion; opponents receive 10000 Knowledge if they destroy it.' },
 };
 
 /* ---------- Technologies (University) ---------- */

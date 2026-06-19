@@ -26,7 +26,7 @@ const SaveLoad = (() => {
       // players
       const players = game.players.map(p => ({
         id: p.id, civKey: p.civKey,
-        res: { ...p.res }, age: p.age,
+        res: { ...p.res }, bonus: { ...p.bonus }, age: p.age,
         techs: [...p.techs],
         pop: p.pop, popCap: p.popCap,
         towns: p.towns, defeated: !!p.defeated,
@@ -59,7 +59,7 @@ const SaveLoad = (() => {
 
       // world object deltas (only what changed from generated defaults)
       const objGone = [], objDelta = [];
-      const origAmts = { gold: 600, stone: 500, iron: 400, tree: 400, bush: 180, fish: 400 };
+      const origAmts = { gold: 600, stone: 500, iron: 400, tree: 400, bush: 180, fish: 400, platinum: 500 };
       for (const o of W.objects) {
         if (o.doodad) continue;
         if (!o.alive) {
@@ -137,6 +137,7 @@ const SaveLoad = (() => {
     for (const pd of data.players) {
       const p = new Player(pd.id, pd.civKey, pd.id === game.humanId, data.diff || 'normal');
       p.res = Object.assign({}, pd.res);
+      if (pd.bonus) Object.assign(p.bonus, pd.bonus);
       p.age = pd.age || 1;
       p.pop = 0; // recalculated after unit spawn
       p.popCap = pd.popCap || CFG.START_POP;
