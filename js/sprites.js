@@ -146,8 +146,9 @@ const Sprites = (() => {
         gr.addColorStop(0, '#4f8a35'); gr.addColorStop(1, '#2f5520');
         g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
       }
-      for (let i = 0; i < 9; i++) { g.fillStyle = '#c92f4c'; g.beginPath(); g.arc(10 + rnd() * 28, 18 + rnd() * 14, 1.8, 0, 7); g.fill();
-        g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(9.6 + rnd() * 0, 0, 0, 0); }
+      for (let i = 0; i < 9; i++) { const bx = 10 + rnd() * 28, by = 18 + rnd() * 14;
+        g.fillStyle = '#c92f4c'; g.beginPath(); g.arc(bx, by, 1.8, 0, 7); g.fill();
+        g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(bx - 0.6, by - 0.6, 0.8, 0.8); }
       cache.set(key, { cv: c, ax: 24, ay: 35 }); return cache.get(key);
     }
     if (kind === 'gold' || kind === 'stone' || kind === 'iron') {
@@ -373,6 +374,8 @@ const Sprites = (() => {
       spearman: { tunic: '#9aa2ad', helmet: 'galea', weapon: 'spear',   shield: 'round' },
       archer:   { tunic: '#9c2a28', helmet: 'cap',   weapon: 'bow',     shield: 'none' },
       crossbow: { tunic: '#9aa2ad', helmet: 'metal', weapon: 'crossbow',shield: 'none' },
+      longbow:  { tunic: '#7a1f1e', helmet: 'hood',  weapon: 'bow',     shield: 'none' },
+      trader:   { tunic: '#9c6b4a', helmet: 'cap',   weapon: 'staff',   shield: 'none', pack: true },
     },
     china: {
       settler:  { tunic: '#3a3868', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
@@ -381,6 +384,7 @@ const Sprites = (() => {
       crossbow: { tunic: '#223050', helmet: 'cone',  weapon: 'crossbow',shield: 'none' },
       longbow:  { tunic: '#162a40', helmet: 'cone',  weapon: 'bow',     shield: 'none' },
       sword:    { tunic: '#2a204e', helmet: 'metal', weapon: 'sword',   shield: 'kite' },
+      trader:   { tunic: '#48426e', helmet: 'cap',   weapon: 'staff',   shield: 'none', pack: true },
     },
     india: {
       settler:  { tunic: '#d18a2e', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
@@ -389,6 +393,7 @@ const Sprites = (() => {
       crossbow: { tunic: '#5a2e10', helmet: 'metal', weapon: 'crossbow',shield: 'none' },
       longbow:  { tunic: '#4a2410', helmet: 'hood',  weapon: 'bow',     shield: 'none' },
       sword:    { tunic: '#b8782a', helmet: 'cap',   weapon: 'sword',   shield: 'kite' },
+      trader:   { tunic: '#c47a2e', helmet: 'turban',weapon: 'staff',   shield: 'none', pack: true },
     },
   };
 
@@ -834,7 +839,7 @@ const Sprites = (() => {
       g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(28, 66, 15, 4, 0, 0, 7); g.fill();
       g.lineWidth = 3;
       for (const [ox, ph] of [[18, 0], [22, Math.PI], [34, Math.PI], [38, 0]]) {
-        const a = Math.sin(ph + swing * Math.PI) * 0.4;
+        const a = swing * Math.sin(ph + Math.PI / 2) * 0.4;
         g.strokeStyle = ox < 26 ? '#6e5a44' : '#8a7256';
         g.beginPath(); g.moveTo(ox, 54); g.lineTo(ox + Math.sin(a) * 6, 66); g.stroke();
       }
@@ -870,6 +875,7 @@ const Sprites = (() => {
       g.beginPath(); g.moveTo(52, 52); g.lineTo(40, 48); g.stroke(); // yoke
       g.fillStyle = tc.main; g.strokeStyle = 'rgba(20,12,6,.6)';
       g.beginPath(); g.roundRect(54, 40, 22, 12, 3); g.fill(); g.stroke(); // cart
+      g.fillStyle = '#e8c84a'; g.fillRect(54, 49, 22, 1.8); // gold trim — Indian chariot
       g.fillStyle = '#4e3f2a'; g.beginPath(); g.arc(65, 58, 8, 0, 7); g.fill();
       g.fillStyle = '#2e2418'; g.beginPath(); g.arc(65, 58, 3, 0, 7); g.fill();
       g.strokeStyle = '#8a7148'; g.lineWidth = 1.4;
@@ -940,7 +946,7 @@ const Sprites = (() => {
       g.fillStyle = 'rgba(0,0,0,.32)'; g.beginPath(); g.ellipse(50, 76, 28, 7, 0, 0, 7); g.fill();
       // legs
       for (const [ox, ph] of [[-16, 0], [-8, Math.PI], [10, Math.PI], [18, 0]]) {
-        const a = Math.sin(ph + swing * Math.PI) * 0.35;
+        const a = swing * Math.sin(ph + Math.PI / 2) * 0.35;
         g.fillStyle = ox < 0 ? '#6b6660' : '#7d7872';
         g.save(); g.translate(50 + ox, 56); g.rotate(a); g.fillRect(-4.5, 0, 9, 20); g.restore();
       }
@@ -964,6 +970,7 @@ const Sprites = (() => {
       // team caparison + mahout
       g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
       g.beginPath(); g.roundRect(36, 26, 26, 14, 3); g.fill(); g.stroke();
+      g.fillStyle = '#e87a1a'; g.fillRect(36, 26, 26, 2); // saffron band — Indian war elephant
       g.fillStyle = '#e7cf8e'; g.fillRect(36, 38, 26, 2.4);
       drawRiderTorso(g, 49, 12, colorIdx, civ, 'none', 0);
       return { cv: c, ax: 50, ay: 76 };
@@ -971,6 +978,10 @@ const Sprites = (() => {
     /* ---------- ships (side view, waterline at ay) ---------- */
     if (UNITS[type] && UNITS[type].naval) {
       const tc2 = teamCols(colorIdx);
+      // civ-flavored trim: a thin hull stripe + sail edge binding, layered over the team-color sail
+      const CIV_SHIP = { rome: '#9c2a28', china: '#c82828', india: '#e87a1a' };
+      const CIV_ACCENT2 = { china: '#e8c84a', india: '#2ab8d8' }; // gold (china) / blue (india) masthead touch
+      const civTrim = CIV_SHIP[civ] || '#6e583a';
       const WL = 56; // waterline y
       function hull(len, ht, col, colD) {
         g.fillStyle = 'rgba(8,20,40,.35)';
@@ -985,7 +996,7 @@ const Sprites = (() => {
         g.quadraticCurveTo(48 + len / 2 + 1, WL, 48 + len / 2 - 2, WL - ht - 2);
         g.lineTo(48 - len / 2 + 5, WL - ht - 2);
         g.closePath(); g.fill(); g.stroke();
-        g.strokeStyle = 'rgba(40,26,12,.4)'; g.lineWidth = 1;
+        g.strokeStyle = civTrim; g.lineWidth = 1.3; // civ-colored gunwale trim (was a neutral wood line)
         g.beginPath(); g.moveTo(48 - len / 2 + 6, WL - ht / 2); g.lineTo(48 + len / 2 - 5, WL - ht / 2); g.stroke();
         g.fillStyle = 'rgba(235,248,255,.55)';
         g.beginPath(); g.ellipse(48 - len / 2 + 1, WL + 2, 5, 2, 0, 0, 7); g.fill();
@@ -1003,8 +1014,12 @@ const Sprites = (() => {
         g.lineTo(mx + wid / 2, WL - 10);
         g.quadraticCurveTo(mx + wid / 2 + 4, WL - hgt / 2 - 6, mx + wid / 2, WL - hgt - 2);
         g.closePath(); g.fill(); g.stroke();
+        g.strokeStyle = civTrim; g.lineWidth = 1.4; // civ-colored edge binding along the leech
+        g.beginPath(); g.moveTo(mx + wid / 2, WL - hgt - 2); g.lineTo(mx + wid / 2 - 2, WL - 12); g.stroke();
         g.fillStyle = tc2.dark; g.beginPath();
         g.moveTo(mx, WL - 4 - hgt); g.lineTo(mx + 10, WL - 2 - hgt); g.lineTo(mx, WL - hgt); g.closePath(); g.fill();
+        if (CIV_ACCENT2[civ]) { g.fillStyle = CIV_ACCENT2[civ]; // masthead accent dot: gold (china), blue (india)
+          g.beginPath(); g.arc(mx, WL - 6 - hgt, 1.6, 0, 7); g.fill(); }
       }
       function oars(n, y0, ph) {
         g.strokeStyle = '#7d5a2e'; g.lineWidth = 1.8;
@@ -1104,6 +1119,9 @@ const Sprites = (() => {
       g.fillStyle = '#6e5638'; g.strokeStyle = '#3a2a16'; g.lineWidth = 1.4;
       g.beginPath(); g.roundRect(18, 48, 56, 8, 2); g.fill(); g.stroke();
       g.beginPath(); g.moveTo(30, 48); g.lineTo(46, 28); g.lineTo(62, 48); g.closePath(); g.fill(); g.stroke();
+      // small civ-colored pennant at the frame apex — a machine, so just a team marker, not decoration
+      g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = .8;
+      g.beginPath(); g.moveTo(46, 28); g.lineTo(46, 19); g.lineTo(53, 23.5); g.closePath(); g.fill(); g.stroke();
       // arm: cocked when idle, released when attack fr1
       const armA = anim === 'attack' && fr >= 1 ? -1.9 : -0.45;
       g.save(); g.translate(46, 46); g.rotate(armA);
@@ -1145,7 +1163,7 @@ const Sprites = (() => {
       for (const s of [-1, 1]) {
         g.strokeStyle = s < 0 ? '#5f4830' : '#6e583a'; g.lineWidth = 3.4;
         g.beginPath(); g.moveTo(cx + s * 6, gy - 22);
-        g.lineTo(cx + s * 6 + Math.sin(swing * Math.PI * s) * 3, gy - 1); g.stroke();
+        g.lineTo(cx + s * 6 + swing * s * 3, gy - 1); g.stroke();
       }
       const gr = g.createLinearGradient(cx - 11, 0, cx + 11, 0);
       gr.addColorStop(0, '#6e583a'); gr.addColorStop(.5, '#8a6a48'); gr.addColorStop(1, '#5f4830');
@@ -1221,6 +1239,7 @@ const Sprites = (() => {
         g.fillStyle = tc.main; g.strokeStyle = 'rgba(20,12,6,.6)'; g.lineWidth = 1.3;
         g.beginPath(); g.roundRect(cx - 13, 40, 26, 18, 3); g.fill(); g.stroke();
         g.fillStyle = '#e7cf8e'; g.fillRect(cx - 13, 46, 26, 2);
+        g.fillStyle = '#e8c84a'; g.fillRect(cx - 13, 53, 26, 1.8); // gold trim — Indian chariot
         drawRiderTorso(g, cx, 28, colorIdx, civ, 'none', raise);
       }
       return { cv: c, ax: cx, ay: 73 };
@@ -1257,7 +1276,7 @@ const Sprites = (() => {
       g.fillStyle = 'rgba(0,0,0,.32)'; g.beginPath(); g.ellipse(cx, 76, 20, 6.5, 0, 0, 7); g.fill();
       for (const s of [-1, 1]) { // two thick legs
         g.fillStyle = s < 0 ? '#6b6660' : '#7d7872';
-        g.save(); g.translate(cx + s * 11, 56); g.rotate(Math.sin(swing * Math.PI * s) * 0.18);
+        g.save(); g.translate(cx + s * 11, 56); g.rotate(swing * s * 0.18);
         g.fillRect(-4.5, 0, 9, 20); g.restore();
       }
       const gr = g.createLinearGradient(cx - 24, 0, cx + 24, 0);
@@ -1283,11 +1302,13 @@ const Sprites = (() => {
         g.beginPath(); g.moveTo(cx + 7, 44); g.quadraticCurveTo(cx + 10, 52, cx + 8, 58); g.stroke();
         g.fillStyle = '#1d1812'; g.fillRect(cx - 6.5, 31, 2.2, 2.6); g.fillRect(cx + 4.3, 31, 2.2, 2.6);
         g.fillStyle = tc.main; g.fillRect(cx - 9, 24, 18, 4.5); // headdress band
+        g.fillStyle = '#e87a1a'; g.fillRect(cx - 9, 24, 18, 1.6); // saffron edge — Indian war elephant
       } else {
         g.strokeStyle = '#6b6660'; g.lineWidth = 2.4; // tail
         g.beginPath(); g.moveTo(cx, 60); g.quadraticCurveTo(cx + 2, 68, cx, 74); g.stroke();
         g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
         g.beginPath(); g.roundRect(cx - 13, 30, 26, 16, 3); g.fill(); g.stroke(); // caparison
+        g.fillStyle = '#e87a1a'; g.fillRect(cx - 13, 30, 26, 1.8); // saffron band
         g.fillStyle = '#e7cf8e'; g.fillRect(cx - 13, 43, 26, 2.4);
       }
       drawRiderTorso(g, cx, 10, colorIdx, civ, 'none', 0);
@@ -1305,6 +1326,9 @@ const Sprites = (() => {
       g.fillStyle = '#6e5638'; g.strokeStyle = '#3a2a16'; g.lineWidth = 1.4;
       g.beginPath(); g.roundRect(cx - 22, 50, 44, 8, 2); g.fill(); g.stroke(); // axle beam
       g.beginPath(); g.moveTo(cx - 14, 50); g.lineTo(cx, 26); g.lineTo(cx + 14, 50); g.closePath(); g.fill(); g.stroke();
+      // small civ-colored pennant at the frame apex, matching the side view
+      g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = .8;
+      g.beginPath(); g.moveTo(cx, 26); g.lineTo(cx, 17); g.lineTo(cx + 7, 21.5); g.closePath(); g.fill(); g.stroke();
       const armUp = anim === 'attack' && fr >= 1 ? 16 : 0; // throwing arm rises
       g.fillStyle = '#7d5a2e'; g.fillRect(cx - 2.5, 18 - armUp, 5, 34); g.strokeRect(cx - 2.5, 18 - armUp, 5, 34);
       g.fillStyle = '#57534a'; g.beginPath(); g.arc(cx, 16 - armUp, 5, 0, 7); g.fill();
@@ -1312,6 +1336,9 @@ const Sprites = (() => {
     }
     /* ---- ships bow-on / stern-on ---- */
     const WL = 56;
+    const CIV_SHIP = { rome: '#9c2a28', china: '#c82828', india: '#e87a1a' };
+    const CIV_ACCENT2 = { china: '#e8c84a', india: '#2ab8d8' }; // gold (china) / blue (india) masthead touch
+    const civTrim = CIV_SHIP[civ] || '#6e583a';
     function hullFB(hw, ht, col, colD) {
       g.fillStyle = 'rgba(8,20,40,.35)';
       g.beginPath(); g.ellipse(cx, WL + 3, hw + 4, 4.5, 0, 0, 7); g.fill();
@@ -1323,7 +1350,7 @@ const Sprites = (() => {
       g.quadraticCurveTo(cx + hw, WL - ht, cx + hw, WL + 1);
       g.quadraticCurveTo(cx, WL + 5, cx - hw, WL + 1);
       g.closePath(); g.fill(); g.stroke();
-      g.strokeStyle = 'rgba(40,26,12,.45)'; g.lineWidth = 1; // keel line
+      g.strokeStyle = civTrim; g.lineWidth = 1.2; // civ-colored keel line (was neutral wood)
       g.beginPath(); g.moveTo(cx, WL - ht - 3); g.lineTo(cx, WL + 3); g.stroke();
       if (!away) { g.fillStyle = 'rgba(235,248,255,.55)'; // bow wash
         g.beginPath(); g.ellipse(cx, WL + 3.5, hw * .7, 2.2, 0, 0, 7); g.fill(); }
@@ -1339,6 +1366,10 @@ const Sprites = (() => {
       g.quadraticCurveTo(cx, WL - hgt + 2, cx + wid / 2, WL - 4 - hgt); // wind-bellied foot
       g.lineTo(cx + wid / 2 - 2, WL - 12); g.quadraticCurveTo(cx, WL - 18, cx - wid / 2 + 2, WL - 12);
       g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = civTrim; g.lineWidth = 1.3; // civ-colored edge binding, mirrors the side view
+      g.beginPath(); g.moveTo(cx + wid / 2 - 2, WL - 12); g.lineTo(cx + wid / 2, WL - 4 - hgt); g.stroke();
+      if (CIV_ACCENT2[civ]) { g.fillStyle = CIV_ACCENT2[civ]; // masthead accent dot, mirrors the side view
+        g.beginPath(); g.arc(cx, WL - 8 - hgt, 1.6, 0, 7); g.fill(); }
     }
     const tc2 = teamCols(colorIdx);
     if (type === 'fishboat') {
@@ -1887,12 +1918,13 @@ const Sprites = (() => {
       g.beginPath();
       g.moveTo(cx - hw, cy - 5); g.lineTo(cx, cy - hh - 5); g.lineTo(cx + hw, cy - 5);
       g.lineTo(cx, cy + hh - 5); g.closePath(); g.stroke();
-      // two sparring dummies with padded bodies
+      // two sparring dummies with padded bodies — civ-tinted padding
+      const padCol = style === 'china' ? '#9a3a2e' : style === 'india' ? '#c8983a' : '#9a3b30';
       for (const [dx2, dy2] of [[cx - 12, cy - 2], [cx + 14, cy + 5]]) {
         g.strokeStyle = '#6e5638'; g.lineWidth = 3;
         g.beginPath(); g.moveTo(dx2, dy2); g.lineTo(dx2, dy2 - 17); g.stroke();
         g.beginPath(); g.moveTo(dx2 - 8, dy2 - 11); g.lineTo(dx2 + 8, dy2 - 11); g.stroke();
-        g.fillStyle = '#9a3b30'; g.fillRect(dx2 - 4, dy2 - 9, 8, 6);
+        g.fillStyle = padCol; g.fillRect(dx2 - 4, dy2 - 9, 8, 6);
         g.fillStyle = '#cdb279'; g.beginPath(); g.arc(dx2, dy2 - 19, 4, 0, 7); g.fill();
       }
       // spear rack
