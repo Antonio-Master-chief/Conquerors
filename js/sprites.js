@@ -368,21 +368,27 @@ const Sprites = (() => {
 
   // Civilization-specific visual overrides — applied over UNIT_VIS when civ matches
   const CIV_UNIT_VIS = {
+    rome: {
+      settler:  { tunic: '#9c2a28', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
+      spearman: { tunic: '#9aa2ad', helmet: 'galea', weapon: 'spear',   shield: 'round' },
+      archer:   { tunic: '#9c2a28', helmet: 'cap',   weapon: 'bow',     shield: 'none' },
+      crossbow: { tunic: '#9aa2ad', helmet: 'metal', weapon: 'crossbow',shield: 'none' },
+    },
     china: {
-      settler:  { tunic: '#7a6840', helmet: 'cone',  weapon: 'axe',     shield: 'none' },
-      spearman: { tunic: '#1e4272', helmet: 'cone',  weapon: 'spear',   shield: 'round' },
-      archer:   { tunic: '#1a3854', helmet: 'cone',  weapon: 'bow',     shield: 'none' },
+      settler:  { tunic: '#3a3868', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
+      spearman: { tunic: '#1e4272', helmet: 'cap',   weapon: 'spear',   shield: 'round' },
+      archer:   { tunic: '#2a2858', helmet: 'cap',   weapon: 'bow',     shield: 'none' },
       crossbow: { tunic: '#223050', helmet: 'cone',  weapon: 'crossbow',shield: 'none' },
       longbow:  { tunic: '#162a40', helmet: 'cone',  weapon: 'bow',     shield: 'none' },
       sword:    { tunic: '#2a204e', helmet: 'metal', weapon: 'sword',   shield: 'kite' },
     },
     india: {
-      settler:  { tunic: '#a07848', helmet: 'straw', weapon: 'axe',     shield: 'none' },
+      settler:  { tunic: '#d18a2e', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
       spearman: { tunic: '#7a3c16', helmet: 'metal', weapon: 'spear',   shield: 'round' },
-      archer:   { tunic: '#5c2e14', helmet: 'hood',  weapon: 'bow',     shield: 'none' },
+      archer:   { tunic: '#d18a2e', helmet: 'cap',   weapon: 'bow',     shield: 'none' },
       crossbow: { tunic: '#5a2e10', helmet: 'metal', weapon: 'crossbow',shield: 'none' },
       longbow:  { tunic: '#4a2410', helmet: 'hood',  weapon: 'bow',     shield: 'none' },
-      sword:    { tunic: '#6e3a16', helmet: 'turban',weapon: 'sword',   shield: 'kite' },
+      sword:    { tunic: '#b8782a', helmet: 'cap',   weapon: 'sword',   shield: 'kite' },
     },
   };
 
@@ -700,12 +706,25 @@ const Sprites = (() => {
     g.fillStyle = tc.main; g.fillRect(x - 5, y - 21, 11, 6);
   }
 
-  function drawRiderTorso(g, x, y, colorIdx, civ, weapon, raise) {
+  function drawRiderTorso(g, x, y, colorIdx, civ, weapon, raise, mount) {
     const tc = teamCols(colorIdx), skin = SKIN[civ] || SKIN.none;
     g.fillStyle = tc.main; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.1;
     g.beginPath(); g.moveTo(x - 4.5, y); g.lineTo(x + 4.5, y); g.lineTo(x + 3.5, y + 10); g.lineTo(x - 3.5, y + 10); g.closePath(); g.fill(); g.stroke();
     g.fillStyle = skin; g.beginPath(); g.arc(x, y - 5, 4.6, 0, 7); g.fill();
-    g.fillStyle = '#6e5638'; g.beginPath(); g.arc(x, y - 6.5, 4.8, Math.PI, 0); g.fill();
+    // scout headwear is civ-flavored (campaign hat / topknot wrap / turban); other riders keep the plain cap
+    if (mount === 'scout' && civ === 'india') {
+      g.fillStyle = '#e87a1a'; g.beginPath(); g.ellipse(x, y - 6.5, 4.6, 3.4, 0, 0, 7); g.fill(); // saffron turban
+      g.strokeStyle = '#a8541a'; g.lineWidth = .8;
+      g.beginPath(); g.moveTo(x - 4, y - 7.2); g.quadraticCurveTo(x, y - 5, x + 4, y - 7.2); g.stroke();
+    } else if (mount === 'scout' && civ === 'china') {
+      g.fillStyle = '#241a10'; g.beginPath(); g.arc(x, y - 6.5, 4.2, Math.PI, 0); g.fill(); // dark topknot, no helmet
+      g.fillStyle = '#c82828'; g.fillRect(x - 4.2, y - 5.6, 8.4, 1.4); // red headband
+    } else if (mount === 'scout' && civ === 'rome') {
+      g.fillStyle = '#cdb279'; g.beginPath(); g.ellipse(x, y - 7.4, 6, 2.4, 0, 0, 7); g.fill(); // straw travel hat
+      g.beginPath(); g.arc(x, y - 8, 3.6, Math.PI, 0); g.fill();
+    } else {
+      g.fillStyle = '#6e5638'; g.beginPath(); g.arc(x, y - 6.5, 4.8, Math.PI, 0); g.fill();
+    }
     g.strokeStyle = skin; g.lineWidth = 2.6;
     g.beginPath(); g.moveTo(x - 3, y + 3); g.lineTo(x - 9, y + 5 - raise * 4); g.stroke();
     if (weapon === 'spear') {
@@ -802,7 +821,7 @@ const Sprites = (() => {
     const raise = anim === 'attack' ? (fr === 1 ? 1 : .3) : 0;
     if (type === 'scout') {
       drawHorse(g, 46, 64, colorIdx, swing);
-      drawRiderTorso(g, 46, 36, colorIdx, civ, 'none', 0);
+      drawRiderTorso(g, 46, 36, colorIdx, civ, 'none', 0, 'scout');
       return { cv: c, ax: 46, ay: 66 };
     }
     if (type === 'deer' || type === 'boar' || type === 'wolf' || type === 'sheep') {
@@ -1149,7 +1168,7 @@ const Sprites = (() => {
 
     if (type === 'scout') {
       horseFB(72);
-      drawRiderTorso(g, cx, 22, colorIdx, civ, 'none', 0);
+      drawRiderTorso(g, cx, 22, colorIdx, civ, 'none', 0, 'scout');
       return { cv: c, ax: cx, ay: 73 };
     }
     if (type === 'cart') { // ox cart head-on / from behind
