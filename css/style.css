@@ -106,7 +106,7 @@ canvas#game { position:fixed; inset:0; display:block; }
   position:relative; overflow:hidden;
 }
 .qslot .fill { position:absolute; bottom:0; left:0; right:0; background:rgba(123,210,74,.35); }
-.qslot canvas { width:100%; height:100%; }
+.qslot canvas, .qslot img { width:100%; height:100%; object-fit:cover; }
 
 /* ---------- TITLE SCREEN ---------- */
 #title {
