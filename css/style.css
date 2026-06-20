@@ -83,6 +83,10 @@ canvas#game { position:fixed; inset:0; display:block; }
 .card .hpbar { height:6px; background:#3a2a18; border-radius:3px; margin-top:4px; overflow:hidden; width:110px; }
 .card .hpbar > div { height:100%; background:linear-gradient(90deg,#7bd24a,#4f9e2a); }
 .card .sub { color:#b8a784; font-size:11px; margin-top:2px; }
+.card.withPortrait { display:flex; align-items:center; gap:8px; padding-right:10px; }
+.card .portrait { width:46px; height:46px; border-radius:7px; object-fit:cover; flex-shrink:0; border:1px solid #6b5121; box-shadow:0 1px 4px rgba(0,0,0,.5); }
+.card .cardBody { min-width:0; }
+.abtn img.portraitIcon { width:30px; height:30px; object-fit:cover; border-radius:5px; pointer-events:none; }
 .abtn {
   width:58px; height:58px; border-radius:9px; border:1px solid #6b5121; cursor:pointer;
   background:linear-gradient(180deg,#3a2c18,#241a0e); color:#e8dcc3; position:relative;

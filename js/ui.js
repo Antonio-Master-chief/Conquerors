@@ -104,8 +104,29 @@ const UI = (() => {
     setTimeout(() => { m.style.transition = 'opacity .6s'; m.style.opacity = '0'; setTimeout(() => m.remove(), 600); }, 4000);
   }
 
+  /* ---------------- AI-art portraits (subset of units so far) ---------------- */
+  const PORTRAIT_KEYS = new Set([
+    'archer_china', 'archer_india', 'archer_rome',
+    'crossbow_china', 'crossbow_rome',
+    'scout_china', 'scout_india', 'scout_rome',
+    'settler_china', 'settler_india', 'settler_rome',
+    'spearman_china', 'spearman_india', 'spearman_rome',
+    'sword_china', 'sword_india',
+    'legionary_rome',
+  ]);
+  function portraitPath(type, civ) {
+    const key = `${type}_${civ}`;
+    return PORTRAIT_KEYS.has(key) ? `assets/portraits/${key}.png` : null;
+  }
+
   /* ---------------- selection & action panels ---------------- */
   function iconForUnit(type, civ) {
+    const path = portraitPath(type, civ);
+    if (path) {
+      const img = document.createElement('img');
+      img.className = 'portraitIcon'; img.alt = ''; img.src = path;
+      return img;
+    }
     const s = Sprites.unit(type, 0, civ || 'rome', 6, 'idle', 0); // dir 6 = front, for icons
     const c = document.createElement('canvas'); c.width = 30; c.height = 30;
     const g = c.getContext('2d');
@@ -181,10 +202,17 @@ const UI = (() => {
         const c = el('div', 'card', selP);
         const one = sel.find(x => x.type === t);
         const nm = types[t] === 1 ? one.displayName() : UNITS[t].name;
-        el('div', 'nm', c).textContent = `${nm}${types[t] > 1 ? ' ×' + types[t] : ''}`;
+        const pPath = types[t] === 1 ? portraitPath(t, one.civKey) : null;
+        let body = c;
+        if (pPath) {
+          c.classList.add('withPortrait');
+          const img = el('img', 'portrait', c); img.alt = ''; img.src = pPath;
+          body = el('div', 'cardBody', c);
+        }
+        el('div', 'nm', body).textContent = `${nm}${types[t] > 1 ? ' ×' + types[t] : ''}`;
         if (types[t] === 1) {
           const u = one;
-          const hb = el('div', 'hpbar', c); el('div', '', hb).style.width = `${u.hp / u.maxHp * 100}%`;
+          const hb = el('div', 'hpbar', body); el('div', '', hb).style.width = `${u.hp / u.maxHp * 100}%`;
           let sub = `ATK ${Math.round(u.effAtk(game))} · DEF ${u.effArmor(game)}${u.rank ? ' · ' + ['', 'Trained', 'Veteran', 'Elite'][u.rank] : ''}`;
           if (u.def.animal) {
             const icon = { deer: '🦌', boar: '🐗', wolf: '🐺', sheep: '🐑' }[u.type] || '🦌';
@@ -201,7 +229,7 @@ const UI = (() => {
                 : u.bribedBy >= 0 ? 'Already serving another kingdom'
                 : `Knows ${known} rival kingdom${known === 1 ? '' : 's'} · protected inside borders`;
           }
-          el('div', 'sub', c).textContent = sub;
+          el('div', 'sub', body).textContent = sub;
         }
       }
     } else if (first.kind === 'lake') {
