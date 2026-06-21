@@ -2,8 +2,10 @@
 'use strict';
 
 const SaveLoad = (() => {
-  const SAVE_KEY   = 'conq_save_v3';
-  const PEND_KEY   = 'conq_load_pending';
+  const OLD_SAVE_KEY = 'conq_save_v3';       // legacy single-slot key (pre-migration)
+  const SAVE_PREFIX  = 'conq_save_';         // + name => per-save JSON blob
+  const INDEX_KEY    = 'conq_saves_index';   // [{ name, civKey, age, savedAt }, ...]
+  const PEND_KEY     = 'conq_load_pending';
   let _pending = null;
 
   /* ---- helpers ---- */
@@ -17,69 +19,114 @@ const SaveLoad = (() => {
     const n = Math.min(s.length, out.length);
     for (let i = 0; i < n; i++) out[i] = s.charCodeAt(i);
   }
+  function dataKey(name) { return SAVE_PREFIX + name; }
 
-  /* ---- public: save ---- */
-  function save(game) {
+  function readIndex() {
+    try { return JSON.parse(localStorage.getItem(INDEX_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function writeIndex(idx) { localStorage.setItem(INDEX_KEY, JSON.stringify(idx)); }
+
+  /* ---- migration: lift the old single-slot save into the named index ---- */
+  // Runs lazily the first time the index is consulted. If the legacy key exists
+  // and the index is empty/missing, the old save becomes a save named "Autosave".
+  // The legacy key is left in place (harmless, just unused) so nothing is lost
+  // even if this logic is ever skipped.
+  let _migrated = false;
+  function migrateLegacy() {
+    if (_migrated) return;
+    _migrated = true;
     try {
-      const W = game.world;
+      const idx = readIndex();
+      if (idx.length) return; // index already populated — nothing to migrate
+      const raw = localStorage.getItem(OLD_SAVE_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (!d) return;
+      const name = 'Autosave';
+      localStorage.setItem(dataKey(name), raw);
+      const civKey = d.civKey || (d.players && d.players[0] && d.players[0].civKey) || '';
+      const age = (d.players && d.players[0] && d.players[0].age) || 1;
+      writeIndex([{ name, civKey, age, savedAt: Date.now() }]);
+    } catch (e) { console.warn('Save migration failed:', e); }
+  }
 
-      // players
-      const players = game.players.map(p => ({
-        id: p.id, civKey: p.civKey,
-        res: { ...p.res }, bonus: { ...p.bonus }, age: p.age,
-        techs: [...p.techs],
-        pop: p.pop, popCap: p.popCap,
-        towns: p.towns, defeated: !!p.defeated,
+  /* ---- serialize full game state (shared by saveAs) ---- */
+  function serialize(game) {
+    const W = game.world;
+
+    // players
+    const players = game.players.map(p => ({
+      id: p.id, civKey: p.civKey,
+      res: { ...p.res }, bonus: { ...p.bonus }, age: p.age,
+      techs: [...p.techs],
+      pop: p.pop, popCap: p.popCap,
+      towns: p.towns, defeated: !!p.defeated,
+    }));
+
+    // all buildings (including neutral towns, owner=-1)
+    const buildings = game.buildings.filter(b => !b.dead).map(b => ({
+      tp: b.type, ow: b.owner, ck: b.civKey || 'none',
+      x: b.x, y: b.y, hp: Math.round(b.hp), maxHp: b.maxHp,
+      built: b.built, progress: Math.round((b.progress || 0) * 100) / 100,
+      wallMask: b.wallMask || 0,
+      rally: b.rally ? { x: Math.round(b.rally.x * 10) / 10, y: Math.round(b.rally.y * 10) / 10 } : null,
+      facingFlip: b.facingFlip || false,
+      fortress: b.fortress || false,
+    }));
+
+    // units: skip dead, npc, animal, cart, inWall garrisoned
+    const units = game.units
+      .filter(u => !u.dead && !u.def.npc && !u.def.animal && !u.def.cart && !u.inWall)
+      .map(u => ({
+        tp: u.type, ow: u.owner, ck: u.civKey,
+        x: Math.round(u.x * 100) / 100,
+        y: Math.round(u.y * 100) / 100,
+        hp: Math.round(u.hp), maxHp: u.maxHp || UNITS[u.type].hp,
+        xp: Math.round(u.xp || 0), rank: u.rank || 0,
+        dir: u.dir || 0,
+        carry: u.carry ? { res: u.carry.res, amt: Math.round(u.carry.amt) } : null,
+        home: u.home ? { x: Math.round(u.home.x * 10) / 10, y: Math.round(u.home.y * 10) / 10 } : null,
       }));
 
-      // all buildings (including neutral towns, owner=-1)
-      const buildings = game.buildings.filter(b => !b.dead).map(b => ({
-        tp: b.type, ow: b.owner, ck: b.civKey || 'none',
-        x: b.x, y: b.y, hp: Math.round(b.hp), maxHp: b.maxHp,
-        built: b.built, progress: Math.round((b.progress || 0) * 100) / 100,
-        wallMask: b.wallMask || 0,
-        rally: b.rally ? { x: Math.round(b.rally.x * 10) / 10, y: Math.round(b.rally.y * 10) / 10 } : null,
-        facingFlip: b.facingFlip || false,
-        fortress: b.fortress || false,
-      }));
-
-      // units: skip dead, npc, animal, cart, inWall garrisoned
-      const units = game.units
-        .filter(u => !u.dead && !u.def.npc && !u.def.animal && !u.def.cart && !u.inWall)
-        .map(u => ({
-          tp: u.type, ow: u.owner, ck: u.civKey,
-          x: Math.round(u.x * 100) / 100,
-          y: Math.round(u.y * 100) / 100,
-          hp: Math.round(u.hp), maxHp: u.maxHp || UNITS[u.type].hp,
-          xp: Math.round(u.xp || 0), rank: u.rank || 0,
-          dir: u.dir || 0,
-          carry: u.carry ? { res: u.carry.res, amt: Math.round(u.carry.amt) } : null,
-          home: u.home ? { x: Math.round(u.home.x * 10) / 10, y: Math.round(u.home.y * 10) / 10 } : null,
-        }));
-
-      // world object deltas (only what changed from generated defaults)
-      const objGone = [], objDelta = [];
-      const origAmts = { gold: 600, stone: 500, iron: 400, tree: 400, bush: 180, fish: 400, platinum: 500 };
-      for (const o of W.objects) {
-        if (o.doodad) continue;
-        if (!o.alive) {
-          objGone.push([o.x, o.y]);
-        } else {
-          const orig = origAmts[o.kind];
-          if (orig && o.amount < orig * 0.98) objDelta.push({ x: o.x, y: o.y, amt: Math.round(o.amount) });
-        }
+    // world object deltas (only what changed from generated defaults)
+    const objGone = [], objDelta = [];
+    const origAmts = { gold: 600, stone: 500, iron: 400, tree: 400, bush: 180, fish: 400, platinum: 500 };
+    for (const o of W.objects) {
+      if (o.doodad) continue;
+      if (!o.alive) {
+        objGone.push([o.x, o.y]);
+      } else {
+        const orig = origAmts[o.kind];
+        if (orig && o.amount < orig * 0.98) objDelta.push({ x: o.x, y: o.y, amt: Math.round(o.amount) });
       }
+    }
 
-      const data = {
-        v: 3, seed: game.worldSeed || 0, t: Math.round(game.time * 10) / 10,
-        civKey: game.players[game.humanId].civKey, diff: game.diff || 'normal',
-        cam: { x: Math.round(game.cam.x), y: Math.round(game.cam.y), zoom: game.cam.zoom },
-        players, buildings, units, objGone, objDelta,
-        fog: u8ToB64(W.vis),
-        boot: (() => { try { return JSON.parse(localStorage.getItem('conq_boot') || 'null'); } catch (e) { return null; } })(),
-      };
+    return {
+      v: 3, seed: game.worldSeed || 0, t: Math.round(game.time * 10) / 10,
+      civKey: game.players[game.humanId].civKey, diff: game.diff || 'normal',
+      cam: { x: Math.round(game.cam.x), y: Math.round(game.cam.y), zoom: game.cam.zoom },
+      players, buildings, units, objGone, objDelta,
+      fog: u8ToB64(W.vis),
+      boot: (() => { try { return JSON.parse(localStorage.getItem('conq_boot') || 'null'); } catch (e) { return null; } })(),
+    };
+  }
 
-      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  /* ---- public: saveAs(game, name) — named multi-slot save ---- */
+  function saveAs(game, name) {
+    try {
+      if (!name) return false;
+      migrateLegacy();
+      const data = serialize(game);
+      localStorage.setItem(dataKey(name), JSON.stringify(data));
+
+      const idx = readIndex().filter(e => e.name !== name);
+      idx.push({
+        name,
+        civKey: data.civKey,
+        age: (game.players[game.humanId] && game.players[game.humanId].age) || 1,
+        savedAt: Date.now(),
+      });
+      writeIndex(idx);
       return true;
     } catch (e) {
       console.warn('Save failed:', e);
@@ -87,16 +134,46 @@ const SaveLoad = (() => {
     }
   }
 
-  /* ---- public: hasSave / getSave ---- */
-  function hasSave() { return !!localStorage.getItem(SAVE_KEY); }
-  function getSave() {
-    try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { return null; }
+  /* ---- public: listSaves() ---- */
+  function listSaves() {
+    migrateLegacy();
+    return readIndex().slice().sort((a, b) => b.savedAt - a.savedAt);
   }
-  function deleteSave() { localStorage.removeItem(SAVE_KEY); }
 
-  /* ---- public: requestLoad (call from title screen) ---- */
-  function requestLoad() {
-    const d = getSave();
+  /* ---- public: hasSave / getSave (legacy-shaped helpers, kept for compat) ---- */
+  // hasSave(): true if at least one named save exists. getSave(): most recent save's data.
+  function hasSave() { return listSaves().length > 0; }
+  function getSaveNamed(name) {
+    try { return JSON.parse(localStorage.getItem(dataKey(name)) || 'null'); } catch (e) { return null; }
+  }
+  function getSave() {
+    const list = listSaves();
+    return list.length ? getSaveNamed(list[0].name) : null;
+  }
+
+  /* ---- public: deleteSaveNamed(name) ---- */
+  function deleteSaveNamed(name) {
+    localStorage.removeItem(dataKey(name));
+    writeIndex(readIndex().filter(e => e.name !== name));
+  }
+  function deleteSave() {
+    // legacy no-arg delete: clears every named save (back-compat convenience only).
+    for (const e of readIndex()) localStorage.removeItem(dataKey(e.name));
+    writeIndex([]);
+    localStorage.removeItem(OLD_SAVE_KEY);
+  }
+
+  /* ---- public: requestLoad(name) (call from title screen) ---- */
+  // name is optional for back-compat with the old no-arg call: defaults to the
+  // most recently saved slot.
+  function requestLoad(name) {
+    migrateLegacy();
+    if (!name) {
+      const list = listSaves();
+      if (!list.length) return false;
+      name = list[0].name;
+    }
+    const d = getSaveNamed(name);
     if (!d) return false;
     // update boot config so map size matches the save
     const boot = Object.assign({}, d.boot || {}, { civ: d.civKey, diff: d.diff });
@@ -214,5 +291,9 @@ const SaveLoad = (() => {
     }
   }
 
-  return { save, hasSave, getSave, deleteSave, requestLoad, checkPending, getPending, apply };
+  return {
+    listSaves, saveAs, deleteSaveNamed, requestLoad, checkPending, getPending, apply,
+    // legacy-shaped helpers kept for back-compat with the not-yet-rewritten title.js
+    hasSave, getSave, deleteSave,
+  };
 })();

@@ -14,7 +14,7 @@ function makeGame(civKey, diff) {
     players: [], units: [], buildings: [], projectiles: [], particles: [], pings: [],
     markers: [],                  // command feedback (move/attack/gather/rally)
     selected: [], placing: null, targeting: null,
-    ai: [], time: 0, humanId: 0, over: false, speed: 1,
+    ai: [], time: 0, humanId: 0, over: false, speed: 1, netRole: null, // 'host' | 'client' | null
     lastAlertT: -99, traderT: 25,
     poisons: [],                  // active poisoned water sources
     grid: new Map(),
@@ -194,6 +194,23 @@ function setupMatch(game, civKey, diff) {
     Sim.spawnUnit(game, i, 'scout', s.x + .5, s.y - 2.4);
   }
 
+  spawnWorldDressing(game);
+
+  game.ai = [new AIController(game, 1), new AIController(game, 2)];
+
+  // camera on human TC
+  const hs = game.world.starts[0];
+  game.cam.x = World.isoX(hs.x, hs.y);
+  game.cam.y = World.isoY(hs.x, hs.y);
+  game.cam.zoom = innerWidth < 700 ? 0.75 : 0.95;
+
+  World.recomputeFog([...game.units, ...game.buildings], game.humanId);
+}
+
+/* neutral towns/garrisons, citadel herds, and roaming wildlife - shared by
+   single-player setupMatch and the multiplayer host setup below (identical
+   either way; only the player roster above this point differs). */
+function spawnWorldDressing(game) {
   // neutral towns + garrisons
   game.world.towns.forEach((t, ti) => {
     for (let y = t.y - 1; y <= t.y + 1; y++) for (let x = t.x - 1; x <= t.x + 1; x++) {
@@ -259,16 +276,59 @@ function setupMatch(game, civKey, diff) {
       Sim.spawnUnit(game, -1, kind, x + .5 + (Math.random() * 3 - 1.5), y + .5 + (Math.random() * 3 - 1.5), 'none');
     have[kind]++;
   }
+}
 
-  game.ai = [new AIController(game, 1), new AIController(game, 2)];
+/* ---------------- multiplayer match setup (host-authoritative) ----------------
+   The host spawns the real, authoritative world (same shape as single-player,
+   just 2 human slots and no AI) and streams it to the client over Net. The
+   client only needs the same deterministic terrain (World.gen with the
+   shared seed reproduces it exactly) - every unit/building it sees arrives
+   via the host's first snapshot, so it does no spawning of its own. */
+function setupMatchHostMP(game, hostCiv, clientCiv, diff, seed) {
+  game.worldSeed = seed;
+  game.diff = diff;
+  World.gen(seed);
+  game.gates = [];
+  game.corpses = [];
+  game.players = [
+    new Player(0, hostCiv, true, diff),
+    new Player(1, clientCiv, true, diff),
+  ];
+  for (let i = 0; i < 2; i++) {
+    const s = game.world.starts[i];
+    for (let y = s.y - 1; y <= s.y + 1; y++) for (let x = s.x - 1; x <= s.x + 1; x++) {
+      const o = World.objAt(x, y); if (o) World.removeObj(o);
+      game.world.blocked[World.idx(x, y)] = 0;
+    }
+    Sim.placeBuilding(game, i, 'tc', s.x - 1, s.y - 1, true);
+    const offs = [[-2.2, 1.8], [2.4, 1.6], [0, 2.8]];
+    for (const [ox, oy] of offs) Sim.spawnUnit(game, i, 'settler', s.x + .5 + ox, s.y + .5 + oy);
+    Sim.spawnUnit(game, i, 'scout', s.x + .5, s.y - 2.4);
+  }
+  spawnWorldDressing(game);
+  game.ai = []; // both slots are human-controlled - no AI in multiplayer
 
-  // camera on human TC
   const hs = game.world.starts[0];
   game.cam.x = World.isoX(hs.x, hs.y);
   game.cam.y = World.isoY(hs.x, hs.y);
   game.cam.zoom = innerWidth < 700 ? 0.75 : 0.95;
-
   World.recomputeFog([...game.units, ...game.buildings], game.humanId);
+}
+function setupMatchClientMP(game, hostCiv, clientCiv, diff, seed) {
+  game.worldSeed = seed;
+  game.diff = diff;
+  World.gen(seed); // deterministic - reproduces the host's map exactly from the shared seed
+  game.gates = [];
+  game.corpses = [];
+  game.players = [
+    new Player(0, hostCiv, true, diff),
+    new Player(1, clientCiv, true, diff),
+  ];
+  game.ai = [];
+  const hs = game.world.starts[1]; // frame the camera on the client's own start
+  game.cam.x = World.isoX(hs.x, hs.y);
+  game.cam.y = World.isoY(hs.x, hs.y);
+  game.cam.zoom = innerWidth < 700 ? 0.75 : 0.95;
 }
 
 /* ---------------- traders ---------------- */
@@ -617,7 +677,7 @@ function drawCorpse(ctx, c, view, z, game) {
 
 /* ---------------- main loop ---------------- */
 let lastT = 0, fogT = 0, uiT = 0, mmT = 0, panelT = 0, vicT = 0, leashT = 0, auraT = 0,
-    irrT = 0, smokeT = 0, moodT = 0, siegeT2 = 0, poisonT2 = 0;
+    irrT = 0, smokeT = 0, moodT = 0, siegeT2 = 0, poisonT2 = 0, netSyncT = 0;
 
 function loop(now) {
   const game = Game;
@@ -638,6 +698,20 @@ function loop(now) {
 }
 
 function simStep(game, dt) {
+  // multiplayer client: never runs its own sim (the host's snapshots are the
+  // only source of truth for unit/building state) - just keep local-only
+  // cosmetic stuff (fog, HUD, minimap) ticking so the screen doesn't look frozen.
+  if (game.netRole === 'client') {
+    game.time += dt;
+    if ((fogT += dt) > 0.3) { fogT = 0; World.recomputeFog([...game.units, ...game.buildings], game.humanId); }
+    if ((uiT += dt) > 0.25) { uiT = 0; UI.refreshTop(); }
+    if ((panelT += dt) > 0.6) { panelT = 0; if (game.selected.length || game.placing) UI.refreshPanels(true); }
+    if ((mmT += dt) > 0.5) { mmT = 0; UI.renderMinimap(); }
+    if (game.markers.length) game.markers = game.markers.filter(m => game.time - m.t0 < 0.9);
+    game.selected = game.selected.filter(e => !e.dead && e.alive !== false);
+    return;
+  }
+
   game.time += dt;
   game.rebuildGrid();
 
@@ -711,6 +785,9 @@ function simStep(game, dt) {
   if ((panelT += dt) > 0.6) { panelT = 0; if (game.selected.length || game.placing) UI.refreshPanels(true); }
   if ((mmT += dt) > 0.5) { mmT = 0; UI.renderMinimap(); }
   if ((vicT += dt) > 2) { vicT = 0; checkVictory(game); }
+  if (game.netRole === 'host' && Net.isConnected() && (netSyncT += dt) > 0.15) {
+    netSyncT = 0; Net.send(Net.buildSnapshot(game));
+  }
 
   // cleanup
   game.pings = game.pings.filter(p => game.time - p.t < 2);
@@ -734,6 +811,34 @@ window.startGame = function (civKey, diff) {
   Audio2.setMood('peace');
   Game.message(`Welcome, ${CIVS[civKey].name}. Capture neutral towns to grow your empire!`);
   Audio2.say(`Welcome, commander of the ${CIVS[civKey].name}. Capture neutral towns to grow your empire.`);
+  lastT = performance.now();
+  requestAnimationFrame(loop);
+};
+
+window.startMultiplayerHost = function (hostCiv, clientCiv, diff, seed) {
+  Game = makeGame(hostCiv, diff);
+  Game.netRole = 'host';
+  setupMatchHostMP(Game, hostCiv, clientCiv, diff, seed);
+  UI.init(Game);
+  Input.init(Game);
+  Sim.recomputeIrrigation(Game);
+  Audio2.startAmbient();
+  Audio2.setMood('peace');
+  Net.onMessage(msg => { if (msg.cmd) Net.applyRemoteCommand(Game, msg); });
+  Game.message(`Welcome, ${CIVS[hostCiv].name}. A rival commander has joined the battlefield!`);
+  lastT = performance.now();
+  requestAnimationFrame(loop);
+};
+
+window.startMultiplayerClient = function (hostCiv, clientCiv, diff, seed) {
+  Game = makeGame(clientCiv, diff);
+  Game.humanId = 1;
+  Game.netRole = 'client';
+  setupMatchClientMP(Game, hostCiv, clientCiv, diff, seed);
+  UI.init(Game);
+  Input.init(Game);
+  Net.onMessage(msg => { if (msg.t === 'snap') Net.applySnapshot(Game, msg); });
+  Game.message(`Welcome, ${CIVS[clientCiv].name}. Connected to the host's battlefield!`);
   lastT = performance.now();
   requestAnimationFrame(loop);
 };

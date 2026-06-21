@@ -178,6 +178,41 @@ h1.gametitle {
 #loadBtn:active { transform:scale(.97); }
 .soundhint { color:#6e5c3e; font-size:11px; margin-top:-8px; margin-bottom:12px; }
 
+/* mode-select + multiplayer + load-game screens */
+.moderow { display:flex; gap:24px; justify-content:center; margin-top:4vh; flex-wrap:wrap; }
+.modebtn {
+  font-family:'Cinzel',Georgia,serif; width:240px; padding:26px 18px; cursor:pointer;
+  background:linear-gradient(180deg,#3a2c18,#1c140c); color:#ffe9c4; border:2px solid #7a5d2e;
+  border-radius:12px; text-align:center; transition:transform .15s, box-shadow .2s;
+}
+.modebtn h3 { font-size:19px; letter-spacing:.1em; text-transform:uppercase; color:#ffd98a; margin-bottom:6px; }
+.modebtn p { font-size:12px; color:#b8a784; line-height:1.5; }
+.modebtn:hover { transform:translateY(-4px); box-shadow:0 0 32px rgba(184,90,24,.4); border-color:#caa34f; }
+.backbtn {
+  font-family:'Cinzel',Georgia,serif; background:none; border:1px solid #5a4426; color:#a8946d;
+  padding:6px 18px; border-radius:6px; cursor:pointer; font-size:12px; letter-spacing:.1em;
+  text-transform:uppercase; margin-bottom:2vh;
+}
+.backbtn:hover { color:#e8c870; border-color:#7a6030; }
+.mpcode {
+  width:min(520px,86vw); height:64px; margin:10px auto; display:block; resize:none;
+  font-family:monospace; font-size:11px; padding:8px; border-radius:8px; word-break:break-all;
+  background:#15110a; color:#c8b890; border:1.5px solid #5a4426;
+}
+.mpstatus { color:#c98a4a; font-size:13px; margin:8px 0; min-height:18px; }
+.savelist { width:min(560px,90vw); margin:1.5vh auto; max-height:30vh; overflow-y:auto; }
+.saveitem {
+  display:flex; align-items:center; gap:10px; padding:10px 14px; margin-bottom:6px;
+  background:linear-gradient(180deg,#241a0e,#1a130b); border:1px solid #5a4426; border-radius:8px;
+}
+.saveitem .info { flex:1; text-align:left; }
+.saveitem .nm { color:#ffe9b0; font-weight:700; font-size:14px; }
+.saveitem .meta { color:#a8946d; font-size:11px; margin-top:2px; }
+.saveitem button { font-family:'Cinzel',Georgia,serif; font-size:11px; padding:6px 14px; border-radius:6px; cursor:pointer; text-transform:uppercase; }
+.saveitem .loadb { background:linear-gradient(180deg,#8a2418,#591009); color:#ffe7c8; border:1px solid #caa34f; }
+.saveitem .delb { background:none; color:#7a5040; border:1px solid #4a342a; }
+.saveitem .delb:hover { color:#c85a40; border-color:#7a3828; }
+
 /* victory / defeat */
 #endscreen {
   position:fixed; inset:0; z-index:60; display:flex; flex-direction:column; align-items:center;

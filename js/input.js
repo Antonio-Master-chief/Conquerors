@@ -352,10 +352,18 @@ const Input = (() => {
     const p = game.players[game.humanId];
     if (!Sim.canPlace(game, type, bx, by)) { UI.message('Cannot build there', true); return; }
     if (!p.canAfford(B.cost)) { UI.message('Not enough resources', true); game.placing = null; UI.refreshPanels(true); return; }
+    const settlers = game.selected.filter(e => !e.dead && e.kind === 'unit' && e.type === 'settler');
+    if (Net.isClient()) {
+      // host is authoritative for creation + payment - just ask it to place this
+      Net.sendPlace(type, bx, by, settlers.map(s => s.id));
+      Audio2.sfx('build');
+      game.placing = null;
+      UI.refreshPanels(true);
+      return;
+    }
     p.pay(B.cost);
     const b = Sim.placeBuilding(game, game.humanId, type, bx, by, false);
     if (b && B.wallTower && game.placing.keepFlip) b.facingFlip = true;
-    const settlers = game.selected.filter(e => !e.dead && e.kind === 'unit' && e.type === 'settler');
     for (const s of settlers) s.orderBuildQueued(b); // queues if already building (AoE style)
     Audio2.sfx('build');
     game.placing = null;

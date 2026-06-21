@@ -34,13 +34,8 @@ const UI = (() => {
     const saveB = el('button', '', top); saveB.id = 'menuBtn'; saveB.title = 'Save game';
     saveB.textContent = '💾';
     saveB.onclick = () => {
-      if (SaveLoad.save(game)) {
-        saveB.textContent = '✔';
-        game.message('Game saved!');
-        Audio2.sfx('train');
-        setTimeout(() => { saveB.textContent = '💾'; }, 1200);
-      }
       Audio2.sfx('click');
+      openSaveModal(saveB);
     };
     const sb = el('button', '', top); sb.id = 'menuBtn'; sb.textContent = '1×';
     sb.title = 'Game speed';
@@ -75,6 +70,73 @@ const UI = (() => {
     refreshTop(); refreshPanels(true);
   }
   let idleCycle = 0;
+
+  /* ---------------- save-name modal ---------------- */
+  // Minimal inline overlay (matches the .card / #startBtn wood-and-gold look)
+  // asking for a save name, then calling SaveLoad.saveAs(game, name).
+  function openSaveModal(saveB) {
+    if (document.getElementById('saveModal')) return;
+    const p = game.players[game.humanId];
+    const civName = (CIVS[p.civKey] && CIVS[p.civKey].name) || p.civKey;
+    const defaultName = `${civName} · Age ${p.age} · ${new Date().toLocaleDateString()}`;
+
+    const overlay = el('div', '', document.body);
+    overlay.id = 'saveModal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:70;display:flex;align-items:center;'
+      + 'justify-content:center;background:rgba(5,3,2,.72);backdrop-filter:blur(2px);';
+
+    const panel = el('div', 'card', overlay);
+    panel.style.cssText = 'width:min(360px,86vw);padding:16px;box-shadow:0 6px 28px rgba(0,0,0,.7);';
+
+    const title = el('div', 'nm', panel);
+    title.style.cssText = 'font-size:15px;margin-bottom:10px;';
+    title.textContent = 'Save Game';
+
+    const input = el('input', '', panel);
+    input.type = 'text';
+    input.value = defaultName;
+    input.maxLength = 60;
+    input.style.cssText = 'width:100%;padding:7px 9px;font-size:13px;font-family:inherit;'
+      + 'background:#1c130b;color:#ffe9b0;border:1px solid #6b5121;border-radius:6px;outline:none;';
+
+    const row = el('div', '', panel);
+    row.style.cssText = 'display:flex;gap:8px;margin-top:12px;justify-content:flex-end;';
+
+    const cancelB = el('button', 'diffbtn', row);
+    cancelB.textContent = 'Cancel';
+    cancelB.style.cssText = 'font-family:inherit;padding:7px 16px;';
+
+    const okB = el('button', 'diffbtn sel', row);
+    okB.textContent = 'Save';
+    okB.style.cssText = 'font-family:inherit;padding:7px 16px;';
+
+    const close = () => overlay.remove();
+    cancelB.onclick = () => { Audio2.sfx('click'); close(); };
+    overlay.onclick = (ev) => { if (ev.target === overlay) close(); };
+
+    const doSave = () => {
+      const name = input.value.trim() || defaultName;
+      if (SaveLoad.saveAs(game, name)) {
+        close();
+        if (saveB) {
+          saveB.textContent = '✔';
+          setTimeout(() => { saveB.textContent = '💾'; }, 1200);
+        }
+        message(`Saved as "${name}"`);
+        Audio2.sfx('train');
+      } else {
+        message('Save failed', true);
+      }
+    };
+    okB.onclick = () => { Audio2.sfx('click'); doSave(); };
+    input.onkeydown = (ev) => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') doSave();
+      else if (ev.key === 'Escape') { Audio2.sfx('click'); close(); }
+    };
+    input.focus();
+    input.select();
+  }
 
   /* ---------------- top bar ---------------- */
   function refreshTop() {
@@ -414,7 +476,7 @@ const UI = (() => {
         actionBtn(actP, {
           label: u.name.split(' ').pop(), icon: iconForUnit(uk, p.civKey), cost: u.cost,
           enabled: p.canAfford(u.cost), title: `HP ${u.hp} · ATK ${u.atk}${u.range > 1.2 ? ' · ranged' : ''}`,
-          onClick: () => b.enqueue(game, uk),
+          onClick: () => Net.isClient() ? Net.sendTrain(b.id, uk) : b.enqueue(game, uk),
         });
       }
       // storehouse: manually dispatch an ox cart now (otherwise auto-dispatches)

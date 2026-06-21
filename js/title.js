@@ -3,7 +3,9 @@
 
 const Title = (() => {
   const sel = { civ: 'rome', diff: 'normal', map: 'small', res: 'normal', animals: 'normal' };
+  const mp = { civ: 'rome', code: '' };
   let fxRunning = false;
+  let view = 'mode'; // 'mode' | 'sp' | 'load' | 'mpmode' | 'mphost' | 'mpjoin'
 
   function build() {
     const root = document.getElementById('title');
@@ -17,43 +19,45 @@ const Title = (() => {
       sel.res = ({ '0.6': 'low', '1': 'normal', '1.7': 'high' })[saved.res] || sel.res;
       sel.animals = ({ '0.5': 'few', '1': 'normal', '2.2': 'many' })[saved.animals] || sel.animals;
     }
-    root.innerHTML = `
-      <canvas id="titleFx"></canvas>
-      <div id="titleInner">
-        <h1 class="gametitle">CONQUERORS</h1>
-        <div class="subtitle">⚔ Forge · Capture · Conquer ⚔</div>
-        <div class="civrow" id="civrow"></div>
-        <div class="optrow"><label>Enemy AI</label>
-          <button class="optbtn" data-g="diff" data-v="easy">Easy</button>
-          <button class="optbtn sel" data-g="diff" data-v="normal">Normal</button>
-          <button class="optbtn" data-g="diff" data-v="hard">Hard</button>
-        </div>
-        <div class="optrow"><label>Battlefield</label>
-          <button class="optbtn sel" data-g="map" data-v="small">Small</button>
-          <button class="optbtn" data-g="map" data-v="medium">Medium</button>
-          <button class="optbtn" data-g="map" data-v="large">Large</button>
-          <button class="optbtn" data-g="map" data-v="huge">Huge</button>
-        </div>
-        <div class="optrow"><label>Resources</label>
-          <button class="optbtn" data-g="res" data-v="low">Scarce</button>
-          <button class="optbtn sel" data-g="res" data-v="normal">Normal</button>
-          <button class="optbtn" data-g="res" data-v="high">Abundant</button>
-        </div>
-        <div class="optrow"><label>Wildlife</label>
-          <button class="optbtn" data-g="animals" data-v="few">Few</button>
-          <button class="optbtn sel" data-g="animals" data-v="normal">Normal</button>
-          <button class="optbtn" data-g="animals" data-v="many">Many</button>
-        </div>
-        <div class="optrow"><div class="soundhint">⚔ tap anywhere to awaken the war drums ⚔</div></div>
-        <button id="startBtn">⚔ TO WAR ⚔</button>
-        <button id="loadBtn" style="display:none">📂 Continue Save</button>
-      </div>`;
+    root.innerHTML = `<canvas id="titleFx"></canvas><div id="titleInner"></div>`;
+    renderView(saved);
+    warFx();
 
-    const row = document.getElementById('civrow');
+    // music on first interaction (browser autoplay rules)
+    const wake = () => { Audio2.setMood('battle'); Audio2.startMusic(1.0); Audio2.setIntensity(0.9); root.removeEventListener('pointerdown', wake); };
+    root.addEventListener('pointerdown', wake);
+  }
+
+  function setView(v) { view = v; renderView(); }
+
+  function renderView(savedBoot) {
+    const inner = document.getElementById('titleInner');
+    if (view === 'mode') inner.innerHTML = modeHTML();
+    else if (view === 'sp') inner.innerHTML = spHTML();
+    else if (view === 'load') inner.innerHTML = loadHTML();
+    else if (view === 'mpmode') inner.innerHTML = mpModeHTML();
+    else if (view === 'mphost') inner.innerHTML = mpHostHTML();
+    else if (view === 'mpjoin') inner.innerHTML = mpJoinHTML();
+    wireView(savedBoot);
+  }
+
+  /* ---------------- mode select ---------------- */
+  function modeHTML() {
+    return `
+      <h1 class="gametitle">CONQUERORS</h1>
+      <div class="subtitle">⚔ Forge · Capture · Conquer ⚔</div>
+      <div class="moderow">
+        <div class="modebtn" id="goSp"><h3>⚔ Single Player</h3><p>Build your empire and crush the AI on a map of your choosing.</p></div>
+        <div class="modebtn" id="goMp"><h3>🌐 Multiplayer</h3><p>Invite a friend and fight them directly, kingdom vs kingdom.</p></div>
+      </div>`;
+  }
+
+  /* ---------------- civ card row (shared by SP + MP host/join) ---------------- */
+  function buildCivRow(row, selObj) {
     for (const key in CIVS) {
       const c = CIVS[key];
       const card = document.createElement('div');
-      card.className = 'civcard' + (key === sel.civ ? ' sel' : '');
+      card.className = 'civcard' + (key === selObj.civ ? ' sel' : '');
       card.dataset.civ = key;
       card.innerHTML = `<h3>${c.name}</h3><div class="tag">${c.tag}</div>`;
       card.appendChild(Sprites.portrait(key));
@@ -61,14 +65,135 @@ const Title = (() => {
       for (const d of c.desc) { const li = document.createElement('li'); li.textContent = d; ul.appendChild(li); }
       card.appendChild(ul);
       card.onclick = () => {
-        sel.civ = key;
+        selObj.civ = key;
         row.querySelectorAll('.civcard').forEach(x => x.classList.toggle('sel', x.dataset.civ === key));
         Audio2.sfx('click');
       };
       row.appendChild(card);
     }
+  }
 
-    // unified option buttons (difficulty, map, resources, wildlife)
+  /* ---------------- single player ---------------- */
+  function spHTML() {
+    return `
+      <button class="backbtn" id="backBtn">← Back</button>
+      <h1 class="gametitle">CONQUERORS</h1>
+      <div class="civrow" id="civrow"></div>
+      <div class="optrow"><label>Enemy AI</label>
+        <button class="optbtn" data-g="diff" data-v="easy">Easy</button>
+        <button class="optbtn sel" data-g="diff" data-v="normal">Normal</button>
+        <button class="optbtn" data-g="diff" data-v="hard">Hard</button>
+      </div>
+      <div class="optrow"><label>Battlefield</label>
+        <button class="optbtn sel" data-g="map" data-v="small">Small</button>
+        <button class="optbtn" data-g="map" data-v="medium">Medium</button>
+        <button class="optbtn" data-g="map" data-v="large">Large</button>
+        <button class="optbtn" data-g="map" data-v="huge">Huge</button>
+      </div>
+      <div class="optrow"><label>Resources</label>
+        <button class="optbtn" data-g="res" data-v="low">Scarce</button>
+        <button class="optbtn sel" data-g="res" data-v="normal">Normal</button>
+        <button class="optbtn" data-g="res" data-v="high">Abundant</button>
+      </div>
+      <div class="optrow"><label>Wildlife</label>
+        <button class="optbtn" data-g="animals" data-v="few">Few</button>
+        <button class="optbtn sel" data-g="animals" data-v="normal">Normal</button>
+        <button class="optbtn" data-g="animals" data-v="many">Many</button>
+      </div>
+      <div class="optrow"><div class="soundhint">⚔ tap anywhere to awaken the war drums ⚔</div></div>
+      <button id="startBtn">⚔ TO WAR ⚔</button>
+      <button id="loadBtn" style="display:none">📂 Load Game</button>`;
+  }
+
+  /* ---------------- load game list ---------------- */
+  function loadHTML() {
+    const saves = SaveLoad.listSaves();
+    const rows = saves.length ? saves.map(s => `
+      <div class="saveitem" data-name="${encodeURIComponent(s.name)}">
+        <div class="info">
+          <div class="nm">${s.name}</div>
+          <div class="meta">${(CIVS[s.civKey] || {}).name || s.civKey} · Age ${s.age} · ${new Date(s.savedAt).toLocaleString()}</div>
+        </div>
+        <button class="loadb">Load</button>
+        <button class="delb">✕</button>
+      </div>`).join('') : `<div class="mpstatus">No saved games yet.</div>`;
+    return `
+      <button class="backbtn" id="backBtn">← Back</button>
+      <h1 class="gametitle">CONQUERORS</h1>
+      <div class="subtitle">Load Game</div>
+      <div class="savelist">${rows}</div>`;
+  }
+
+  /* ---------------- multiplayer mode select ---------------- */
+  function mpModeHTML() {
+    return `
+      <button class="backbtn" id="backBtn">← Back</button>
+      <h1 class="gametitle">CONQUERORS</h1>
+      <div class="subtitle">Multiplayer</div>
+      <div class="moderow">
+        <div class="modebtn" id="goHost"><h3>Host Game</h3><p>Create an invite code and share it with the friend you want to play.</p></div>
+        <div class="modebtn" id="goJoin"><h3>Join Game</h3><p>Paste the invite code your friend sent you.</p></div>
+      </div>`;
+  }
+
+  /* ---------------- host flow ---------------- */
+  function mpHostHTML() {
+    return `
+      <button class="backbtn" id="backBtn">← Back</button>
+      <h1 class="gametitle">CONQUERORS</h1>
+      <div class="subtitle">Host Game — pick your civilization</div>
+      <div class="civrow" id="civrow"></div>
+      <button id="mkInviteBtn">Create Invite Code</button>
+      <div class="mpstatus" id="mpStatus">Click to generate a code, then send it to your friend.</div>
+      <textarea class="mpcode" id="inviteOut" readonly style="display:none"></textarea>
+      <div id="answerWrap" style="display:none">
+        <div class="optrow"><label>Their reply code</label></div>
+        <textarea class="mpcode" id="answerIn" placeholder="Paste the response code your friend sent back, then click Connect"></textarea>
+        <button id="connectBtn">Connect</button>
+      </div>`;
+  }
+
+  /* ---------------- join flow ---------------- */
+  function mpJoinHTML() {
+    return `
+      <button class="backbtn" id="backBtn">← Back</button>
+      <h1 class="gametitle">CONQUERORS</h1>
+      <div class="subtitle">Join Game — pick your civilization</div>
+      <div class="civrow" id="civrow"></div>
+      <div class="optrow"><label>Invite code</label></div>
+      <textarea class="mpcode" id="offerIn" placeholder="Paste the invite code your friend sent you"></textarea>
+      <button id="joinBtn">Generate Reply Code</button>
+      <div class="mpstatus" id="mpStatus"></div>
+      <textarea class="mpcode" id="answerOut" readonly style="display:none"></textarea>`;
+  }
+
+  /* ---------------- wire up whichever view just rendered ---------------- */
+  function wireView(savedBoot) {
+    const root = document.getElementById('title');
+    const back = document.getElementById('backBtn');
+    if (back) back.onclick = () => { Audio2.sfx('click'); setView(view === 'load' ? 'sp' : view === 'mphost' || view === 'mpjoin' ? 'mpmode' : 'mode'); };
+
+    if (view === 'mode') {
+      document.getElementById('goSp').onclick = () => { Audio2.sfx('click'); setView('sp'); };
+      document.getElementById('goMp').onclick = () => { Audio2.sfx('click'); setView('mpmode'); };
+    } else if (view === 'mpmode') {
+      document.getElementById('goHost').onclick = () => { Audio2.sfx('click'); setView('mphost'); };
+      document.getElementById('goJoin').onclick = () => { Audio2.sfx('click'); setView('mpjoin'); };
+    } else if (view === 'sp') {
+      wireSp(savedBoot);
+    } else if (view === 'load') {
+      wireLoad();
+    } else if (view === 'mphost') {
+      wireMpHost();
+    } else if (view === 'mpjoin') {
+      wireMpJoin();
+    }
+  }
+
+  function wireSp(savedBoot) {
+    const root = document.getElementById('title');
+    const row = document.getElementById('civrow');
+    buildCivRow(row, sel);
     root.querySelectorAll('.optbtn').forEach(b => {
       b.onclick = () => {
         const g = b.dataset.g; sel[g] = b.dataset.v;
@@ -76,21 +201,14 @@ const Title = (() => {
         Audio2.sfx('click');
       };
     });
-    // reflect any carried-over selections in the UI
-    root.querySelectorAll('.civcard').forEach(x => x.classList.toggle('sel', x.dataset.civ === sel.civ));
     ['diff', 'map', 'res', 'animals'].forEach(g =>
       root.querySelectorAll('.optbtn[data-g="' + g + '"]').forEach(b => b.classList.toggle('sel', b.dataset.v === sel[g])));
-    if (saved) { const sh = root.querySelector('.soundhint'); if (sh) sh.textContent = '⚔ Battlefield ready — press TO WAR ⚔'; }
+    if (savedBoot) { const sh = root.querySelector('.soundhint'); if (sh) sh.textContent = '⚔ Battlefield ready — press TO WAR ⚔'; }
 
-    // music on first interaction (browser autoplay rules)
-    const wake = () => { Audio2.setMood('battle'); Audio2.startMusic(1.0); Audio2.setIntensity(0.9); root.removeEventListener('pointerdown', wake); };
-    root.addEventListener('pointerdown', wake);
-
-    // show "Continue Save" button if a save exists
-    if (SaveLoad.hasSave()) {
+    if (SaveLoad.listSaves().length) {
       const lb = document.getElementById('loadBtn');
       lb.style.display = '';
-      lb.onclick = () => { Audio2.sfx('age'); SaveLoad.requestLoad(); };
+      lb.onclick = () => { Audio2.sfx('age'); setView('load'); };
     }
 
     document.getElementById('startBtn').onclick = () => {
@@ -100,20 +218,89 @@ const Title = (() => {
       window.GAME_OPTS = { res, animals };
       Audio2.sfx('age');
       if (mapN !== CFG.MAP) {
-        // a different map size must be set before the world arrays allocate — do a
-        // fresh reload carrying the chosen options; main.js then auto-starts.
         localStorage.setItem('conq_boot', JSON.stringify({ civ: sel.civ, diff: sel.diff, map: sel.map, res, animals }));
         location.reload();
         return;
       }
-      localStorage.removeItem('conq_boot');   // chosen size already loaded — start now
+      localStorage.removeItem('conq_boot');
       Audio2.startMusic(1.0); Audio2.setIntensity(0.75);
       fxRunning = false;
       root.classList.add('hidden');
       window.startGame(sel.civ, sel.diff);
     };
+  }
 
-    warFx();
+  function wireLoad() {
+    document.querySelectorAll('.saveitem').forEach(item => {
+      const name = decodeURIComponent(item.dataset.name);
+      item.querySelector('.loadb').onclick = () => { Audio2.sfx('age'); SaveLoad.requestLoad(name); };
+      item.querySelector('.delb').onclick = () => { Audio2.sfx('click'); SaveLoad.deleteSaveNamed(name); setView('load'); };
+    });
+  }
+
+  /* ---------------- multiplayer connection plumbing ---------------- */
+  function startTheMatch(hostCiv, clientCiv, diff, seed, asHost) {
+    const root = document.getElementById('title');
+    Audio2.startMusic(1.0); Audio2.setIntensity(0.75);
+    fxRunning = false;
+    root.classList.add('hidden');
+    if (asHost) window.startMultiplayerHost(hostCiv, clientCiv, diff, seed);
+    else window.startMultiplayerClient(hostCiv, clientCiv, diff, seed);
+  }
+
+  function wireMpHost() {
+    buildCivRow(document.getElementById('civrow'), mp);
+    const status = document.getElementById('mpStatus');
+    document.getElementById('mkInviteBtn').onclick = async () => {
+      Audio2.sfx('click');
+      status.textContent = 'Generating invite code…';
+      try {
+        const code = await Net.hostCreateOffer();
+        document.getElementById('inviteOut').style.display = '';
+        document.getElementById('inviteOut').value = code;
+        document.getElementById('answerWrap').style.display = '';
+        status.textContent = 'Send this code to your friend, then paste their reply below.';
+        Net.onOpen(() => Net.send({ t: 'hello', civKey: mp.civ }));
+        Net.onMessage(msg => {
+          if (msg.t !== 'hello') return;
+          status.textContent = 'Connected! Starting the match…';
+          const seed = (Date.now() % 100000) | 0;
+          startTheMatch(mp.civ, msg.civKey, sel.diff, seed, true);
+        });
+      } catch (e) { status.textContent = 'Could not create invite: ' + e.message; }
+    };
+    document.getElementById('connectBtn').onclick = async () => {
+      Audio2.sfx('click');
+      const code = document.getElementById('answerIn').value.trim();
+      if (!code) { status.textContent = 'Paste your friend\'s reply code first.'; return; }
+      try {
+        status.textContent = 'Connecting…';
+        await Net.hostAcceptAnswer(code);
+      } catch (e) { status.textContent = 'Connection failed: ' + e.message; }
+    };
+  }
+
+  function wireMpJoin() {
+    buildCivRow(document.getElementById('civrow'), mp);
+    const status = document.getElementById('mpStatus');
+    document.getElementById('joinBtn').onclick = async () => {
+      Audio2.sfx('click');
+      const code = document.getElementById('offerIn').value.trim();
+      if (!code) { status.textContent = 'Paste the invite code your friend sent you first.'; return; }
+      try {
+        status.textContent = 'Generating reply code…';
+        const answer = await Net.joinWithOffer(code);
+        document.getElementById('answerOut').style.display = '';
+        document.getElementById('answerOut').value = answer;
+        status.textContent = 'Send this reply code back to your friend, then wait…';
+        Net.onOpen(() => Net.send({ t: 'hello', civKey: mp.civ }));
+        Net.onMessage(msg => {
+          if (msg.t !== 'init') return;
+          status.textContent = 'Connected! Starting the match…';
+          startTheMatch(msg.hostCiv, msg.clientCiv, msg.diff, msg.seed, false);
+        });
+      } catch (e) { status.textContent = 'Could not join: ' + e.message; }
+    };
   }
 
   /* war backdrop: a marching silhouette army under drifting embers & a fire glow */
