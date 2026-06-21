@@ -194,11 +194,36 @@ h1.gametitle {
   text-transform:uppercase; margin-bottom:2vh;
 }
 .backbtn:hover { color:#e8c870; border-color:#7a6030; }
+.mpstep { width:min(560px,90vw); margin:1.6vh auto; text-align:left; }
+.mpstep .steplabel {
+  font-family:'Cinzel',Georgia,serif; color:#c98a4a; font-size:12px; letter-spacing:.14em;
+  text-transform:uppercase; margin-bottom:6px;
+}
+.mpstep .stephint { color:#a8946d; font-size:12px; margin-bottom:8px; line-height:1.5; }
+.mpcoderow { display:flex; gap:8px; align-items:stretch; }
 .mpcode {
-  width:min(520px,86vw); height:64px; margin:10px auto; display:block; resize:none;
+  flex:1; height:60px; margin:0; resize:none;
   font-family:monospace; font-size:11px; padding:8px; border-radius:8px; word-break:break-all;
   background:#15110a; color:#c8b890; border:1.5px solid #5a4426;
 }
+.mpcode:focus { outline:none; border-color:#caa34f; }
+.copybtn {
+  font-family:'Cinzel',Georgia,serif; width:64px; flex-shrink:0; cursor:pointer;
+  background:linear-gradient(180deg,#3a3020,#24201a); color:#c8a85a; border:1.5px solid #7a6030;
+  border-radius:8px; font-size:11px; letter-spacing:.05em; text-transform:uppercase;
+  transition:transform .1s, box-shadow .2s;
+}
+.copybtn:hover { box-shadow:0 0 14px rgba(140,90,20,.4); color:#e8c870; }
+.copybtn:active { transform:scale(.94); }
+.mpbtn {
+  font-family:'Cinzel',Georgia,serif; display:block; margin:14px auto; cursor:pointer;
+  padding:12px 40px; font-size:14px; font-weight:700; letter-spacing:.15em; text-transform:uppercase;
+  background:linear-gradient(180deg,#a82c1e,#6e1410); color:#ffe9c4; border:2px solid #e8b552;
+  border-radius:9px; box-shadow:0 0 22px rgba(184,40,24,.4), inset 0 1px 0 rgba(255,225,180,.25);
+  transition:transform .1s, box-shadow .2s;
+}
+.mpbtn:hover { box-shadow:0 0 32px rgba(214,60,36,.55), inset 0 1px 0 rgba(255,225,180,.35); }
+.mpbtn:active { transform:scale(.97); }
 .mpstatus { color:#c98a4a; font-size:13px; margin:8px 0; min-height:18px; }
 .savelist { width:min(560px,90vw); margin:1.5vh auto; max-height:30vh; overflow-y:auto; }
 .saveitem {

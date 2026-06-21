@@ -143,13 +143,20 @@ const Title = (() => {
       <h1 class="gametitle">CONQUERORS</h1>
       <div class="subtitle">Host Game — pick your civilization</div>
       <div class="civrow" id="civrow"></div>
-      <button id="mkInviteBtn">Create Invite Code</button>
+      <button class="mpbtn" id="mkInviteBtn">⚔ Create Invite Code ⚔</button>
       <div class="mpstatus" id="mpStatus">Click to generate a code, then send it to your friend.</div>
-      <textarea class="mpcode" id="inviteOut" readonly style="display:none"></textarea>
-      <div id="answerWrap" style="display:none">
-        <div class="optrow"><label>Their reply code</label></div>
-        <textarea class="mpcode" id="answerIn" placeholder="Paste the response code your friend sent back, then click Connect"></textarea>
-        <button id="connectBtn">Connect</button>
+      <div class="mpstep" id="inviteStep" style="display:none">
+        <div class="steplabel">Step 1 · Send this code to your friend</div>
+        <div class="mpcoderow">
+          <textarea class="mpcode" id="inviteOut" readonly></textarea>
+          <button class="copybtn" id="copyInviteBtn">Copy</button>
+        </div>
+      </div>
+      <div class="mpstep" id="answerWrap" style="display:none">
+        <div class="steplabel">Step 2 · Paste their reply code here</div>
+        <div class="stephint">They'll send you back a reply code once they've pasted your invite — paste it below.</div>
+        <textarea class="mpcode" id="answerIn" placeholder="Paste the reply code here…" style="width:100%; height:60px;"></textarea>
+        <button class="mpbtn" id="connectBtn">Connect</button>
       </div>`;
   }
 
@@ -160,11 +167,19 @@ const Title = (() => {
       <h1 class="gametitle">CONQUERORS</h1>
       <div class="subtitle">Join Game — pick your civilization</div>
       <div class="civrow" id="civrow"></div>
-      <div class="optrow"><label>Invite code</label></div>
-      <textarea class="mpcode" id="offerIn" placeholder="Paste the invite code your friend sent you"></textarea>
-      <button id="joinBtn">Generate Reply Code</button>
+      <div class="mpstep">
+        <div class="steplabel">Step 1 · Paste the invite code your friend sent you</div>
+        <textarea class="mpcode" id="offerIn" placeholder="Paste the invite code here…" style="width:100%; height:60px;"></textarea>
+      </div>
+      <button class="mpbtn" id="joinBtn">⚔ Generate Reply Code ⚔</button>
       <div class="mpstatus" id="mpStatus"></div>
-      <textarea class="mpcode" id="answerOut" readonly style="display:none"></textarea>`;
+      <div class="mpstep" id="answerStep" style="display:none">
+        <div class="steplabel">Step 2 · Send this reply code back to your friend</div>
+        <div class="mpcoderow">
+          <textarea class="mpcode" id="answerOut" readonly></textarea>
+          <button class="copybtn" id="copyAnswerBtn">Copy</button>
+        </div>
+      </div>`;
   }
 
   /* ---------------- wire up whichever view just rendered ---------------- */
@@ -248,16 +263,30 @@ const Title = (() => {
     else window.startMultiplayerClient(hostCiv, clientCiv, diff, seed);
   }
 
+  function wireCopyBtn(btnId, sourceId) {
+    const btn = document.getElementById(btnId);
+    btn.onclick = () => {
+      const ta = document.getElementById(sourceId);
+      ta.select();
+      navigator.clipboard.writeText(ta.value).then(() => {
+        Audio2.sfx('click');
+        const old = btn.textContent; btn.textContent = '✔ Copied';
+        setTimeout(() => { btn.textContent = old; }, 1200);
+      }).catch(() => { /* clipboard permission denied - text is still select()ed for manual copy */ });
+    };
+  }
+
   function wireMpHost() {
     buildCivRow(document.getElementById('civrow'), mp);
     const status = document.getElementById('mpStatus');
+    wireCopyBtn('copyInviteBtn', 'inviteOut');
     document.getElementById('mkInviteBtn').onclick = async () => {
       Audio2.sfx('click');
       status.textContent = 'Generating invite code…';
       try {
         const code = await Net.hostCreateOffer();
-        document.getElementById('inviteOut').style.display = '';
         document.getElementById('inviteOut').value = code;
+        document.getElementById('inviteStep').style.display = '';
         document.getElementById('answerWrap').style.display = '';
         status.textContent = 'Send this code to your friend, then paste their reply below.';
         Net.onOpen(() => Net.send({ t: 'hello', civKey: mp.civ }));
@@ -283,6 +312,7 @@ const Title = (() => {
   function wireMpJoin() {
     buildCivRow(document.getElementById('civrow'), mp);
     const status = document.getElementById('mpStatus');
+    wireCopyBtn('copyAnswerBtn', 'answerOut');
     document.getElementById('joinBtn').onclick = async () => {
       Audio2.sfx('click');
       const code = document.getElementById('offerIn').value.trim();
@@ -290,8 +320,8 @@ const Title = (() => {
       try {
         status.textContent = 'Generating reply code…';
         const answer = await Net.joinWithOffer(code);
-        document.getElementById('answerOut').style.display = '';
         document.getElementById('answerOut').value = answer;
+        document.getElementById('answerStep').style.display = '';
         status.textContent = 'Send this reply code back to your friend, then wait…';
         Net.onOpen(() => Net.send({ t: 'hello', civKey: mp.civ }));
         Net.onMessage(msg => {
