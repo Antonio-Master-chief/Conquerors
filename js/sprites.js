@@ -370,30 +370,34 @@ const Sprites = (() => {
   // Civilization-specific visual overrides — applied over UNIT_VIS when civ matches
   const CIV_UNIT_VIS = {
     rome: {
+      // Red leads every tunic; royal purple shows up only as the sash/trim accent painted
+      // below (civ === 'rome' block) — never as a tunic base, so it stays a touch, not a 50/50 split.
       settler:  { tunic: '#9c2a28', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
-      spearman: { tunic: '#9aa2ad', helmet: 'galea', weapon: 'spear',   shield: 'round' },
+      spearman: { tunic: '#a3302c', helmet: 'galea', weapon: 'spear',   shield: 'round' },
       archer:   { tunic: '#9c2a28', helmet: 'cap',   weapon: 'bow',     shield: 'none' },
-      crossbow: { tunic: '#9aa2ad', helmet: 'metal', weapon: 'crossbow',shield: 'none' },
+      crossbow: { tunic: '#a3302c', helmet: 'metal', weapon: 'crossbow',shield: 'none' },
       longbow:  { tunic: '#7a1f1e', helmet: 'hood',  weapon: 'bow',     shield: 'none' },
-      trader:   { tunic: '#9c6b4a', helmet: 'cap',   weapon: 'staff',   shield: 'none', pack: true },
+      trader:   { tunic: '#9c4030', helmet: 'cap',   weapon: 'staff',   shield: 'none', pack: true },
     },
     china: {
-      settler:  { tunic: '#3a3868', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
-      spearman: { tunic: '#1e4272', helmet: 'cap',   weapon: 'spear',   shield: 'round' },
-      archer:   { tunic: '#2a2858', helmet: 'cap',   weapon: 'bow',     shield: 'none' },
-      crossbow: { tunic: '#223050', helmet: 'cone',  weapon: 'crossbow',shield: 'none' },
-      longbow:  { tunic: '#162a40', helmet: 'cone',  weapon: 'bow',     shield: 'none' },
-      sword:    { tunic: '#2a204e', helmet: 'metal', weapon: 'sword',   shield: 'kite' },
-      trader:   { tunic: '#48426e', helmet: 'cap',   weapon: 'staff',   shield: 'none', pack: true },
+      // Jade green + light blue replace the old indigo/navy family — no third hue introduced.
+      settler:  { tunic: '#3d7a5e', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
+      spearman: { tunic: '#3f7fa0', helmet: 'cap',   weapon: 'spear',   shield: 'round' },
+      archer:   { tunic: '#2e6048', helmet: 'cap',   weapon: 'bow',     shield: 'none' },
+      crossbow: { tunic: '#336d8a', helmet: 'cone',  weapon: 'crossbow',shield: 'none' },
+      longbow:  { tunic: '#28543f', helmet: 'cone',  weapon: 'bow',     shield: 'none' },
+      sword:    { tunic: '#2e6048', helmet: 'metal', weapon: 'sword',   shield: 'kite' },
+      trader:   { tunic: '#4a8c70', helmet: 'cap',   weapon: 'staff',   shield: 'none', pack: true },
     },
     india: {
-      settler:  { tunic: '#d18a2e', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
-      spearman: { tunic: '#7a3c16', helmet: 'metal', weapon: 'spear',   shield: 'round' },
-      archer:   { tunic: '#d18a2e', helmet: 'cap',   weapon: 'bow',     shield: 'none' },
-      crossbow: { tunic: '#5a2e10', helmet: 'metal', weapon: 'crossbow',shield: 'none' },
-      longbow:  { tunic: '#4a2410', helmet: 'hood',  weapon: 'bow',     shield: 'none' },
-      sword:    { tunic: '#b8782a', helmet: 'cap',   weapon: 'sword',   shield: 'kite' },
-      trader:   { tunic: '#c47a2e', helmet: 'turban',weapon: 'staff',   shield: 'none', pack: true },
+      // Green + yellow replace the old saffron/gold/bronze family — no third hue introduced.
+      settler:  { tunic: '#5a8a3c', helmet: 'cap',   weapon: 'axe',     shield: 'none' },
+      spearman: { tunic: '#3f6b28', helmet: 'metal', weapon: 'spear',   shield: 'round' },
+      archer:   { tunic: '#d4b82e', helmet: 'cap',   weapon: 'bow',     shield: 'none' },
+      crossbow: { tunic: '#3f6b28', helmet: 'metal', weapon: 'crossbow',shield: 'none' },
+      longbow:  { tunic: '#2e5020', helmet: 'hood',  weapon: 'bow',     shield: 'none' },
+      sword:    { tunic: '#bca22e', helmet: 'cap',   weapon: 'sword',   shield: 'kite' },
+      trader:   { tunic: '#8aa83e', helmet: 'turban',weapon: 'staff',   shield: 'none', pack: true },
     },
   };
 
@@ -538,14 +542,17 @@ const Sprites = (() => {
         g.strokeStyle = '#b8a784'; g.beginPath(); g.moveTo(hx - 5, hy - 4); g.quadraticCurveTo(hx, hy - 1, hx + 5, hy - 4); g.stroke(); break;
     }
     // civ-specific helmet accents
+    if (civ === 'rome') { // royal-purple sash accent on torso — Rome's accent touch, tunic stays red
+      g.fillStyle = '#6f3f9e'; g.fillRect(hipX - tw + 1, hipY - 4, tw * 2 - 2, 2);
+    }
     if (civ === 'china' && v.helmet === 'cone') {
-      g.fillStyle = '#c82828'; // lacquer-red band
+      g.fillStyle = '#3f7fa0'; // lacquer light-blue band
       g.fillRect(hx - 7, hy - 3.5, 14, 2.2);
-      g.strokeStyle = '#8a1a1a'; g.lineWidth = 0.8;
+      g.strokeStyle = '#28543f'; g.lineWidth = 0.8;
       g.beginPath(); g.moveTo(hx - 7, hy - 3.5); g.lineTo(hx + 7, hy - 3.5); g.stroke();
     }
-    if (civ === 'china') { // red sash accent on torso
-      g.fillStyle = '#c82828'; g.fillRect(hipX - tw + 1, hipY - 4, tw * 2 - 2, 2);
+    if (civ === 'china') { // light-blue sash accent on torso
+      g.fillStyle = '#3f7fa0'; g.fillRect(hipX - tw + 1, hipY - 4, tw * 2 - 2, 2);
     }
     if (civ === 'india' && v.helmet === 'turban') {
       g.fillStyle = '#e8c84a'; g.beginPath(); g.arc(hx, hy - 6.5, 2, 0, 7); g.fill(); // gem
@@ -555,8 +562,8 @@ const Sprites = (() => {
       g.strokeStyle = '#e8c84a'; g.lineWidth = 1.1; // gold trim on helmet
       g.beginPath(); g.arc(hx, hy - 1.5, 5.7, Math.PI, 0); g.stroke();
     }
-    if (civ === 'india') { // saffron sash
-      g.fillStyle = '#e87a1a'; g.fillRect(hipX - tw + 1, hipY - 4, tw * 2 - 2, 2);
+    if (civ === 'india') { // yellow sash accent on torso
+      g.fillStyle = '#e8c83c'; g.fillRect(hipX - tw + 1, hipY - 4, tw * 2 - 2, 2);
     }
 
     // ----- weapon & arms -----
@@ -718,15 +725,16 @@ const Sprites = (() => {
     g.fillStyle = skin; g.beginPath(); g.arc(x, y - 5, 4.6, 0, 7); g.fill();
     // scout headwear is civ-flavored (campaign hat / topknot wrap / turban); other riders keep the plain cap
     if (mount === 'scout' && civ === 'india') {
-      g.fillStyle = '#e87a1a'; g.beginPath(); g.ellipse(x, y - 6.5, 4.6, 3.4, 0, 0, 7); g.fill(); // saffron turban
-      g.strokeStyle = '#a8541a'; g.lineWidth = .8;
+      g.fillStyle = '#5a8a3c'; g.beginPath(); g.ellipse(x, y - 6.5, 4.6, 3.4, 0, 0, 7); g.fill(); // green turban
+      g.strokeStyle = '#3f6b28'; g.lineWidth = .8;
       g.beginPath(); g.moveTo(x - 4, y - 7.2); g.quadraticCurveTo(x, y - 5, x + 4, y - 7.2); g.stroke();
     } else if (mount === 'scout' && civ === 'china') {
       g.fillStyle = '#241a10'; g.beginPath(); g.arc(x, y - 6.5, 4.2, Math.PI, 0); g.fill(); // dark topknot, no helmet
-      g.fillStyle = '#c82828'; g.fillRect(x - 4.2, y - 5.6, 8.4, 1.4); // red headband
+      g.fillStyle = '#3f7fa0'; g.fillRect(x - 4.2, y - 5.6, 8.4, 1.4); // light-blue headband
     } else if (mount === 'scout' && civ === 'rome') {
       g.fillStyle = '#cdb279'; g.beginPath(); g.ellipse(x, y - 7.4, 6, 2.4, 0, 0, 7); g.fill(); // straw travel hat
       g.beginPath(); g.arc(x, y - 8, 3.6, Math.PI, 0); g.fill();
+      g.fillStyle = '#6f3f9e'; g.fillRect(x - 4.2, y - 6.6, 8.4, 1.2); // royal-purple hatband accent
     } else {
       g.fillStyle = '#6e5638'; g.beginPath(); g.arc(x, y - 6.5, 4.8, Math.PI, 0); g.fill();
     }
@@ -970,7 +978,7 @@ const Sprites = (() => {
       // team caparison + mahout
       g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
       g.beginPath(); g.roundRect(36, 26, 26, 14, 3); g.fill(); g.stroke();
-      g.fillStyle = '#e87a1a'; g.fillRect(36, 26, 26, 2); // saffron band — Indian war elephant
+      g.fillStyle = '#e8c83c'; g.fillRect(36, 26, 26, 2); // yellow band — Indian war elephant
       g.fillStyle = '#e7cf8e'; g.fillRect(36, 38, 26, 2.4);
       drawRiderTorso(g, 49, 12, colorIdx, civ, 'none', 0);
       return { cv: c, ax: 50, ay: 76 };
@@ -979,8 +987,8 @@ const Sprites = (() => {
     if (UNITS[type] && UNITS[type].naval) {
       const tc2 = teamCols(colorIdx);
       // civ-flavored trim: a thin hull stripe + sail edge binding, layered over the team-color sail
-      const CIV_SHIP = { rome: '#9c2a28', china: '#c82828', india: '#e87a1a' };
-      const CIV_ACCENT2 = { china: '#e8c84a', india: '#2ab8d8' }; // gold (china) / blue (india) masthead touch
+      const CIV_SHIP = { rome: '#9c2a28', china: '#3d7a5e', india: '#5a8a3c' };
+      const CIV_ACCENT2 = { rome: '#6f3f9e', china: '#6fb8d6', india: '#e8c83c' }; // purple (rome) / light-blue (china) / yellow (india) masthead touch
       const civTrim = CIV_SHIP[civ] || '#6e583a';
       const WL = 56; // waterline y
       function hull(len, ht, col, colD) {
@@ -1018,7 +1026,7 @@ const Sprites = (() => {
         g.beginPath(); g.moveTo(mx + wid / 2, WL - hgt - 2); g.lineTo(mx + wid / 2 - 2, WL - 12); g.stroke();
         g.fillStyle = tc2.dark; g.beginPath();
         g.moveTo(mx, WL - 4 - hgt); g.lineTo(mx + 10, WL - 2 - hgt); g.lineTo(mx, WL - hgt); g.closePath(); g.fill();
-        if (CIV_ACCENT2[civ]) { g.fillStyle = CIV_ACCENT2[civ]; // masthead accent dot: gold (china), blue (india)
+        if (CIV_ACCENT2[civ]) { g.fillStyle = CIV_ACCENT2[civ]; // masthead accent dot: purple (rome), light-blue (china), yellow (india)
           g.beginPath(); g.arc(mx, WL - 6 - hgt, 1.6, 0, 7); g.fill(); }
       }
       function oars(n, y0, ph) {
@@ -1302,13 +1310,13 @@ const Sprites = (() => {
         g.beginPath(); g.moveTo(cx + 7, 44); g.quadraticCurveTo(cx + 10, 52, cx + 8, 58); g.stroke();
         g.fillStyle = '#1d1812'; g.fillRect(cx - 6.5, 31, 2.2, 2.6); g.fillRect(cx + 4.3, 31, 2.2, 2.6);
         g.fillStyle = tc.main; g.fillRect(cx - 9, 24, 18, 4.5); // headdress band
-        g.fillStyle = '#e87a1a'; g.fillRect(cx - 9, 24, 18, 1.6); // saffron edge — Indian war elephant
+        g.fillStyle = '#e8c83c'; g.fillRect(cx - 9, 24, 18, 1.6); // yellow edge — Indian war elephant
       } else {
         g.strokeStyle = '#6b6660'; g.lineWidth = 2.4; // tail
         g.beginPath(); g.moveTo(cx, 60); g.quadraticCurveTo(cx + 2, 68, cx, 74); g.stroke();
         g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
         g.beginPath(); g.roundRect(cx - 13, 30, 26, 16, 3); g.fill(); g.stroke(); // caparison
-        g.fillStyle = '#e87a1a'; g.fillRect(cx - 13, 30, 26, 1.8); // saffron band
+        g.fillStyle = '#e8c83c'; g.fillRect(cx - 13, 30, 26, 1.8); // yellow band — Indian war elephant
         g.fillStyle = '#e7cf8e'; g.fillRect(cx - 13, 43, 26, 2.4);
       }
       drawRiderTorso(g, cx, 10, colorIdx, civ, 'none', 0);
@@ -1336,8 +1344,8 @@ const Sprites = (() => {
     }
     /* ---- ships bow-on / stern-on ---- */
     const WL = 56;
-    const CIV_SHIP = { rome: '#9c2a28', china: '#c82828', india: '#e87a1a' };
-    const CIV_ACCENT2 = { china: '#e8c84a', india: '#2ab8d8' }; // gold (china) / blue (india) masthead touch
+    const CIV_SHIP = { rome: '#9c2a28', china: '#3d7a5e', india: '#5a8a3c' };
+    const CIV_ACCENT2 = { rome: '#6f3f9e', china: '#6fb8d6', india: '#e8c83c' }; // purple (rome) / light-blue (china) / yellow (india) masthead touch
     const civTrim = CIV_SHIP[civ] || '#6e583a';
     function hullFB(hw, ht, col, colD) {
       g.fillStyle = 'rgba(8,20,40,.35)';
@@ -1492,9 +1500,13 @@ const Sprites = (() => {
     g.moveTo(cx, cy + hh); g.lineTo(cx, cy + hh - wallH); g.stroke();
   }
   const CIV_PAL = {
-    rome:  { wallL: '#cfc7b4', wallR: '#a89f8a', top: '#e3dccb', roof: '#b3543b', roofD: '#8a3f2c' },
-    china: { wallL: '#9a3a2e', wallR: '#6e2820', top: '#b07040', roof: '#2a3a2e', roofD: '#1a2820' },
-    india: { wallL: '#d4aa78', wallR: '#b08858', top: '#e8c898', roof: '#c05838', roofD: '#8a3e28' },
+    // Rome: red leads (walls + both roof slopes stay red-family); royal purple lives only in `accent`
+    // (banners, sashes, trim bands) so it reads as a touch, never competing with red for area.
+    rome:  { wallL: '#cfc7b4', wallR: '#a89f8a', top: '#e3dccb', roof: '#a8302a', roofD: '#7a2420', accent: '#6f3f9e' },
+    // China: jade green + light blue replace the old indigo/maroon scheme.
+    china: { wallL: '#3d7a5e', wallR: '#28543f', top: '#6fa98c', roof: '#6fb8d6', roofD: '#3f7fa0', accent: '#bfe6f2' },
+    // India: green + yellow replace the old saffron/gold scheme.
+    india: { wallL: '#5a8a3c', wallR: '#3f6b28', top: '#7fae54', roof: '#e8c83c', roofD: '#b89a26', accent: '#f2e07a' },
     none:  { wallL: '#9a948a', wallR: '#736e64', top: '#b5ad9c', roof: '#6b6557', roofD: '#4e4a40' },
   };
   function flag(g, x, y, colorIdx) {
@@ -1800,7 +1812,7 @@ const Sprites = (() => {
       g.fillStyle = 'rgba(0,0,0,.18)'; g.beginPath();
       g.moveTo(cx, cy - hh); g.lineTo(cx + hw, cy); g.lineTo(cx, cy + hh); g.lineTo(cx - hw, cy); g.closePath(); g.fill();
       // back-corner posts — civ-tinted
-      const postCol = style === 'china' ? '#7a2018' : style === 'india' ? '#8a6a42' : '#5d4426';
+      const postCol = style === 'china' ? '#2e6048' : style === 'india' ? '#3f6b28' : '#5d4426';
       g.strokeStyle = postCol; g.lineWidth = 3.4;
       for (const [px2, py2] of [[cx - hw + 4, cy - 1], [cx, cy - hh + 1], [cx + hw - 4, cy - 1], [cx, cy + hh - 1]])
         { g.beginPath(); g.moveTo(px2, py2); g.lineTo(px2, py2 - wallH2); g.stroke(); }
@@ -1809,8 +1821,8 @@ const Sprites = (() => {
       g.fillRect(cx - 12, cy - 12, 10, 10); g.strokeRect(cx - 12, cy - 12, 10, 10);
       g.fillRect(cx - 1, cy - 9, 9, 8); g.strokeRect(cx - 1, cy - 9, 9, 8);
       g.strokeStyle = 'rgba(60,42,22,.5)'; g.beginPath(); g.moveTo(cx - 7, cy - 12); g.lineTo(cx - 7, cy - 2); g.stroke();
-      const sackA = style === 'china' ? '#c84a2a' : style === 'india' ? '#c88a3a' : '#c8a24a';
-      const sackB = style === 'china' ? '#a83a20' : style === 'india' ? '#a86e28' : '#b3895a';
+      const sackA = style === 'china' ? '#6fb8d6' : style === 'india' ? '#e8c83c' : '#c8a24a';
+      const sackB = style === 'china' ? '#3f7fa0' : style === 'india' ? '#b89a26' : '#b3895a';
       for (const [bx2, by2, col] of [[cx + 9, cy + 2, sackA], [cx + 13, cy + 4, sackB]]) {
         g.fillStyle = col; g.beginPath(); g.ellipse(bx2, by2, 4, 5.5, 0, 0, 7); g.fill();
         g.strokeStyle = '#3a2a16'; g.lineWidth = 1; g.stroke();
@@ -1820,8 +1832,8 @@ const Sprites = (() => {
       g.strokeStyle = '#3a2a16'; g.stroke();
       g.strokeStyle = '#9a7b54'; g.beginPath(); g.ellipse(cx - 13, cy + 4, 4, 2, 0, 0, 7); g.stroke();
       // low hip roof — civ-specific color
-      const rfM = style === 'china' ? '#7a2018' : style === 'india' ? '#b84828' : '#8a5a3a';
-      const rfD = style === 'china' ? '#5a1412' : style === 'india' ? '#8a3820' : '#6e4630';
+      const rfM = style === 'china' ? '#6fb8d6' : style === 'india' ? '#e8c83c' : '#8a5a3a';
+      const rfD = style === 'china' ? '#3f7fa0' : style === 'india' ? '#b89a26' : '#6e4630';
       g.fillStyle = rfM; g.beginPath();
       g.moveTo(cx - hw - 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6);
       g.lineTo(cx + hw + 3, cy - wallH2); g.lineTo(cx, cy + hh - wallH2 + 2); g.closePath(); g.fill();
@@ -1831,17 +1843,17 @@ const Sprites = (() => {
       g.beginPath(); g.moveTo(cx - hw - 3, cy - wallH2); g.lineTo(cx, cy - hh - wallH2 - 6); g.lineTo(cx + hw + 3, cy - wallH2); g.stroke();
       // civ accents
       if (style === 'china') {
-        // red lacquer post-top caps only — simple and clean
+        // light-blue lacquer post-top caps only — simple and clean
         for (const [px2, py2] of [[cx - hw + 4, cy - 1], [cx, cy - hh + 1], [cx + hw - 4, cy - 1], [cx, cy + hh - 1]]) {
-          g.fillStyle = '#9a3a2e'; g.fillRect(px2 - 3, py2 - wallH2 - 4, 6, 4);
+          g.fillStyle = '#5ba0c4'; g.fillRect(px2 - 3, py2 - wallH2 - 4, 6, 4);
         }
       } else if (style === 'india') {
         // carved lotus arch over goods area
         g.strokeStyle = '#c9a04a'; g.lineWidth = 1.2;
         g.beginPath(); g.moveTo(cx - 10, cy - 5); g.lineTo(cx - 10, cy - 12);
         g.quadraticCurveTo(cx, cy - 18, cx + 10, cy - 12); g.lineTo(cx + 10, cy - 5); g.stroke();
-        // saffron cloth drape hanging from ridge
-        g.fillStyle = 'rgba(232,122,26,.3)';
+        // yellow-green cloth drape hanging from ridge
+        g.fillStyle = 'rgba(232,200,60,.3)';
         g.beginPath(); g.moveTo(cx - hw, cy - wallH2 + 1); g.lineTo(cx, cy - hh - wallH2 + 2);
         g.lineTo(cx, cy - hh - wallH2 + 7); g.lineTo(cx - hw, cy - wallH2 + 6); g.closePath(); g.fill();
       }
@@ -1919,7 +1931,7 @@ const Sprites = (() => {
       g.moveTo(cx - hw, cy - 5); g.lineTo(cx, cy - hh - 5); g.lineTo(cx + hw, cy - 5);
       g.lineTo(cx, cy + hh - 5); g.closePath(); g.stroke();
       // two sparring dummies with padded bodies — civ-tinted padding
-      const padCol = style === 'china' ? '#9a3a2e' : style === 'india' ? '#c8983a' : '#9a3b30';
+      const padCol = style === 'china' ? '#3f7fa0' : style === 'india' ? '#7fae54' : '#9a3b30';
       for (const [dx2, dy2] of [[cx - 12, cy - 2], [cx + 14, cy + 5]]) {
         g.strokeStyle = '#6e5638'; g.lineWidth = 3;
         g.beginPath(); g.moveTo(dx2, dy2); g.lineTo(dx2, dy2 - 17); g.stroke();
@@ -1950,8 +1962,8 @@ const Sprites = (() => {
       isoBox(g, cx, cy, s, wallH2, p.top, p.wallL, p.wallR);
       // roof — color varies by civ
       const roofY2 = cy - wallH2;
-      const stbRM = style === 'china' ? '#7a2018' : style === 'india' ? '#b84828' : '#c8a04a';
-      const stbRD = style === 'china' ? '#5a1412' : style === 'india' ? '#8a3820' : '#a07c34';
+      const stbRM = style === 'china' ? '#6fb8d6' : style === 'india' ? '#e8c83c' : '#c8a04a';
+      const stbRD = style === 'china' ? '#3f7fa0' : style === 'india' ? '#b89a26' : '#a07c34';
       g.fillStyle = stbRM;
       g.beginPath(); g.moveTo(cx - hw, roofY2); g.lineTo(cx, roofY2 - hh - 10); g.lineTo(cx + hw, roofY2); g.lineTo(cx, roofY2 + hh); g.closePath(); g.fill();
       g.fillStyle = stbRD;
@@ -1961,7 +1973,7 @@ const Sprites = (() => {
         g.beginPath(); g.moveTo(cx - hw * t2, roofY2 + hh * t2 - hh); g.lineTo(cx, roofY2 + hh - hh * t2); g.stroke();
         g.beginPath(); g.moveTo(cx + hw * t2, roofY2 + hh * t2 - hh); g.lineTo(cx, roofY2 + hh - hh * t2); g.stroke(); }
       // 3 arched stall openings on the front-left face
-      const stallStroke = style === 'china' ? '#7a2018' : style === 'india' ? '#8a6030' : '#6e5638';
+      const stallStroke = style === 'china' ? '#2e6048' : style === 'india' ? '#3f6b28' : '#6e5638';
       for (let i = 0; i < 3; i++) {
         const t2 = 0.18 + i * 0.28, ax2 = cx - hw + hw * t2, ay2 = cy + hh * t2 - wallH2 * 0.28;
         g.fillStyle = '#241a10';
@@ -1971,7 +1983,7 @@ const Sprites = (() => {
         g.fillStyle = '#d4a83c'; g.fillRect(ax2 - 3.5, ay2 + 1, 7, 2.2); // hay
       }
       // vertical framing — civ-tinted
-      g.strokeStyle = style === 'china' ? 'rgba(140,30,20,.4)' : style === 'india' ? 'rgba(100,70,30,.35)' : 'rgba(60,40,20,.32)'; g.lineWidth = 1.2;
+      g.strokeStyle = style === 'china' ? 'rgba(60,150,180,.4)' : style === 'india' ? 'rgba(70,130,50,.35)' : 'rgba(60,40,20,.32)'; g.lineWidth = 1.2;
       for (let i = 1; i <= 3; i++) { const t2 = i / 4;
         g.beginPath(); g.moveTo(cx - hw + hw * t2, cy + hh * t2 - wallH2); g.lineTo(cx - hw + hw * t2, cy + hh * t2); g.stroke(); }
       if (style === 'india') {
@@ -1984,7 +1996,7 @@ const Sprites = (() => {
         g.beginPath(); g.moveTo(ex - 10.5, ey - 0.5); g.quadraticCurveTo(ex - 14, ey + 2, ex - 11, ey + 4); g.stroke(); // trunk
         g.strokeStyle = '#e0d0b0'; g.lineWidth = 1.4;
         g.beginPath(); g.moveTo(ex - 10, ey + 0.5); g.quadraticCurveTo(ex - 13.5, ey + 1, ex - 12, ey + 3); g.stroke(); // tusk
-        g.fillStyle = 'rgba(232,122,26,.55)'; // saffron saddle cloth
+        g.fillStyle = 'rgba(232,200,60,.55)'; // yellow saddle cloth
         g.beginPath(); g.moveTo(ex - 2, ey - 8); g.lineTo(ex + 4, ey - 8); g.lineTo(ex + 5, ey - 4); g.lineTo(ex - 3, ey - 4); g.closePath(); g.fill();
       } else {
         // horse heads visible in right-wall stalls (Rome / China)
@@ -1997,9 +2009,9 @@ const Sprites = (() => {
           g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 0.9;
         }
       }
-      // china stable: red-framed stall door on right wall only — no lanterns
+      // china stable: light-blue-framed stall door on right wall only — no lanterns
       if (style === 'china') {
-        g.strokeStyle = '#9a3a2e'; g.lineWidth = 1.8;
+        g.strokeStyle = '#5ba0c4'; g.lineWidth = 1.8;
         g.beginPath(); g.moveTo(cx + hw * 0.25, cy - hh * 0.25 - wallH2 + 2); g.lineTo(cx + hw * 0.25, cy - hh * 0.25); g.stroke();
         g.beginPath(); g.moveTo(cx + hw * 0.55, cy - hh * 0.55 - wallH2 + 2); g.lineTo(cx + hw * 0.55, cy - hh * 0.55); g.stroke();
       }
@@ -2038,10 +2050,10 @@ const Sprites = (() => {
         g.strokeStyle = '#c9a04a'; g.lineWidth = 0.9;
         for (let i = -1; i <= 1; i++) { g.beginPath(); g.arc(cx + i * 7.5, cy - wallH + 1, 2.2, Math.PI, 0); g.stroke(); }
       } else if (style === 'china') {
-        // red merlons + simple red cornice band at merlon base
-        g.fillStyle = '#8a2018';
+        // jade merlons + simple light-blue cornice band at merlon base
+        g.fillStyle = '#28543f';
         for (let i = -1; i <= 1; i++) g.fillRect(cx + i * 9 - 2.5, cy - wallH - 6, 5, 7);
-        g.fillStyle = '#9a3a2e'; // simple cornice band
+        g.fillStyle = '#5ba0c4'; // simple cornice band
         g.fillRect(cx - 15, cy - wallH - 2, 30, 4);
       } else {
         g.fillStyle = p.wallR;
@@ -2117,10 +2129,10 @@ const Sprites = (() => {
       g.fillStyle = p.top; g.beginPath(); g.ellipse(cx, cy - KH - 4, BW + 2, 6, 0, 0, 7); g.fill();
       g.strokeStyle = 'rgba(20,12,6,.5)'; g.stroke();
       if (style === 'china') {
-        g.fillStyle = '#8a2018';
-        for (let i = -2; i <= 2; i++) g.fillRect(cx + i * 8 - 3, cy - KH - 13, 6, 9); // red merlons
-        // simple red cornice band at base of merlons
-        g.fillStyle = '#9a3a2e';
+        g.fillStyle = '#28543f';
+        for (let i = -2; i <= 2; i++) g.fillRect(cx + i * 8 - 3, cy - KH - 13, 6, 9); // jade merlons
+        // simple light-blue cornice band at base of merlons
+        g.fillStyle = '#5ba0c4';
         g.fillRect(cx - BW - 2, cy - KH - 5, (BW + 2) * 2, 4);
       } else if (style === 'india') {
         // carved arch cornice + mini dome silhouette instead of box merlons
@@ -2249,8 +2261,8 @@ const Sprites = (() => {
         // arena floor
         g.fillStyle = '#c8b88a'; g.beginPath(); g.ellipse(cx, cy - 28, 30, 12, 0, 0, 7); g.fill();
         g.strokeStyle = 'rgba(60,44,24,.4)'; g.lineWidth = 1; g.stroke();
-        // top trim
-        g.strokeStyle = '#ece4d2'; g.lineWidth = 2.5;
+        // top trim — royal-purple accent stripe (existing trim ring, civ accent color)
+        g.strokeStyle = CIV_PAL.rome.accent; g.lineWidth = 2.5;
         g.beginPath(); g.ellipse(cx, cy - 50, 42, 18, 0, 0, 7); g.stroke();
         ageDress(g, cx, cy, s * 32, s * 16, 50, age, colorIdx);
         flag(g, cx, cy - 68, colorIdx);
@@ -2433,7 +2445,7 @@ const Sprites = (() => {
         g.strokeStyle = '#8a6420'; g.lineWidth = 1.4; g.stroke();
       }
       // full marble colonnade across the front-left face
-      const colCol = style === 'china' ? '#b34a3a' : style === 'india' ? '#c9a070' : '#ece4d2';
+      const colCol = style === 'china' ? '#5ba0c4' : style === 'india' ? '#7fae54' : '#ece4d2';
       for (let i = 0; i < 5; i++) {
         const t2 = 0.1 + i * 0.2, capx = cx - s * 32 + s * 32 * t2, capy = cy + s * 16 * t2 - 6;
         g.fillStyle = colCol; g.fillRect(capx - 2.6, capy - wallH + 1, 5.2, wallH - 2);
@@ -2480,7 +2492,7 @@ const Sprites = (() => {
       g.fillStyle = 'rgba(255,255,255,.18)';
       g.beginPath(); g.moveTo(cx - s * 32, cy); g.lineTo(cx, cy + s * 16); g.lineTo(cx + s * 32, cy);
       g.lineTo(cx + s * 32, cy - 3); g.lineTo(cx, cy + s * 16 - 3); g.lineTo(cx - s * 32, cy - 3); g.closePath(); g.fill();
-      g.fillStyle = style === 'china' ? '#9c2f2f' : style === 'india' ? '#c9a070' : '#e3dccb';
+      g.fillStyle = style === 'china' ? '#5ba0c4' : style === 'india' ? '#7fae54' : '#e3dccb';
       for (let i = 0; i < 5; i++) {
         const t2 = 0.12 + i * 0.19;
         g.fillRect(cx - s * 32 + s * 32 * t2 - 2.2, cy + s * 16 * t2 - wallH + 2, 4.4, wallH - 3);
@@ -2535,18 +2547,18 @@ const Sprites = (() => {
       g.beginPath(); g.moveTo(asx - 4.5, asy - 8); g.lineTo(asx + 4.5, asy - 8); g.lineTo(asx + 3.4, asy + 1); g.lineTo(asx - 3.4, asy + 1); g.closePath(); g.fill(); g.stroke();
       if (style === 'india') {
         // turban-style helm for India
-        g.fillStyle = '#e87a1a'; g.beginPath(); g.arc(asx, asy - 12.5, 3.6, Math.PI, 0); g.fill(); g.stroke();
+        g.fillStyle = '#5a8a3c'; g.beginPath(); g.arc(asx, asy - 12.5, 3.6, Math.PI, 0); g.fill(); g.stroke();
         g.fillStyle = '#e7b840'; g.beginPath(); g.arc(asx, asy - 12.5, 1.2, 0, 7); g.fill();
       } else {
         g.fillStyle = '#9aa2ad'; g.beginPath(); g.arc(asx, asy - 12.5, 3.6, Math.PI, 0); g.fill(); g.stroke();
       }
       // civ-specific barracks banner/standard
       if (style === 'china') {
-        // single red vertical banner hanging from the left-wall eave
+        // single jade vertical banner hanging from the left-wall eave
         const bnrX = cx - s * 26, bnrTop = cy - wallH + 2;
         g.strokeStyle = '#3a2a16'; g.lineWidth = 1.2;
         g.beginPath(); g.moveTo(bnrX, bnrTop - 2); g.lineTo(bnrX, bnrTop - 5); g.stroke(); // short pole
-        g.fillStyle = '#9a2018'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
+        g.fillStyle = '#28543f'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
         g.fillRect(bnrX - 3, bnrTop - 5, 6, 20); g.strokeRect(bnrX - 3, bnrTop - 5, 6, 20);
       } else if (style === 'india') {
         // elephant war standard above armor stand
@@ -2577,8 +2589,8 @@ const Sprites = (() => {
       g.strokeStyle = '#5d4426'; g.lineWidth = 2.2;
       g.beginPath(); g.moveTo(ax2 - 10, ay2 + 8); g.lineTo(ax2 - 10, ay2 - 14); g.stroke();
       g.beginPath(); g.moveTo(ax2 + 12, ay2 + 2); g.lineTo(ax2 + 12, ay2 - 18); g.stroke();
-      const cA = style === 'china' ? '#e7d04a' : style === 'india' ? '#e87a1a' : '#e8e0ce';
-      const cB = style === 'china' ? '#c4543f' : style === 'india' ? '#c8983a' : '#c4543f';
+      const cA = style === 'china' ? '#bfe6f2' : style === 'india' ? '#e8c83c' : '#e8e0ce';
+      const cB = style === 'china' ? '#3f7fa0' : style === 'india' ? '#5a8a3c' : '#c4543f';
       for (let i = 0; i < 4; i++) { // striped canopy
         g.fillStyle = i % 2 ? cA : cB;
         g.beginPath();
@@ -2587,8 +2599,8 @@ const Sprites = (() => {
         g.closePath(); g.fill();
       }
       const tx = cx + s * 24, ty = cy + 4;
-      const tgtA = style === 'china' ? '#e8e0ce' : style === 'india' ? '#e8d098' : '#e8e0ce';
-      const tgtB = style === 'china' ? '#c4543f' : style === 'india' ? '#c05838' : '#c4543f';
+      const tgtA = style === 'china' ? '#e8e0ce' : style === 'india' ? '#f2e07a' : '#e8e0ce';
+      const tgtB = style === 'china' ? '#3f7fa0' : style === 'india' ? '#3f6b28' : '#c4543f';
       for (const [r, col] of [[8.5, tgtA], [6, tgtB], [3.4, tgtA], [1.6, tgtB]]) {
         g.fillStyle = col; g.beginPath(); g.ellipse(tx, ty, r, r * .8, 0, 0, 7); g.fill();
       }
@@ -2607,9 +2619,17 @@ const Sprites = (() => {
       for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(cx - s * 22 + i * 2, cy + s * 6 - 4); g.lineTo(cx - s * 22 + i * 3.4, cy + s * 6 - 12); g.stroke(); }
     }
     // civilization accents — applied to all generic-path buildings
+    if (style === 'rome') {
+      // thin royal-purple band along the front roofline edge — a genuine accent, not a third main color
+      g.fillStyle = p.accent;
+      g.save();
+      g.beginPath(); g.moveTo(cx - s * 32, cy - wallH); g.lineTo(cx, cy - wallH + s * 16); g.lineTo(cx + s * 32, cy - wallH); g.closePath(); g.clip();
+      g.fillRect(cx - s * 32 - 2, cy - wallH - 1, (s * 32 + 2) * 2, 3);
+      g.restore();
+    }
     if (style === 'china') {
-      // simple 4px-tall red band along the front roofline edge only
-      g.fillStyle = '#9a3a2e';
+      // simple 4px-tall light-blue band along the front roofline edge only
+      g.fillStyle = '#5ba0c4';
       g.save();
       g.beginPath(); g.moveTo(cx - s * 32, cy - wallH); g.lineTo(cx, cy - wallH + s * 16); g.lineTo(cx + s * 32, cy - wallH); g.closePath(); g.clip();
       g.fillRect(cx - s * 32 - 2, cy - wallH - 1, (s * 32 + 2) * 2, 4);
