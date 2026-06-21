@@ -352,6 +352,11 @@ const Sprites = (() => {
   /* ---------------- humanoid painter ----------------
      dir: 0 front, 1 left(side), 2 back.  anim: idle|walk|attack. */
   const SKIN = { rome: '#d9a878', china: '#e0b184', india: '#a8714a', none: '#caa27a' };
+  // each civ's dominant cloth color + a secondary accent (purple/light-blue/yellow) -
+  // shared by foot-unit cloth, shields, and mounted-rider torsos so the same civ
+  // always reads the same regardless of which body part is being colored.
+  const CIV_TORSO = { rome: '#9c2a28', china: '#3d7a5e', india: '#5a8a3c' };
+  const CIV_ACCENT = { rome: '#6f3f9e', china: '#6fb8d6', india: '#e8c83c' };
   function teamCols(idx) { return idx < 0 ? GAIA_COLOR : PLAYER_COLORS[idx]; }
 
   const UNIT_VIS = {
@@ -663,7 +668,10 @@ const Sprites = (() => {
     const shScale = away ? 0.8 : 1;
     const sx2 = away ? hipX + 0.5 : (prof ? hipX + fx * 7.5 : hipX - 7.5);
     const sy2 = away ? armY + 4 : armY + 3;
-    g.lineWidth = 1.2; g.strokeStyle = 'rgba(20,12,6,.6)';
+    // shield face stays team-colored (instant ally/enemy ID), but the rim now carries
+    // the civ's accent color so it doesn't look like a mismatched team-blue sticker
+    // glued onto the new civ palette.
+    g.lineWidth = 1.4; g.strokeStyle = CIV_ACCENT[civ] || 'rgba(20,12,6,.6)';
     if (v.shield === 'round') {
       const r = 6 * shScale;
       const gr = g.createRadialGradient(sx2 - 1.5, sy2 - 1.5, 1, sx2, sy2, r);
@@ -691,7 +699,7 @@ const Sprites = (() => {
   }
 
   /* ---------------- mounted / large unit painters (side view) ---------------- */
-  function drawHorse(g, x, y, colorIdx, swing, col = '#8a6a48', colD = '#5f4830') {
+  function drawHorse(g, x, y, colorIdx, swing, col = '#8a6a48', colD = '#5f4830', clothCol) {
     const tc = teamCols(colorIdx);
     g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(x, y + 1, 17, 4.5, 0, 0, 7); g.fill();
     // legs
@@ -714,14 +722,20 @@ const Sprites = (() => {
     g.strokeStyle = '#3a2c1c'; g.lineWidth = 2.4;
     g.beginPath(); g.moveTo(x - 14, y - 22); g.quadraticCurveTo(x - 10, y - 26, x - 8, y - 21); g.stroke();
     g.beginPath(); g.moveTo(x + 15, y - 17); g.quadraticCurveTo(x + 22, y - 12, x + 20, y - 5); g.stroke();
-    // saddle cloth
-    g.fillStyle = tc.main; g.fillRect(x - 5, y - 21, 11, 6);
+    // saddle cloth - civ-accent colored where known, falls back to team color
+    // (e.g. a bare neutral-garrison horse) so it isn't the single biggest blue
+    // patch on every mounted unit regardless of civilization.
+    g.fillStyle = clothCol || tc.main; g.fillRect(x - 5, y - 21, 11, 6);
   }
 
   function drawRiderTorso(g, x, y, colorIdx, civ, weapon, raise, mount) {
     const tc = teamCols(colorIdx), skin = SKIN[civ] || SKIN.none;
-    g.fillStyle = tc.main; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.1;
+    // torso reads as the civ's color (matches foot units) - team color is now just a
+    // thin sash, so a scout/horseman/keshik/ashva no longer looks identically "team
+    // blue" regardless of which civilization it belongs to.
+    g.fillStyle = CIV_TORSO[civ] || tc.main; g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 1.1;
     g.beginPath(); g.moveTo(x - 4.5, y); g.lineTo(x + 4.5, y); g.lineTo(x + 3.5, y + 10); g.lineTo(x - 3.5, y + 10); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = tc.main; g.fillRect(x + 1.8, y + 0.5, 2.4, 2.4); // small team shoulder patch, for at-a-glance ally/enemy ID
     g.fillStyle = skin; g.beginPath(); g.arc(x, y - 5, 4.6, 0, 7); g.fill();
     // scout headwear is civ-flavored (campaign hat / topknot wrap / turban); other riders keep the plain cap
     if (mount === 'scout' && civ === 'india') {
@@ -833,7 +847,7 @@ const Sprites = (() => {
     const swing = anim === 'walk' ? Math.sin(fr / 4 * Math.PI * 2) : 0;
     const raise = anim === 'attack' ? (fr === 1 ? 1 : .3) : 0;
     if (type === 'scout') {
-      drawHorse(g, 46, 64, colorIdx, swing);
+      drawHorse(g, 46, 64, colorIdx, swing, undefined, undefined, CIV_ACCENT[civ]);
       drawRiderTorso(g, 46, 36, colorIdx, civ, 'none', 0, 'scout');
       return { cv: c, ax: 46, ay: 66 };
     }
@@ -894,26 +908,28 @@ const Sprites = (() => {
     if (type === 'horseman' || type === 'equites' || type === 'keshik' || type === 'ashva') {
       const horseCol = type === 'ashva' ? '#6a5444' : type === 'equites' ? '#7a6a54' : '#8a6a48';
       const horseD   = type === 'ashva' ? '#3e3026' : type === 'equites' ? '#5a4a38' : '#5f4830';
-      drawHorse(g, 46, 64, colorIdx, swing, horseCol, horseD);
+      const armorCol = CIV_TORSO[civ] || tc.main, accentCol = CIV_ACCENT[civ] || tc.dark;
+      drawHorse(g, 46, 64, colorIdx, swing, horseCol, horseD, accentCol);
       if (type === 'equites') {
-        // Roman heavy lancer: metal helm + red crest, long lance, kite shield
+        // Roman heavy lancer: metal helm + red crest, long lance, kite shield (shield
+        // stays team-colored for ally/enemy ID; the cuirass is now civ-colored armor)
         g.fillStyle = '#b4bec4'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
         g.beginPath(); g.arc(46, 27, 5.5, 0, 7); g.fill(); g.stroke();
         g.fillStyle = '#cc3b2e';
         g.beginPath(); g.moveTo(41, 23); g.quadraticCurveTo(46, 13, 51, 23); g.closePath(); g.fill();
-        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.fillStyle = armorCol; g.strokeStyle = accentCol; g.lineWidth = 1;
         g.beginPath(); g.roundRect(41, 33, 10, 14, 2); g.fill(); g.stroke();
         g.strokeStyle = '#cfd6dd'; g.lineWidth = 2.6;
         g.beginPath(); g.moveTo(46, 33); g.lineTo(24, 18); g.stroke();
         g.fillStyle = '#cfd6dd';
         g.beginPath(); g.moveTo(24, 18); g.lineTo(20, 15); g.lineTo(26, 14); g.closePath(); g.fill();
-        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.fillStyle = tc.main; g.strokeStyle = accentCol; g.lineWidth = 1;
         g.beginPath(); g.moveTo(53, 36); g.lineTo(59, 43); g.quadraticCurveTo(57, 51, 55, 49); g.lineTo(50, 43); g.closePath(); g.fill(); g.stroke();
       } else if (type === 'keshik') {
         // Chinese horse archer: conical hat, lamellar armor, bow drawn
         g.fillStyle = '#a08858'; g.strokeStyle = 'rgba(20,12,6,.35)'; g.lineWidth = 1;
         g.beginPath(); g.moveTo(39, 28); g.lineTo(46, 16); g.lineTo(53, 28); g.closePath(); g.fill(); g.stroke();
-        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.fillStyle = armorCol; g.strokeStyle = accentCol; g.lineWidth = 1;
         g.beginPath(); g.roundRect(42, 31, 9, 12, 2); g.fill(); g.stroke();
         g.strokeStyle = '#6e5638'; g.lineWidth = 2.2;
         g.beginPath(); g.arc(59, 34, 11, Math.PI * 0.55, Math.PI * 1.45); g.stroke();
@@ -925,26 +941,26 @@ const Sprites = (() => {
         g.beginPath(); g.moveTo(47, 34); g.lineTo(44, 32); g.lineTo(44, 36); g.closePath(); g.fill();
       } else if (type === 'ashva') {
         // Indian Ashvaroha: turban + gem, curved talwar, horse barding
-        g.fillStyle = tc.main; g.strokeStyle = 'rgba(20,12,6,.3)'; g.lineWidth = 1;
+        g.fillStyle = armorCol; g.strokeStyle = 'rgba(20,12,6,.3)'; g.lineWidth = 1;
         g.beginPath(); g.ellipse(46, 24, 7, 5, 0, 0, 7); g.fill(); g.stroke();
         g.fillStyle = '#f0c040'; g.beginPath(); g.arc(46, 21, 2, 0, 7); g.fill();
-        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.fillStyle = armorCol; g.strokeStyle = accentCol; g.lineWidth = 1;
         g.beginPath(); g.roundRect(41, 29, 10, 14, 2); g.fill(); g.stroke();
         g.strokeStyle = '#cfd6dd'; g.lineWidth = 2.6;
         g.beginPath(); g.moveTo(44, 40); g.quadraticCurveTo(38, 30, 34, 21); g.stroke();
         g.fillStyle = '#8a6a48'; g.beginPath(); g.arc(44, 41, 2.5, 0, 7); g.fill();
-        g.fillStyle = tc.dark; g.strokeStyle = '#f0c040'; g.lineWidth = 1.2;
+        g.fillStyle = armorCol; g.strokeStyle = '#f0c040'; g.lineWidth = 1.2;
         g.beginPath(); g.ellipse(46, 54, 17, 7, 0, 0, 7); g.fill(); g.stroke();
       } else { // horseman: nasal helm, broadsword raised, round shield
         g.fillStyle = '#8a9498'; g.strokeStyle = 'rgba(20,12,6,.4)'; g.lineWidth = 1;
         g.beginPath(); g.arc(46, 28, 5.5, 0, 7); g.fill(); g.stroke();
         g.fillStyle = '#cfd6dd'; g.fillRect(43, 30, 8, 1.8);
-        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.fillStyle = armorCol; g.strokeStyle = accentCol; g.lineWidth = 1;
         g.beginPath(); g.roundRect(41, 32, 10, 14, 2); g.fill(); g.stroke();
         g.strokeStyle = '#cfd6dd'; g.lineWidth = 2.8;
         g.beginPath(); g.moveTo(46, 38); g.lineTo(40, 20); g.stroke();
         g.fillStyle = '#8a6a48'; g.beginPath(); g.arc(46, 39, 2.5, 0, 7); g.fill();
-        g.fillStyle = tc.main; g.strokeStyle = tc.dark; g.lineWidth = 1;
+        g.fillStyle = tc.main; g.strokeStyle = accentCol; g.lineWidth = 1;
         g.beginPath(); g.arc(53, 39, 5.5, 0, 7); g.fill(); g.stroke();
         g.strokeStyle = tc.dark; g.beginPath(); g.arc(53, 39, 3, 0, 7); g.stroke();
       }
@@ -987,9 +1003,7 @@ const Sprites = (() => {
     if (UNITS[type] && UNITS[type].naval) {
       const tc2 = teamCols(colorIdx);
       // civ-flavored trim: a thin hull stripe + sail edge binding, layered over the team-color sail
-      const CIV_SHIP = { rome: '#9c2a28', china: '#3d7a5e', india: '#5a8a3c' };
-      const CIV_ACCENT2 = { rome: '#6f3f9e', china: '#6fb8d6', india: '#e8c83c' }; // purple (rome) / light-blue (china) / yellow (india) masthead touch
-      const civTrim = CIV_SHIP[civ] || '#6e583a';
+      const civTrim = CIV_TORSO[civ] || '#6e583a';
       const WL = 56; // waterline y
       function hull(len, ht, col, colD) {
         g.fillStyle = 'rgba(8,20,40,.35)';
@@ -1026,7 +1040,7 @@ const Sprites = (() => {
         g.beginPath(); g.moveTo(mx + wid / 2, WL - hgt - 2); g.lineTo(mx + wid / 2 - 2, WL - 12); g.stroke();
         g.fillStyle = tc2.dark; g.beginPath();
         g.moveTo(mx, WL - 4 - hgt); g.lineTo(mx + 10, WL - 2 - hgt); g.lineTo(mx, WL - hgt); g.closePath(); g.fill();
-        if (CIV_ACCENT2[civ]) { g.fillStyle = CIV_ACCENT2[civ]; // masthead accent dot: purple (rome), light-blue (china), yellow (india)
+        if (CIV_ACCENT[civ]) { g.fillStyle = CIV_ACCENT[civ]; // masthead accent dot: purple (rome), light-blue (china), yellow (india)
           g.beginPath(); g.arc(mx, WL - 6 - hgt, 1.6, 0, 7); g.fill(); }
       }
       function oars(n, y0, ph) {
@@ -1189,7 +1203,7 @@ const Sprites = (() => {
       g.fillStyle = '#6e583a'; // ears
       g.beginPath(); g.moveTo(cx - 5, gy - 47); g.lineTo(cx - 3, gy - 53); g.lineTo(cx - 1, gy - 48); g.closePath(); g.fill();
       g.beginPath(); g.moveTo(cx + 5, gy - 47); g.lineTo(cx + 3, gy - 53); g.lineTo(cx + 1, gy - 48); g.closePath(); g.fill();
-      g.fillStyle = tc.main; g.fillRect(cx - 9, gy - 32, 18, 5); // saddle cloth
+      g.fillStyle = CIV_ACCENT[civ] || tc.main; g.fillRect(cx - 9, gy - 32, 18, 5); // saddle cloth
     }
 
     if (type === 'scout') {
@@ -1271,7 +1285,7 @@ const Sprites = (() => {
         g.beginPath(); g.moveTo(cx - 8, 27); g.lineTo(cx, 14); g.lineTo(cx + 8, 27); g.closePath(); g.fill();
         drawRiderTorso(g, cx, 20, colorIdx, civ, 'none', raise);
       } else if (type === 'ashva') {
-        g.fillStyle = tc.main;
+        g.fillStyle = CIV_TORSO[civ] || tc.main;
         g.beginPath(); g.ellipse(cx, 22, 7, 5, 0, 0, 7); g.fill();
         g.fillStyle = '#f0c040'; g.beginPath(); g.arc(cx, 20, 1.8, 0, 7); g.fill();
         drawRiderTorso(g, cx, 19, colorIdx, civ, 'none', raise);
@@ -1344,9 +1358,7 @@ const Sprites = (() => {
     }
     /* ---- ships bow-on / stern-on ---- */
     const WL = 56;
-    const CIV_SHIP = { rome: '#9c2a28', china: '#3d7a5e', india: '#5a8a3c' };
-    const CIV_ACCENT2 = { rome: '#6f3f9e', china: '#6fb8d6', india: '#e8c83c' }; // purple (rome) / light-blue (china) / yellow (india) masthead touch
-    const civTrim = CIV_SHIP[civ] || '#6e583a';
+    const civTrim = CIV_TORSO[civ] || '#6e583a';
     function hullFB(hw, ht, col, colD) {
       g.fillStyle = 'rgba(8,20,40,.35)';
       g.beginPath(); g.ellipse(cx, WL + 3, hw + 4, 4.5, 0, 0, 7); g.fill();
@@ -1376,7 +1388,7 @@ const Sprites = (() => {
       g.closePath(); g.fill(); g.stroke();
       g.strokeStyle = civTrim; g.lineWidth = 1.3; // civ-colored edge binding, mirrors the side view
       g.beginPath(); g.moveTo(cx + wid / 2 - 2, WL - 12); g.lineTo(cx + wid / 2, WL - 4 - hgt); g.stroke();
-      if (CIV_ACCENT2[civ]) { g.fillStyle = CIV_ACCENT2[civ]; // masthead accent dot, mirrors the side view
+      if (CIV_ACCENT[civ]) { g.fillStyle = CIV_ACCENT[civ]; // masthead accent dot, mirrors the side view
         g.beginPath(); g.arc(cx, WL - 8 - hgt, 1.6, 0, 7); g.fill(); }
     }
     const tc2 = teamCols(colorIdx);
@@ -1962,8 +1974,8 @@ const Sprites = (() => {
       isoBox(g, cx, cy, s, wallH2, p.top, p.wallL, p.wallR);
       // roof — color varies by civ
       const roofY2 = cy - wallH2;
-      const stbRM = style === 'china' ? '#6fb8d6' : style === 'india' ? '#e8c83c' : '#c8a04a';
-      const stbRD = style === 'china' ? '#3f7fa0' : style === 'india' ? '#b89a26' : '#a07c34';
+      const stbRM = style === 'china' ? '#6fb8d6' : style === 'india' ? '#e8c83c' : '#a8302a';
+      const stbRD = style === 'china' ? '#3f7fa0' : style === 'india' ? '#b89a26' : '#7a2420';
       g.fillStyle = stbRM;
       g.beginPath(); g.moveTo(cx - hw, roofY2); g.lineTo(cx, roofY2 - hh - 10); g.lineTo(cx + hw, roofY2); g.lineTo(cx, roofY2 + hh); g.closePath(); g.fill();
       g.fillStyle = stbRD;
